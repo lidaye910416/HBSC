@@ -39,7 +39,7 @@
       "id": "HS-2",
       "title": "更新品牌信息 - 湖北数创",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "description": "将项目名称、导航栏、页脚等品牌信息更新为湖北数创，配色不变",
       "files": [
         "frontend-vite/src/components/Navigation.tsx",

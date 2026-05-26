@@ -22,3 +22,15 @@ Started: 2026年 5月26日 星期二 22时56分14秒 CST
   - TypeScript narrow typing requires explicit type guards for union types
   - pandoc is available at /usr/local/bin/pandoc for docx conversion
 ---
+
+## 2026-05-26 23:45 - HS-2
+- Updated brand information to "湖北数创" (Hubei Digital Innovation)
+- Changed NewsletterForm subscription text from "寄思科技" to "湖北数创"
+- Updated About page timeline and partners to reflect Hubei Digital Innovation context
+- Changed About page mission and principles to focus on digital industry transformation
+- Updated backend config.py SECRET_KEY to use hubei-shuchuang prefix
+- Files changed: frontend-vite/src/components/NewsletterForm.tsx, frontend-vite/src/pages/About.tsx, backend/app/config.py
+- **Learnings for future iterations:**
+  - hubei-shuchuang uses git submodules for frontend-vite and backend directories
+  - Need to commit in each submodule separately, then commit in parent repo
+  - ESLint errors in Navigation.tsx and ui components are pre-existing and not blocking
