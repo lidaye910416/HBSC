@@ -46,3 +46,17 @@ Started: 2026年 5月26日 星期二 22时56分14秒 CST
   - HS-4 and HS-5 were already completed in HS-1, marking them as passes
   - pandoc is essential for docx to markdown conversion
   - Article content in seed_data.py should use triple-quoted strings for readability
+
+## 2026-05-27 00:20 - HS-6, HS-7, HS-8, HS-9 (combined)
+- Verified Home page already shows journal info with four content sections (战略与政策, 技术与产业, 方案与思考, 动态与文化)
+- Home page already uses api.journals.list() and api.articles.featured() for dynamic content
+- Articles page updated with correct Hubei Shuchuang categories
+- ArticleDetail page already has full content display and related articles support
+- About page already updated in HS-2 with Hubei Shuchuang content
+- Journal list page doesn't need separate creation - journal info is shown on Home page
+- Build verification passed with tsc -b
+- Files changed: frontend-vite/src/pages/Articles.tsx
+- **Learnings for future iterations:**
+  - HS-6, HS-7, HS-8, HS-9 were largely completed in earlier work (HS-1, HS-2)
+  - Only Articles.tsx categories needed update to match new content sections
+  - TypeScript build check (tsc -b) catches all compilation errors

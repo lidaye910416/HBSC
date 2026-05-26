@@ -103,7 +103,7 @@
       "id": "HS-6",
       "title": "改造前端页面 - 首页",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "description": "改造首页展示期刊列表",
       "files": ["frontend-vite/src/pages/Home.tsx"],
       "changes": [
@@ -117,7 +117,7 @@
       "id": "HS-7",
       "title": "改造前端页面 - 期刊列表页",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "description": "创建或改造期刊列表页",
       "files": ["frontend-vite/src/pages/Journals.tsx"],
       "changes": [
@@ -130,7 +130,7 @@
       "id": "HS-8",
       "title": "改造前端页面 - 文章列表和详情",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "description": "改造文章列表和详情页，支持按部分筛选",
       "files": ["frontend-vite/src/pages/Articles.tsx", "frontend-vite/src/pages/ArticleDetail.tsx"],
       "changes": [
@@ -143,7 +143,7 @@
       "id": "HS-9",
       "title": "改造前端页面 - 关于页面",
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "description": "改造关于页面，展示湖北数创简介",
       "files": ["frontend-vite/src/pages/About.tsx"],
       "changes": [
