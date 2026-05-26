@@ -2,20 +2,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import engine, Base
-from .routers import articles_router, insights_router, cases_router, team_router
-from .models import Article, Insight, Case, Researcher, Domain
-from .services.seed_data import seed_domains, seed_articles, seed_insights, seed_cases, seed_researchers
+from .routers import articles_router, team_router
+from .models import Journal, Article, Researcher
+from .services.seed_data import seed_journals, seed_articles, seed_researchers
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-import random
+
+# 导入所有模型以确保它们被注册到 Base.metadata
+from .models.base import Base as ModelBase
 
 # 创建数据库表
-Base.metadata.create_all(bind=engine)
+ModelBase.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    description="寄思科技有限责任公司 — 聚焦前沿科技与复杂系统研发的科技公司",
+    description="湖北数创 — 湖北数字产业创新期刊",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
@@ -31,13 +32,11 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(articles_router)
-app.include_router(insights_router)
-app.include_router(cases_router)
 app.include_router(team_router)
 
 @app.get("/")
 def root():
-    return {"message": "寄思科技 API", "version": settings.VERSION}
+    return {"message": "湖北数创 API", "version": settings.VERSION}
 
 @app.get("/api/health")
 def health():
@@ -48,36 +47,34 @@ def seed_all():
     db = Session(bind=engine)
     try:
         # 检查是否已有数据
-        if db.query(Domain).count() > 0:
+        if db.query(Journal).count() > 0:
             print("数据已存在，跳过初始化")
             return
         
-        # 插入研究领域
-        for d in seed_domains():
-            db.add(Domain(**d))
+        # 插入期刊
+        for j in seed_journals():
+            db.add(Journal(**j))
         db.commit()
+        
+        # 获取期刊ID
+        journal = db.query(Journal).first()
+        journal_id = journal.id if journal else 1
         
         # 插入文章
         for a in seed_articles():
-            db.add(Article(**a))
+            article_data = {k: v for k, v in a.items() if k != 'journal_slug'}
+            article_data['journal_id'] = journal_id
+            db.add(Article(**article_data))
         db.commit()
         
-        # 插入资讯
-        for i in seed_insights():
-            db.add(Insight(**i))
-        db.commit()
-        
-        # 插入案例
-        for c in seed_cases():
-            db.add(Case(**c))
-        db.commit()
-        
-        # 插入研究人员
+        # 插入团队成员
         for r in seed_researchers():
-            db.add(Researcher(**r))
+            db.add(type('TeamMember', (), {'name': r['name'], 'name_en': r.get('name_en', ''), 'title': r['title'], 'bio': r.get('bio', ''), 'avatar': r.get('avatar', ''), 'research_area': r.get('research_area', ''), 'email': r.get('email', ''), 'order': r.get('order', 0)})())
         db.commit()
         
-        print("✅ 种子数据初始化完成")
+        print("✅ 湖北数创种子数据初始化完成")
+        print(f"   - 期刊: 1期")
+        print(f"   - 文章: {len(seed_articles())}篇")
     except Exception as e:
         print(f"❌ 初始化失败: {e}")
         db.rollback()
@@ -87,4 +84,3 @@ def seed_all():
 @app.on_event("startup")
 def on_startup():
     seed_all()
-

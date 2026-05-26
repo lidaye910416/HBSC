@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
-    APP_NAME: str = "寄思科技 API"
+    APP_NAME: str = "湖北数创 API"
     VERSION: str = "1.0.0"
     DEBUG: bool = True
     DATABASE_URL: str = "sqlite:///./research.db"

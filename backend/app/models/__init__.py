@@ -1,7 +1,7 @@
-from .article import Article
-from .insight import Insight
-from .case import Case
-from .researcher import Researcher
-from .domain import Domain
+from sqlalchemy.orm import declarative_base
+Base = declarative_base()
 
-__all__ = ["Article", "Insight", "Case", "Researcher", "Domain"]
+from .journal import Journal, Article
+from .researcher import Researcher
+
+__all__ = ["Base", "Journal", "Article", "Researcher"]
