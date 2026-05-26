@@ -156,7 +156,7 @@
       "id": "HS-10",
       "title": "浏览器测试验证",
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "description": "启动服务，浏览器验证所有内容正确显示",
       "files": ["frontend-vite/src/", "backend/app/"],
       "changes": [
