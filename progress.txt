@@ -34,3 +34,15 @@ Started: 2026年 5月26日 星期二 22时56分14秒 CST
   - hubei-shuchuang uses git submodules for frontend-vite and backend directories
   - Need to commit in each submodule separately, then commit in parent repo
   - ESLint errors in Navigation.tsx and ui components are pre-existing and not blocking
+
+## 2026-05-27 00:05 - HS-3 & HS-4 & HS-5 (combined)
+- Extracted complete article content from source docx files using pandoc
+- Updated seed_data.py with full article content for all 9 articles
+- Journal model and Article model already created in previous work
+- Articles router already has all necessary API endpoints
+- Backend verification passed: app loads correctly with all models
+- Files changed: backend/app/services/seed_data.py
+- **Learnings for future iterations:**
+  - HS-4 and HS-5 were already completed in HS-1, marking them as passes
+  - pandoc is essential for docx to markdown conversion
+  - Article content in seed_data.py should use triple-quoted strings for readability

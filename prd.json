@@ -62,7 +62,7 @@
       "id": "HS-3",
       "title": "提取文章内容 - 2026第一期",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "description": "从 /Users/jasonlee/Desktop/湖北数创/2026 第一期/ 读取所有文章内容",
       "files": ["backend/app/services/seed_data.py"],
       "changes": [
@@ -75,7 +75,7 @@
       "id": "HS-4",
       "title": "创建期刊数据模型和种子数据",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "description": "创建期刊相关的数据库模型和种子数据",
       "files": ["backend/app/models/", "backend/app/services/seed_data.py"],
       "changes": [
@@ -89,7 +89,7 @@
       "id": "HS-5",
       "title": "创建期刊 API 端点",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "description": "创建期刊和文章相关的 API 端点",
       "files": ["backend/app/routers/journals_router.py", "backend/app/routers/articles_router.py"],
       "changes": [
