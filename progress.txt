@@ -1,0 +1,24 @@
+# Ralph Progress Log
+Started: 2026年 5月26日 星期二 22时56分14秒 CST
+---
+
+## Codebase Patterns
+- Use pandoc for docx to markdown conversion when reading Word documents
+- FastAPI routes must use `Depends(get_db)` for database sessions
+- TypeScript strict mode: use typeof checks for Union types
+- Remove unused pages (Insights, Cases) from App.tsx routes
+
+## 2026-05-26 23:30 - HS-1
+- Implemented project initialization for Hubei Digital Innovation Journal Platform
+- Replaced jisi-tech seed data with Hubei Shuchuang journal content (9 articles across 4 sections)
+- Created Journal and Article SQLAlchemy models
+- Created articles_router.py with API endpoints for journals and articles
+- Fixed TypeScript errors: added missing fields to interfaces, removed unused components
+- Files changed: backend/app/services/seed_data.py, backend/app/models/journal.py, backend/app/routers/articles_router.py, frontend-vite/src/services/api.ts, frontend-vite/src/App.tsx, frontend-vite/src/pages/ArticleDetail.tsx
+- **Learnings for future iterations:**
+  - The project was a submodule-based repository that needed git initialization
+  - Old files (articles.py, insights.py, cases.py) from jisi-tech template needed cleanup
+  - Use `Depends(get_db)` in FastAPI, not `next(get_db())`
+  - TypeScript narrow typing requires explicit type guards for union types
+  - pandoc is available at /usr/local/bin/pandoc for docx conversion
+---
