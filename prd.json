@@ -1,0 +1,204 @@
+{
+  "project": "湖北数创 - 期刊展示平台",
+  "branchName": "feature/hubei-shuchuang",
+  "status": "in_progress",
+  "description": "将 jisi-tech 模板改造为湖北数创期刊展示平台",
+
+  "goal": "将 jisi-tech 模板改造为湖北数创期刊展示平台，展示湖北数字产业创新研究的各期期刊内容。配色方案保持 jisi-tech 原样，内容以2026第一期为核心。",
+
+  "background": {
+    "design": "参考 /Users/jasonlee/jisi-tech/design.md，配色方案不变",
+    "source": "/Users/jasonlee/Desktop/湖北数创/2026 第一期",
+    "content": "包含战略与政策、技术与产业、方案与思考、动态与文化四个部分"
+  },
+
+  "constraints": {
+    "unchanged": [
+      "配色方案保持 jisi-tech 原样（墨色 #1a1a2e + 蓝色 #2563eb）",
+      "设计风格保持 jisi-tech 原样",
+      "技术栈不变：React + Vite 前端 + FastAPI 后端"
+    ],
+    "changeOnly": "品牌、内容、页面结构"
+  },
+
+  "stories": [
+    {
+      "id": "HS-1",
+      "title": "项目初始化 - 清理旧数据",
+      "priority": 1,
+      "passes": false,
+      "description": "确认 hubei-shuchuang 项目结构，清理 jisi-tech 的种子数据",
+      "files": ["backend/app/services/seed_data.py", "backend/app/main.py"],
+      "changes": [
+        "清理原有的研究文章、资讯、案例数据",
+        "重置团队成员数据为空或简单数据",
+        "保留技术框架不变"
+      ]
+    },
+    {
+      "id": "HS-2",
+      "title": "更新品牌信息 - 湖北数创",
+      "priority": 2,
+      "passes": false,
+      "description": "将项目名称、导航栏、页脚等品牌信息更新为湖北数创，配色不变",
+      "files": [
+        "frontend-vite/src/components/Navigation.tsx",
+        "frontend-vite/src/components/Footer.tsx",
+        "frontend-vite/src/components/NewsletterForm.tsx",
+        "frontend-vite/src/pages/Home.tsx",
+        "frontend-vite/src/pages/About.tsx",
+        "backend/app/config.py",
+        "backend/app/main.py"
+      ],
+      "changes": [
+        "导航栏 Logo 改为「湖北数创」",
+        "页脚信息更新为湖北数创相关",
+        "后端 API 标题更新为「湖北数创 API」",
+        "首页和关于页面内容更新",
+        "配色方案保持 jisi-tech 原样"
+      ]
+    },
+    {
+      "id": "HS-3",
+      "title": "提取文章内容 - 2026第一期",
+      "priority": 3,
+      "passes": false,
+      "description": "从 /Users/jasonlee/Desktop/湖北数创/2026 第一期/ 读取所有文章内容",
+      "files": ["backend/app/services/seed_data.py"],
+      "changes": [
+        "读取所有 docx 文件内容",
+        "提取每篇文章的标题和正文",
+        "按四个部分分类整理"
+      ]
+    },
+    {
+      "id": "HS-4",
+      "title": "创建期刊数据模型和种子数据",
+      "priority": 4,
+      "passes": false,
+      "description": "创建期刊相关的数据库模型和种子数据",
+      "files": ["backend/app/models/", "backend/app/services/seed_data.py"],
+      "changes": [
+        "创建 Journal 模型（期刊）",
+        "创建 Article 模型（文章，关联期刊）",
+        "创建 2026 第一期的所有文章种子数据",
+        "确保四个部分内容完整"
+      ]
+    },
+    {
+      "id": "HS-5",
+      "title": "创建期刊 API 端点",
+      "priority": 5,
+      "passes": false,
+      "description": "创建期刊和文章相关的 API 端点",
+      "files": ["backend/app/routers/journals_router.py", "backend/app/routers/articles_router.py"],
+      "changes": [
+        "GET /api/journals - 期刊列表",
+        "GET /api/journals/:id - 期刊详情",
+        "GET /api/journals/:slug/articles - 期刊文章列表（支持分类筛选）",
+        "GET /api/articles/:slug - 文章详情"
+      ]
+    },
+    {
+      "id": "HS-6",
+      "title": "改造前端页面 - 首页",
+      "priority": 6,
+      "passes": false,
+      "description": "改造首页展示期刊列表",
+      "files": ["frontend-vite/src/pages/Home.tsx"],
+      "changes": [
+        "Hero 区域展示「湖北数创」",
+        "展示当前期刊（2026第一期）封面和信息",
+        "展示四个部分的内容预览",
+        "复用 jisi-tech 的设计风格"
+      ]
+    },
+    {
+      "id": "HS-7",
+      "title": "改造前端页面 - 期刊列表页",
+      "priority": 7,
+      "passes": false,
+      "description": "创建或改造期刊列表页",
+      "files": ["frontend-vite/src/pages/Journals.tsx"],
+      "changes": [
+        "展示所有期刊列表",
+        "每期显示封面、期号、发布日期",
+        "复用 ArticleCard 组件样式"
+      ]
+    },
+    {
+      "id": "HS-8",
+      "title": "改造前端页面 - 文章列表和详情",
+      "priority": 8,
+      "passes": false,
+      "description": "改造文章列表和详情页，支持按部分筛选",
+      "files": ["frontend-vite/src/pages/Articles.tsx", "frontend-vite/src/pages/ArticleDetail.tsx"],
+      "changes": [
+        "文章列表页按四个部分分类展示",
+        "文章详情页显示完整内容",
+        "相关推荐（同部分的其他文章）"
+      ]
+    },
+    {
+      "id": "HS-9",
+      "title": "改造前端页面 - 关于页面",
+      "priority": 9,
+      "passes": false,
+      "description": "改造关于页面，展示湖北数创简介",
+      "files": ["frontend-vite/src/pages/About.tsx"],
+      "changes": [
+        "湖北数创简介",
+        "期刊发展历程",
+        "联系我们"
+      ]
+    },
+    {
+      "id": "HS-10",
+      "title": "浏览器测试验证",
+      "priority": 10,
+      "passes": false,
+      "description": "启动服务，浏览器验证所有内容正确显示",
+      "files": ["frontend-vite/src/", "backend/app/"],
+      "changes": [
+        "验证首页展示期刊信息",
+        "验证所有文章列表（四个部分）",
+        "验证每篇文章详情",
+        "验证文章数量是否完整（10篇文章）",
+        "验证响应式布局"
+      ]
+    }
+  ],
+
+  "filesToModify": [
+    {"file": "frontend-vite/src/components/Navigation.tsx", "action": "更新品牌 Logo 为湖北数创"},
+    {"file": "frontend-vite/src/components/Footer.tsx", "action": "更新页脚信息"},
+    {"file": "frontend-vite/src/components/NewsletterForm.tsx", "action": "更新订阅描述"},
+    {"file": "frontend-vite/src/pages/Home.tsx", "action": "改造首页展示期刊"},
+    {"file": "frontend-vite/src/pages/About.tsx", "action": "改造关于页面"},
+    {"file": "frontend-vite/src/pages/Articles.tsx", "action": "改造文章列表页支持分类"},
+    {"file": "backend/app/config.py", "action": "更新 API 标题"},
+    {"file": "backend/app/main.py", "action": "更新 API 描述"},
+    {"file": "backend/app/services/seed_data.py", "action": "创建期刊和文章种子数据"}
+  ],
+
+  "filesToCreate": [
+    {"file": "backend/app/routers/journals_router.py", "reason": "期刊 API 路由"},
+    {"file": "backend/app/routers/articles_router.py", "reason": "文章 API 路由（改造）"},
+    {"file": "backend/app/models/journal.py", "reason": "期刊数据库模型"},
+    {"file": "frontend-vite/src/pages/Journals.tsx", "reason": "期刊列表页"}
+  ],
+
+  "criteria": {
+    "functional": [
+      "首页展示湖北数创期刊信息",
+      "文章列表页展示所有10篇文章",
+      "文章按四个部分分类展示（战略与政策、技术与产业、方案与思考、动态与文化）",
+      "每篇文章详情页正常显示",
+      "配色方案保持 jisi-tech 原样"
+    ],
+    "nonFunctional": [
+      "页面加载流畅",
+      "移动端适配完整"
+    ]
+  }
+}
