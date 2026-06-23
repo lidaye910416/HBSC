@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import engine, Base
-from .routers import articles_router, team_router
+from .routers import articles_router, team_router, auth_router
 from .models import Journal, Article, Researcher
 from .services.seed_data import seed_journals, seed_articles, seed_researchers
 from sqlalchemy.orm import Session
@@ -33,6 +33,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(articles_router)
 app.include_router(team_router)
+app.include_router(auth_router)
 
 @app.get("/")
 def root():
