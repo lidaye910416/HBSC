@@ -8,7 +8,7 @@ Usage:
 import sys
 from getpass import getpass
 
-from app.security import hash_password
+from app.security import hash_password, verify_password
 
 
 def main():
@@ -30,6 +30,8 @@ def main():
         sys.exit(1)
 
     hashed = hash_password(password)
+    # 自检：避免 bcrypt 边界（空串、>72 字节等）产生"看着合法但登不进去"的 hash
+    assert verify_password(password, hashed), "bcrypt 自检失败，请重试"
     print()
     print("=" * 60)
     print("将以下两行写入 backend/.env（或部署环境变量）：")
