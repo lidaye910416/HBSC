@@ -85,7 +85,7 @@ def seed_articles():
 #### （三）深入推进数字中国建设
 
 将"加快数字化发展 建设数字中国"升级为"深入推进数字中国建设"，篇章顺序的重构体现了国家战略重心的深刻转变，核心是强化实体经济的根基地位，推动科技创新与产业发展深度融合，以数字经济赋能新质生产力发展。""",
-            "cover_image": "/images/15th-plan.jpg",
+            "cover_image": "/uploads/article-covers/15th-five-year-plan-analysis.jpg",
             "category": "战略与政策",
             "author_name": "战略研究部",
             "author_avatar": "",
@@ -168,7 +168,7 @@ def seed_articles():
 #### (3) 李殿勋主持召开全省要素交易服务平台建设现场推进会
 
 推进数据要素市场建设，促进数据资源高效流通和配置。""",
-            "cover_image": "/images/policy-2026.jpg",
+            "cover_image": "/uploads/article-covers/digital-industry-2026-policy.jpg",
             "category": "战略与政策",
             "author_name": "产业政策研究组",
             "author_avatar": "",
@@ -240,7 +240,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 - 工部：技术与开发
 
 这套系统将复杂任务分解为多个子任务，分配给不同角色处理，确保任务的系统性完成。""",
-            "cover_image": "/images/openclaw.jpg",
+            "cover_image": "/uploads/article-covers/openclaw-agent-framework.jpg",
             "category": "技术与产业",
             "author_name": "技术架构组",
             "author_avatar": "",
@@ -317,7 +317,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 #### 关键结论
 
 下一阶段产业竞争的本质，已加速演化为"数据密度×算法精度×场景厚度"的乘数效应。""",
-            "cover_image": "/images/tech-research.jpg",
+            "cover_image": "/uploads/article-covers/international-tech-research.jpg",
             "category": "技术与产业",
             "author_name": "国际合作部",
             "author_avatar": "",
@@ -394,7 +394,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 | 规范级 | X≥40 | Y≥6 | 流程标准化，关键系统互联 |
 | 集成级 | X≥60 | Y≥8 | 业务协同，数据共享 |
 | 优化级 | X≥80 | Y≥10 | 持续优化，智能决策 |""",
-            "cover_image": "/images/sme-case.jpg",
+            "cover_image": "/uploads/article-covers/sme-digitalization-case-study.jpg",
             "category": "方案与思考",
             "author_name": "王培伟、张伟、黄修宇",
             "author_avatar": "",
@@ -475,7 +475,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 | 数据采集重复率 | 45% | 12% |
 
 平台归集数据量达1200万条，共享部门32个，成功打造全国县域基层治理现代化的"嘉鱼样板"。""",
-            "cover_image": "/images/jiayu.jpg",
+            "cover_image": "/uploads/article-covers/jiayu-county-governance-platform.jpg",
             "category": "方案与思考",
             "author_name": "李丹、谢涛",
             "author_avatar": "",
@@ -550,7 +550,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 - API调用成功率从78%提升至99.5%
 
 通过构建企业服务总线，重构企业级能力中台，为业务创新提供底层架构支撑。""",
-            "cover_image": "/images/esb-liantou.jpg",
+            "cover_image": "/uploads/article-covers/esb-architecture-liantou.jpg",
             "category": "方案与思考",
             "author_name": "熊运伟、张臣、池国维",
             "author_avatar": "",
@@ -600,7 +600,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 联投数产集团成功落地宜昌点军区智能网联基础设施建设项目，围绕智能网联和智慧园区两条主线，规模化部署车路协同设备，建成统一的云控平台。
 
 项目深度融合低空经济、数字孪生、能源管控、园区运营、智慧招商等应用，实现园区管理全流程智能化管理。""",
-            "cover_image": "/images/news-q1.jpg",
+            "cover_image": "/uploads/article-covers/q1-2026-news-summary.jpg",
             "category": "动态与文化",
             "author_name": "综合管理部",
             "author_avatar": "",
@@ -658,7 +658,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 这套成熟的"红安模式"，成为湖北省医共体建设的典型标杆，荣获第七届中国健康县域大会"紧密型县域医共体建设示范奖"。
 
 如今，夏俊超正牵头推进项目纳入湖北省"强基工程"专项与省级医共体统筹项目，推动"红安模式"在全省乃至全国复制推广。""",
-            "cover_image": "/images/youth-pioneer.jpg",
+            "cover_image": "/uploads/article-covers/xia-junchao-youth-pioneer.jpg",
             "category": "动态与文化",
             "author_name": "人力资源部",
             "author_avatar": "",
@@ -683,7 +683,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 荆楚大地自古便是创新沃土，更是中部数字经济崛起的核心支点。作为湖北产业数智化发展的中坚力量，联投湖北省数产集团紧抓人工智能发展机遇，对标全球前沿技术方向，聚力打造全栈智能服务体系。我们坚持技术创新与场景应用双轮驱动，推动人工智能深度融入政务服务、产业发展、民生保障等领域，严守数据安全底线、恪守科技伦理准则，全力提速湖北产业数智化转型升级。
 
 《湖北数创》全面焕新，既是对湖北数字创新实践的记录与沉淀，更是对智能时代未来发展的展望与求索。愿以此刊为桥，汇聚行业智慧、链接产业资源，见证荆楚大地在数字经济新征程上，谱写高质量发展的崭新篇章！""",
-            "cover_image": "/images/preface-2026-q1.jpg",
+            "cover_image": "/uploads/article-covers/preface-2026-q1.jpg",
             "category": "动态与文化",
             "author_name": "编辑部",
             "author_avatar": "",
@@ -915,7 +915,7 @@ OpenClaw引入了工作区概念，每个任务拥有独立的工作空间。SOU
 [\[10\] 经济参考报. 智能网联汽车"车路云一体化"应用试点启动\[EB/OL\]. (2024-01-18). ]
 
 [https://www.news.cn/20240118/d74af52c9b854c5dbefad4a06e643b9e/c.html.]""",
-            "cover_image": "/images/driving-wuhan-newcity.jpg",
+            "cover_image": "/uploads/article-covers/autonomous-driving-wuhan-newcity.jpg",
             "category": "方案与思考",
             "author_name": "缪锴、吴臻、向汪文、陈俊成",
             "author_avatar": "",
