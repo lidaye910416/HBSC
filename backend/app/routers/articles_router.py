@@ -33,12 +33,13 @@ def _sanitize_markdown(text: Optional[str]) -> Optional[str]:
     text = re.sub(r"^\s*\*+\s*\[([^\]\n]+?)\]\s*\*+\s*\n", "", text, flags=re.MULTILINE)
     # 5. Collapse any standalone [...] spans whose entire body is a single line
     #    (residue paragraph wrappers). Keep multi-line brackets intact.
+    #    Skip ![alt](url) image syntax so the markdown image is preserved.
     def _strip_brackets(match: re.Match) -> str:
         inner = match.group(1)
         if "\n" not in inner.strip():
             return inner
         return match.group(0)
-    text = re.sub(r"\[([^\[\]]+?)\]", _strip_brackets, text)
+    text = re.sub(r"(?<!!)\[([^\[\]]+?)\](?!\()", _strip_brackets, text)
     # 6. Trim blank lines created by removals.
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
