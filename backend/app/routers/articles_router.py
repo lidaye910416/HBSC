@@ -73,8 +73,8 @@ def get_articles(
     """获取文章列表"""
     db = Session(bind=engine)
     try:
-        query = db.query(Article)
-        
+        query = db.query(Article).filter(Article.status == "published")
+
         if category:
             query = query.filter(Article.category == category)
         if journal_slug:
@@ -113,7 +113,7 @@ def get_featured_articles():
     """获取精选文章"""
     db = Session(bind=engine)
     try:
-        articles = db.query(Article).filter(Article.featured == 1).order_by(Article.published_at.desc()).limit(3).all()
+        articles = db.query(Article).filter(Article.featured == 1, Article.status == "published").order_by(Article.published_at.desc()).limit(3).all()
         return [
             {
                 "id": a.id,
@@ -137,7 +137,7 @@ def get_article(slug: str):
     """获取文章详情"""
     db = Session(bind=engine)
     try:
-        article = db.query(Article).filter(Article.slug == slug).first()
+        article = db.query(Article).filter(Article.slug == slug, Article.status == "published").first()
         if not article:
             raise HTTPException(status_code=404, detail="文章不存在")
         
