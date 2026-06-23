@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
+
 from .config import settings
 from .database import engine, Base
-from .routers import articles_router, team_router, auth_router
+from .routers import articles_router, team_router, auth_router, admin_router
 from .models import Journal, Article, Researcher
 from .services.seed_data import seed_journals, seed_articles, seed_researchers
 from sqlalchemy.orm import Session
@@ -30,10 +33,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 挂载上传文件目录（首次启动时创建）
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
 # 注册路由
 app.include_router(articles_router)
 app.include_router(team_router)
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 @app.get("/")
 def root():
