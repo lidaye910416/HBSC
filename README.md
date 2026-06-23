@@ -113,6 +113,66 @@ POST /api/newsletter           # 订阅
 - **数据库**: 阿里云 RDS PostgreSQL（生产环境）
 - **图床/静态文件**: 阿里云 OSS
 
+## 内容管理后台（CMS）
+
+本项目内置一个仅限单管理员使用的内容管理后台，覆盖文章与期刊的完整 CRUD。
+
+### 访问
+
+启动前后端后，浏览器打开 `http://localhost:5173/admin`。
+
+首次部署需要创建管理员账户：
+
+```bash
+cd backend
+python3 -m scripts.create_admin
+# 按提示输入用户名与密码，把输出写入 backend/.env
+```
+
+### `.env` 配置
+
+参考 `backend/.env.example`，至少需要：
+
+```bash
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=$2b$12$...   # 由 scripts/create_admin 生成
+SECRET_KEY=<openssl rand -hex 32>  # 生产环境必须改
+JWT_EXPIRE_HOURS=8
+UPLOAD_DIR=./uploads
+UPLOAD_MAX_SIZE_MB=5
+```
+
+**⚠️ 安全提醒**：
+- 生产部署必须修改 `SECRET_KEY`（用 `openssl rand -hex 32` 生成）
+- 默认 `SECRET_KEY` 是公开字符串，部署前必须覆盖
+- 不要把 `.env` 提交到 git（已在 `.gitignore`）
+
+### 功能
+
+- **文章**：新建 / 编辑 / 删除 / 草稿 / 发布 / 搜索 / 状态筛选 / Markdown 编辑 / 封面上传 / 正文图片上传
+- **期刊**：新建 / 编辑 / 删除 / 期号管理
+- **媒体库**：查看所有已上传图片、复制 URL、删除
+
+### 公开 API 的状态过滤
+
+`GET /api/articles` 与 `GET /api/articles/{slug}` **仅返回 `status='published'`** 的文章。
+管理 API 不应用此过滤（管理端能看见草稿）。
+
+### 测试
+
+```bash
+cd backend && python3 -m pytest -v
+```
+
+当前 **41 个测试全部通过**（security/auth/models/schemas/upload/admin CRUD/public filter）。
+
+### 已知约束
+
+- slug 在文章/期刊发布后不可修改（避免外链失效）
+- 单管理员：未来如需多用户/角色，参考 `docs/superpowers/specs/2026-06-23-cms-design.md` §十六
+
+---
+
 ## License
 
 MIT
