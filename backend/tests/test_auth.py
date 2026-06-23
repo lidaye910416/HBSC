@@ -40,16 +40,22 @@ def test_login_success_returns_token(client):
     data = res.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
+    # expires_at 应为 ISO 8601 字符串（含日期与时间）
+    assert "expires_at" in data
+    assert "T" in data["expires_at"]  # ISO 8601 分隔符
 
 
 def test_login_wrong_password_401(client):
     res = client.post("/api/auth/login", json={"username": "testadmin", "password": "wrong"})
     assert res.status_code == 401
+    # 合并文案防止用户名枚举（任何人不应能从响应区分"用户不存在" vs "密码错"）
+    assert res.json()["detail"] == "用户名或密码错误"
 
 
 def test_login_unknown_user_401(client):
     res = client.post("/api/auth/login", json={"username": "nobody", "password": "x"})
     assert res.status_code == 401
+    assert res.json()["detail"] == "用户名或密码错误"
 
 
 def test_me_requires_token(client):
