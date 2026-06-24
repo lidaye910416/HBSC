@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime
 import re
 from ..database import engine, get_db
 from ..models import Journal, Article
@@ -225,5 +226,115 @@ def get_categories():
     try:
         articles = db.query(Article.category).distinct().all()
         return [a[0] for a in articles if a[0]]
+    finally:
+        db.close()
+
+
+# =====================================================================
+# /api/issues — multi-issue (multi-journal) endpoints
+#
+# /api/journals is kept for backward compatibility (returns the same data
+# as /api/issues). New consumers should prefer /api/issues.
+# =====================================================================
+
+def _journal_to_dict(journal: Journal, include_articles: bool = False):
+    """Serialize a Journal row to a JSON-friendly dict.
+
+    If `include_articles` is True, also serializes the bound articles using
+    the same shape as /journals/{slug} so callers don't need a second round
+    trip.
+    """
+    payload = {
+        "id": journal.id,
+        "title": journal.title,
+        "slug": journal.slug,
+        "cover_image": journal.cover_image,
+        "description": journal.description,
+        "issue_number": journal.issue_number,
+        "published_at": journal.published_at.isoformat() if journal.published_at else None,
+        "article_count": len(journal.articles),
+    }
+    if include_articles:
+        payload["articles"] = [
+            {
+                "id": a.id,
+                "title": a.title,
+                "slug": a.slug,
+                "summary": _sanitize_summary(a.summary),
+                "category": a.category,
+                "reading_time": a.reading_time,
+                "views": a.views,
+                "tags": a.tags.split(",") if a.tags else [],
+                "published_at": a.published_at.isoformat() if a.published_at else None,
+            }
+            for a in sorted(journal.articles, key=lambda x: x.published_at or datetime.min, reverse=True)
+        ]
+    return payload
+
+
+@router.get("/issues")
+def get_issues():
+    """List all journal issues, sorted by published_at desc."""
+    db = Session(bind=engine)
+    try:
+        journals = db.query(Journal).order_by(Journal.published_at.desc()).all()
+        return [_journal_to_dict(j) for j in journals]
+    finally:
+        db.close()
+
+
+@router.get("/issues/{slug}")
+def get_issue(slug: str):
+    """Issue detail with all its articles, sorted by published_at desc."""
+    db = Session(bind=engine)
+    try:
+        journal = db.query(Journal).filter(Journal.slug == slug).first()
+        if not journal:
+            raise HTTPException(status_code=404, detail="期刊不存在")
+        return _journal_to_dict(journal, include_articles=True)
+    finally:
+        db.close()
+
+
+@router.get("/issues/{slug}/articles")
+def get_issue_articles(slug: str):
+    """All articles in a given issue, sorted by published_at desc."""
+    db = Session(bind=engine)
+    try:
+        journal = db.query(Journal).filter(Journal.slug == slug).first()
+        if not journal:
+            raise HTTPException(status_code=404, detail="期刊不存在")
+
+        articles = sorted(
+            journal.articles,
+            key=lambda a: a.published_at or datetime.min,
+            reverse=True,
+        )
+        return {
+            "issue": {
+                "id": journal.id,
+                "slug": journal.slug,
+                "title": journal.title,
+                "issue_number": journal.issue_number,
+                "published_at": journal.published_at.isoformat() if journal.published_at else None,
+            },
+            "items": [
+                {
+                    "id": a.id,
+                    "title": a.title,
+                    "slug": a.slug,
+                    "summary": _sanitize_summary(a.summary),
+                    "cover_image": a.cover_image,
+                    "category": a.category,
+                    "author_name": a.author_name,
+                    "reading_time": a.reading_time,
+                    "views": a.views,
+                    "tags": a.tags.split(",") if a.tags else [],
+                    "published_at": a.published_at.isoformat() if a.published_at else None,
+                }
+                for a in articles
+            ],
+            "total": len(articles),
+        }
     finally:
         db.close()

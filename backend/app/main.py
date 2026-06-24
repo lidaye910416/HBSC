@@ -59,31 +59,36 @@ def seed_all():
         if db.query(Journal).count() > 0:
             print("数据已存在，跳过初始化")
             return
-        
-        # 插入期刊
+
+        # 插入所有期刊 (issues)
         for j in seed_journals():
             db.add(Journal(**j))
         db.commit()
-        
-        # 获取期刊ID
-        journal = db.query(Journal).first()
-        journal_id = journal.id if journal else 1
-        
-        # 插入文章
+
+        # 建立 slug -> id 映射, 供文章绑定使用
+        slug_to_id = {j.slug: j.id for j in db.query(Journal).all()}
+
+        # 插入文章, 按 article['journal_slug'] 解析到正确的 journal_id
+        article_count = 0
         for a in seed_articles():
             article_data = {k: v for k, v in a.items() if k != 'journal_slug'}
-            article_data['journal_id'] = journal_id
+            slug = a.get('journal_slug')
+            article_data['journal_id'] = slug_to_id.get(slug)
+            if article_data['journal_id'] is None:
+                print(f"⚠️  article '{a.get('title')}' has no matching journal_slug='{slug}', skipping")
+                continue
             db.add(Article(**article_data))
+            article_count += 1
         db.commit()
-        
+
         # 插入团队成员
         for r in seed_researchers():
             db.add(type('TeamMember', (), {'name': r['name'], 'name_en': r.get('name_en', ''), 'title': r['title'], 'bio': r.get('bio', ''), 'avatar': r.get('avatar', ''), 'research_area': r.get('research_area', ''), 'email': r.get('email', ''), 'order': r.get('order', 0)})())
         db.commit()
-        
+
         print("✅ 湖北数创种子数据初始化完成")
-        print(f"   - 期刊: 1期")
-        print(f"   - 文章: {len(seed_articles())}篇")
+        print(f"   - 期刊: {len(slug_to_id)}期")
+        print(f"   - 文章: {article_count}篇")
     except Exception as e:
         print(f"❌ 初始化失败: {e}")
         db.rollback()
