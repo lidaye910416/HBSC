@@ -16,13 +16,19 @@ router = APIRouter(prefix="/api", tags=["articles"])
 #   [**摘要：** ...]
 #   [段落正文]
 #   {#sec:foo .unnumbered}
-# We strip these defensively at the API boundary so the rendered HTML is clean.
+#
+# IMPORTANT (verbatim mode): single-line [...] spans may contain real emphasis
+# or content from the .docx source. We preserve them. We only strip:
+#   - pandoc attribute blocks ({#id} {.class} {=html})
+#   - **...** wrappers around [...] emphasis spans (e.g. **[Title]** -> Title)
+#   - ** markers wrapping bracket labels like [**摘要：** ...] -> **摘要：**
+# We DO NOT strip standalone single-line [...] brackets.
 def _sanitize_markdown(text: Optional[str]) -> Optional[str]:
     if not text:
         return text
-    # 1. Drop pandoc attribute blocks {...} and {...}—but only when they
-    #    contain pandoc-style class/key/identifier syntax, not regular text.
-    text = re.sub(r"\{[#.][^\}]*\}", "", text)
+    # 1. Drop pandoc attribute blocks {...} when they contain pandoc-style
+    #    class/key/identifier syntax, e.g. {#sec:foo .unnumbered} or {=html}.
+    text = re.sub(r"\{[#.=][^\}]*\}", "", text)
     # 2. Collapse **** wrappers around [...] emphasis spans used as headings.
     #    e.g. **[自动驾驶接驳实践研究]** -> 自动驾驶接驳实践研究
     text = re.sub(r"\*+\s*\[([^\]\n]+?)\]\s*\*+", r"\1", text)
@@ -30,18 +36,7 @@ def _sanitize_markdown(text: Optional[str]) -> Optional[str]:
     #    [**摘要：** ...] -> **摘要：** ...
     text = re.sub(r"\[\*\*", "[", text)
     text = re.sub(r"\*\*\]", "]", text)
-    # 4. Strip leading **[...]** emphasis block (often the title-like first line).
-    text = re.sub(r"^\s*\*+\s*\[([^\]\n]+?)\]\s*\*+\s*\n", "", text, flags=re.MULTILINE)
-    # 5. Collapse any standalone [...] spans whose entire body is a single line
-    #    (residue paragraph wrappers). Keep multi-line brackets intact.
-    #    Skip ![alt](url) image syntax so the markdown image is preserved.
-    def _strip_brackets(match: re.Match) -> str:
-        inner = match.group(1)
-        if "\n" not in inner.strip():
-            return inner
-        return match.group(0)
-    text = re.sub(r"(?<!!)\[([^\[\]]+?)\](?!\()", _strip_brackets, text)
-    # 6. Trim blank lines created by removals.
+    # 4. Trim blank lines created by removals.
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
@@ -53,7 +48,7 @@ def _sanitize_summary(text: Optional[str]) -> Optional[str]:
     # a pandoc artifact. Drop it.
     text = re.sub(r"^\s*\*+\s*\[([^\]\n]+?)\]\s*\*+\s*", "", text)
     text = re.sub(r"^\s*\[([^\]\n]+?)\]\s*", "", text)
-    text = re.sub(r"\{[#.][^\}]*\}", "", text)
+    text = re.sub(r"\{[#.=][^\}]*\}", "", text)
     return text.strip()
 
 @router.get("/journals")
