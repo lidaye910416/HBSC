@@ -133,3 +133,9 @@ class MediaOut(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool = True
+
+
+class ImageGenRequest(BaseModel):
+    """AI 生图请求（仅 admin 端点使用）。"""
+    prompt: str = Field(min_length=1, max_length=2000)
+    aspect_ratio: Literal["16:9", "1:1", "4:3"] = "16:9"

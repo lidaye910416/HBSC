@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     UPLOAD_MAX_SIZE_MB: int = 5
     UPLOAD_ALLOWED_MIMES: str = "image/png,image/jpeg,image/webp,image/gif"
 
+    # AI 图像生成（minimax 平台；空 token 时使用占位图）
+    MINIMAX_TOKEN: Optional[str] = None
+    MINIMAX_API_URL: str = "https://api.minimax.chat/v1/image/generation"
+    MINIMAX_MODEL: str = "image-01"
+
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     class Config:

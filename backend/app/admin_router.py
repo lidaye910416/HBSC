@@ -10,10 +10,11 @@ from .models.article_image import ArticleImage
 from .schemas.admin import (
     ArticleCreate, ArticleUpdate, ArticleAdminOut,
     JournalCreate, JournalUpdate, JournalAdminOut,
-    MediaOut, OkResponse,
+    MediaOut, OkResponse, ImageGenRequest,
 )
 from .security import get_current_admin
 from .upload_service import save_upload
+from .services.image_gen import generate_image
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -339,3 +340,39 @@ def delete_media(
     db.delete(m)
     db.commit()
     return OkResponse()
+
+
+# ============== AI IMAGE GENERATION ==============
+
+@router.post("/media/generate")
+async def generate_cover_image(
+    req: ImageGenRequest,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """通过 minimax 平台生成封面/配图（无 token 时回退到 PIL 占位图）。"""
+    info = await generate_image(req.prompt, req.aspect_ratio)
+
+    record = ArticleImage(
+        filename=info["filename"],
+        original_name=f"generated-{info['filename']}",
+        mime=info["mime"],
+        size=info["size"],
+        uploaded_by=admin,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return {
+        "id": record.id,
+        "url": info["url"],
+        "filename": info["filename"],
+        "mime": info["mime"],
+        "size": info["size"],
+        "prompt": req.prompt,
+        "aspect_ratio": req.aspect_ratio,
+        "model": info["model"],
+        "status": info["status"],
+        "uploaded_at": record.uploaded_at.isoformat(),
+    }
