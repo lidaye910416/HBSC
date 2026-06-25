@@ -1,10 +1,11 @@
 """管理员登录与当前用户查询。"""
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from ..config import settings
 from ..security import verify_password, create_access_token, get_current_admin
+from ..middleware.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -25,7 +26,8 @@ class MeResponse(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest):
+@rate_limit(max_calls=5, window_seconds=60)
+def login(req: LoginRequest, request: Request):
     """管理员登录。返回 JWT 与过期时间。"""
     if not settings.ADMIN_PASSWORD_HASH:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="管理员未初始化")

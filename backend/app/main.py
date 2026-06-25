@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6,6 +7,7 @@ import os
 from .config import settings
 from .database import engine, Base
 from .routers import articles_router, team_router, auth_router, admin_router
+from .middleware.rate_limit import rate_limit
 from .models import Journal, Article, Researcher
 from .services.seed_data import seed_journals, seed_articles, seed_researchers
 from sqlalchemy.orm import Session
@@ -27,10 +29,10 @@ app = FastAPI(
 # CORS配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # 挂载上传文件目录（首次启动时创建）
@@ -81,17 +83,21 @@ def seed_all():
             article_count += 1
         db.commit()
 
-        # 插入团队成员
+        # 插入团队成员 (Researcher)
+        researcher_count = 0
         for r in seed_researchers():
-            db.add(type('TeamMember', (), {'name': r['name'], 'name_en': r.get('name_en', ''), 'title': r['title'], 'bio': r.get('bio', ''), 'avatar': r.get('avatar', ''), 'research_area': r.get('research_area', ''), 'email': r.get('email', ''), 'order': r.get('order', 0)})())
+            db.add(Researcher(**r))
+            researcher_count += 1
         db.commit()
 
         print("✅ 湖北数创种子数据初始化完成")
         print(f"   - 期刊: {len(slug_to_id)}期")
         print(f"   - 文章: {article_count}篇")
+        print(f"   - 研究人员: {researcher_count}位")
     except Exception as e:
         print(f"❌ 初始化失败: {e}")
         db.rollback()
+        raise
     finally:
         db.close()
 

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+# -*- coding: utf-8 -*-
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
@@ -51,60 +52,43 @@ def _sanitize_summary(text: Optional[str]) -> Optional[str]:
     text = re.sub(r"\{[#.=][^\}]*\}", "", text)
     return text.strip()
 
+def _list_journals_impl(db: Session):
+    """Shared implementation for GET /journals and GET /issues.
+
+    Both endpoints return the same payload shape, so the actual query and
+    serialization live here to avoid drift.
+    """
+    journals = db.query(Journal).order_by(Journal.published_at.desc()).all()
+    return [_journal_to_dict(j) for j in journals]
+
+
+def _get_journal_impl(db: Session, slug: str):
+    """Shared implementation for GET /journals/{slug} and GET /issues/{slug}.
+
+    Returns the serialized journal with its bound articles. Raises 404 when
+    the slug does not match any journal.
+    """
+    journal = db.query(Journal).filter(Journal.slug == slug).first()
+    if not journal:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+    return _journal_to_dict(journal, include_articles=True)
+
+
 @router.get("/journals")
 def get_journals():
-    """获取期刊列表"""
+    """获取期刊列表 (alias for GET /issues)."""
     db = Session(bind=engine)
     try:
-        journals = db.query(Journal).order_by(Journal.published_at.desc()).all()
-        return [
-            {
-                "id": j.id,
-                "title": j.title,
-                "slug": j.slug,
-                "cover_image": j.cover_image,
-                "description": j.description,
-                "issue_number": j.issue_number,
-                "published_at": j.published_at.isoformat() if j.published_at else None,
-                "article_count": len(j.articles)
-            }
-            for j in journals
-        ]
+        return _list_journals_impl(db)
     finally:
         db.close()
 
 @router.get("/journals/{slug}")
 def get_journal(slug: str):
-    """获取期刊详情"""
+    """获取期刊详情 (alias for GET /issues/{slug})."""
     db = Session(bind=engine)
     try:
-        journal = db.query(Journal).filter(Journal.slug == slug).first()
-        if not journal:
-            raise HTTPException(status_code=404, detail="期刊不存在")
-        
-        return {
-            "id": journal.id,
-            "title": journal.title,
-            "slug": journal.slug,
-            "cover_image": journal.cover_image,
-            "description": journal.description,
-            "issue_number": journal.issue_number,
-            "published_at": journal.published_at.isoformat() if journal.published_at else None,
-            "articles": [
-                {
-                    "id": a.id,
-                    "title": a.title,
-                    "slug": a.slug,
-                    "summary": _sanitize_summary(a.summary),
-                    "category": a.category,
-                    "reading_time": a.reading_time,
-                    "views": a.views,
-                    "tags": a.tags.split(",") if a.tags else [],
-                    "published_at": a.published_at.isoformat() if a.published_at else None
-                }
-                for a in journal.articles
-            ]
-        }
+        return _get_journal_impl(db, slug)
     finally:
         db.close()
 
@@ -179,9 +163,6 @@ def get_article(slug: str, db: Session = Depends(get_db)):
     if not article:
         raise HTTPException(status_code=404, detail="文章不存在")
 
-    article.views = (article.views or 0) + 1
-    db.commit()
-
     related = db.query(Article).filter(
         Article.category == article.category,
         Article.id != article.id
@@ -213,6 +194,17 @@ def get_article(slug: str, db: Session = Depends(get_db)):
             for r in related
         ]
     }
+
+
+@router.post("/articles/{slug}/view", status_code=status.HTTP_204_NO_CONTENT)
+def increment_view(slug: str, db: Session = Depends(get_db)):
+    """Increment article view count. Idempotent on missing article (still 204)."""
+    article = db.query(Article).filter(Article.slug == slug).first()
+    if article:
+        article.views = (article.views or 0) + 1
+        db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 
 @router.get("/categories")
 def get_categories():
@@ -272,8 +264,7 @@ def get_issues():
     """List all journal issues, sorted by published_at desc."""
     db = Session(bind=engine)
     try:
-        journals = db.query(Journal).order_by(Journal.published_at.desc()).all()
-        return [_journal_to_dict(j) for j in journals]
+        return _list_journals_impl(db)
     finally:
         db.close()
 
@@ -283,10 +274,7 @@ def get_issue(slug: str):
     """Issue detail with all its articles, sorted by published_at desc."""
     db = Session(bind=engine)
     try:
-        journal = db.query(Journal).filter(Journal.slug == slug).first()
-        if not journal:
-            raise HTTPException(status_code=404, detail="期刊不存在")
-        return _journal_to_dict(journal, include_articles=True)
+        return _get_journal_impl(db, slug)
     finally:
         db.close()
 

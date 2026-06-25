@@ -1,9 +1,11 @@
 """Admin API：articles/journals/media CRUD + 上传。"""
+import os
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from .config import settings
 from .database import get_db
 from .models.journal import Article, Journal
 from .models.article_image import ArticleImage
@@ -337,6 +339,12 @@ def delete_media(
     m = db.query(ArticleImage).filter(ArticleImage.id == media_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="图片不存在")
+    file_path = os.path.join(settings.UPLOAD_DIR, m.filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
     db.delete(m)
     db.commit()
     return OkResponse()

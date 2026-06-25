@@ -105,7 +105,26 @@ API 地址：`http://localhost:8000`
 - **主色**：墨 `#1A1A2E`、深墨 `#16213E`
 - **强调色**：古铜金 `#C9A84C`
 - **背景**：暖白 `#FAFAF7`、米白 `#F5F0E8`
-- **字体**：Noto Serif SC（标题）+ Noto Sans SC（正文）+ Cormorant Garamond（英文标题）
+- **字体**：
+  - Noto Serif SC — 中文标题与正文（衬线，深阅读）
+  - Noto Sans SC — 中文 UI / 卡片 / 摘要
+  - Inter — 拉丁 UI 与英文正文
+  - Cormorant Garamond — 拉丁装饰字体（仅 Latin 字符通过 unicode-range 生效）:
+    - 英文 H1/H2 自动 fallback，中文保持 Noto Serif SC
+    - .prose-lg 首字下沉（首字母）
+    - .prose blockquote 大引号装饰
+
+### Typography 类族 (global.css)
+- .prose — 基础长文（1.0625rem, line-height 1.9, max-width 720px）
+- .prose-lg — 详情页主文（1.125rem, line-height 1.95, 首字下沉）
+- .prose-sm — 卡片摘要 / 侧栏简介（0.9375rem, line-height 1.7）
+
+### 通用组件
+- Breadcrumb items=[{label,to?}] variant=dark|light — 4 处详情页共用，自动去重相邻重复 label
+
+### 表格
+- 详情页表格用 .prose table，斑马纹 + hover 高亮 + 移动端横向滚动
+- 移动端用 div.prose-table-wrap 包裹
 
 ## 部署
 

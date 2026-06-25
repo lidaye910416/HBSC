@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ..database import engine
 from ..models import Researcher
@@ -29,15 +30,23 @@ def get_team():
         db.close()
 
 @router.get("/search")
-def search(q: str):
+def search(q: str = Query("", max_length=100)):
     """搜索文章"""
     from ..models import Article
+    q = q.strip()
+    if not q:
+        return {"items": [], "total": 0}
+    safe = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     db = Session(bind=engine)
     try:
         articles = db.query(Article).filter(
-            Article.title.contains(q) | Article.summary.contains(q)
-        ).limit(10).all()
-        
+            Article.status == "published",
+            or_(
+                Article.title.ilike(f"%{safe}%", escape="\\"),
+                Article.summary.ilike(f"%{safe}%", escape="\\"),
+            )
+        ).limit(50).all()
+
         return {
             "items": [
                 {"id": a.id, "title": a.title, "slug": a.slug, "category": a.category, "type": "article"}
