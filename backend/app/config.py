@@ -7,7 +7,7 @@ from typing import Optional
 class Settings(BaseSettings):
     APP_NAME: str = "湖北数创 API"
     VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     DATABASE_URL: str = "sqlite:///./research.db"
 
     # JWT（复用现有 SECRET_KEY，别名兼容旧名）
@@ -17,9 +17,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 8
 
-    # 管理员凭据（生产环境必须通过 .env 注入）
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD_HASH: str = ""  # bcrypt 哈希，空字符串=禁用登录
+    # 管理员凭据（生产环境必须通过 .env 注入；空=禁用登录）
+    # 未设置时由 validator 在非生产环境注入 dev 默认值；生产环境报错。
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "")
+    ADMIN_PASSWORD_HASH: str = os.getenv("ADMIN_PASSWORD_HASH", "")
 
     # 上传
     UPLOAD_DIR: str = "./uploads"
@@ -45,6 +46,31 @@ class Settings(BaseSettings):
         import secrets
         self.SECRET_KEY = "dev-only-" + secrets.token_hex(16)
         print(f"[SECURITY] Using ephemeral dev SECRET_KEY")
+        return self
+
+    @model_validator(mode="after")
+    def _ensure_admin_credentials(self):
+        """生产环境必须显式注入 ADMIN_USERNAME / ADMIN_PASSWORD_HASH。
+        非生产环境允许 dev 便利默认值，但会在 stderr 打印警告以提醒。"""
+        is_prod = os.getenv("ENV") == "production"
+        if not self.ADMIN_USERNAME or not self.ADMIN_PASSWORD_HASH:
+            if is_prod:
+                raise ValueError(
+                    "ADMIN_USERNAME and ADMIN_PASSWORD_HASH must be set in production"
+                )
+            # 开发/测试环境：注入默认 dev 凭据 + 明确警告
+            import secrets as _sec
+            if not self.ADMIN_USERNAME:
+                self.ADMIN_USERNAME = "admin"
+            if not self.ADMIN_PASSWORD_HASH:
+                from .security import hash_password
+                dev_password = "dev-" + _sec.token_hex(8)
+                self.ADMIN_PASSWORD_HASH = hash_password(dev_password)
+                print(
+                    f"[SECURITY][DEV ONLY] Using ephemeral admin credentials — "
+                    f"username='{self.ADMIN_USERNAME}' password='{dev_password}'",
+                    flush=True,
+                )
         return self
 
     @property

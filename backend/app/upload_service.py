@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import AsyncIterator, Optional
 from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
@@ -20,9 +20,38 @@ EXT_TO_MIME = {
     "image/gif": ".gif",
 }
 
+# 分块读取大小：1 MB，避免一次性把大文件加载进内存
+CHUNK_SIZE = 1024 * 1024
+
 
 def _max_bytes() -> int:
     return settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
+
+
+class UploadTooLarge(Exception):
+    """上传文件超过最大限制。"""
+    def __init__(self, max_mb: int):
+        self.max_mb = max_mb
+        super().__init__(f"文件超过 {max_mb} MB 限制")
+
+
+async def read_upload_with_limit(file) -> bytes:
+    """分块读取上传流，累计大小，超过限制时立即抛 UploadTooLarge。
+
+    避免 await file.read() 把整个文件一次性读入内存导致 OOM。
+    """
+    max_bytes = _max_bytes()
+    size = 0
+    chunks: list[bytes] = []
+    while True:
+        chunk = await file.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > max_bytes:
+            raise UploadTooLarge(settings.UPLOAD_MAX_SIZE_MB)
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _detect_mime(content: bytes, fallback_filename: str) -> str:

@@ -1,5 +1,6 @@
 """Admin API：articles/journals/media CRUD + 上传。"""
 import os
+import re
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
@@ -15,11 +16,39 @@ from .schemas.admin import (
     MediaOut, OkResponse, ImageGenRequest,
 )
 from .security import get_current_admin
-from .upload_service import save_upload
+from .upload_service import save_upload, read_upload_with_limit, UploadTooLarge
 from .services.image_gen import generate_image
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _sanitize_filename(name: str) -> str:
+    """Sanitize user-supplied filename to prevent stored XSS.
+
+    Strips control characters, HTML angle brackets, quotes, and path
+    separators; caps length to 100 chars; falls back to "upload" when
+    the input is empty or fully sanitized away.
+    """
+    if not name:
+        return "upload"
+    # Remove control chars, HTML angle brackets, quotes
+    name = re.sub(r"[\x00-\x1f\x7f<>\"\'\\/]", "", name)
+    # Limit length
+    name = name[:100].strip()
+    return name or "upload"
+
+
+def _sanitize_prompt(prompt: str) -> str:
+    """Sanitize free-text prompt returned to the client.
+
+    Strips HTML angle brackets and quotes; caps length; falls back to
+    empty string when fully sanitized away.
+    """
+    if not prompt:
+        return ""
+    prompt = re.sub(r"[<>\"\'`]", "", prompt)
+    return prompt[:500].strip()
 
 
 def _serialize_tags(tags_field) -> Optional[List[str]]:
@@ -309,10 +338,14 @@ async def upload_media(
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
-    content = await file.read()
+    try:
+        content = await read_upload_with_limit(file)
+    except UploadTooLarge as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    safe_name = _sanitize_filename(file.filename or "upload")
     try:
         info = save_upload(
-            filename=file.filename or "upload",
+            filename=safe_name,
             content=content,
             uploaded_by=admin,
             db=db,
@@ -360,10 +393,12 @@ async def generate_cover_image(
 ):
     """通过 minimax 平台生成封面/配图（无 token 时回退到 PIL 占位图）。"""
     info = await generate_image(req.prompt, req.aspect_ratio)
+    safe_original_name = _sanitize_filename(f"generated-{info['filename']}")
+    safe_prompt = _sanitize_prompt(req.prompt)
 
     record = ArticleImage(
         filename=info["filename"],
-        original_name=f"generated-{info['filename']}",
+        original_name=safe_original_name,
         mime=info["mime"],
         size=info["size"],
         uploaded_by=admin,
@@ -378,7 +413,7 @@ async def generate_cover_image(
         "filename": info["filename"],
         "mime": info["mime"],
         "size": info["size"],
-        "prompt": req.prompt,
+        "prompt": safe_prompt,
         "aspect_ratio": req.aspect_ratio,
         "model": info["model"],
         "status": info["status"],

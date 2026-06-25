@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import os
 
 from .config import settings
@@ -14,6 +17,21 @@ from sqlalchemy.orm import Session
 
 # 导入所有模型以确保它们被注册到 Base.metadata
 from .models.base import Base as ModelBase
+
+
+def _code_for_status(status_code: int) -> str:
+    """Map an HTTP status code to a stable, machine-readable error code."""
+    return {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        422: "validation_error",
+        429: "rate_limited",
+        500: "internal_error",
+    }.get(status_code, "error")
+
 
 # 创建数据库表
 ModelBase.metadata.create_all(bind=engine)
@@ -34,6 +52,32 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# 全局异常处理 — 统一错误响应格式为 {"error": {"code", "message"}}
+# NOTE: 响应格式从 {detail: "..."} 变为 {error: {code, message}}。
+#       前端 api.ts 暂时仍按 err.detail 处理，将在 G4 任务中统一适配，这里不要修改 api.ts。
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": _code_for_status(exc.status_code), "message": exc.detail}},
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    # 生产环境不泄漏堆栈；调试模式下附带 traceback 便于排查
+    if settings.DEBUG:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "internal_error", "message": str(exc), "traceback": tb}},
+        )
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "internal_error", "message": "An internal error occurred"}},
+    )
+
 
 # 挂载上传文件目录（首次启动时创建）
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)

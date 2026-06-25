@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
@@ -11,6 +11,9 @@ from .config import settings
 
 # tokenUrl 仅用于 OpenAPI 文档，不强制实际路径
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+# 与 auth_router 中的 ADMIN_TOKEN_COOKIE 保持一致
+ADMIN_TOKEN_COOKIE = "admin_token"
 
 
 def hash_password(plain: str) -> str:
@@ -41,8 +44,16 @@ def decode_access_token(token: str) -> dict:
         raise ValueError(str(e)) from e
 
 
-def get_current_admin(token: Optional[str] = Depends(oauth2_scheme)) -> str:
-    """FastAPI 依赖：从 Authorization 头提取 JWT，返回管理员用户名。401 if 无效。"""
+def get_current_admin(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> str:
+    """FastAPI 依赖：从 Authorization 头或 httpOnly cookie 中提取 JWT，返回管理员用户名。
+
+    优先使用 Authorization 头；若缺失则回退到 admin_token cookie。
+    """
+    if not token:
+        token = request.cookies.get(ADMIN_TOKEN_COOKIE)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未认证")
     try:
