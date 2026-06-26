@@ -1,1 +1,60 @@
-**/__pycache__/*.pyc
+# ── Python ───────────────────────────────────────
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / frontend build ──────────────────────
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+.parcel-cache/
+.vite/
+*.tsbuildinfo
+.npm/
+.eslintcache
+
+# ── Environment / secrets (NEVER commit) ──────
+.env
+.env.local
+.env.*.local
+**/.env
+!backend/.env.example
+
+# ── Database / uploaded media ──────────────────
+*.db
+*.sqlite
+*.sqlite3
+backend/research.db
+backend/uploads/
+!backend/uploads/.gitkeep
+
+# ── OS / editor cruft ──────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs / temp ────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tmp
+
+# ── Coverage / test artifacts ─────────────────
+coverage/
+.nyc_output/
+*.lcov

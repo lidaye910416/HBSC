@@ -18,27 +18,43 @@ router = APIRouter(prefix="/api", tags=["articles"])
 #   [段落正文]
 #   {#sec:foo .unnumbered}
 #
-# IMPORTANT (verbatim mode): single-line [...] spans may contain real emphasis
-# or content from the .docx source. We preserve them. We only strip:
-#   - pandoc attribute blocks ({#id} {.class} {=html})
-#   - **...** wrappers around [...] emphasis spans (e.g. **[Title]** -> Title)
-#   - ** markers wrapping bracket labels like [**摘要：** ...] -> **摘要：**
-# We DO NOT strip standalone single-line [...] brackets.
+# This sanitizer (read path) strips the most common pandoc residue so the
+# public read API always returns clean Markdown. It mirrors the offline
+# `scripts/normalize_markdown.py` pass but is intentionally simpler — it
+# catches only the residue that breaks rendering. Heavy lifting (full-width
+# punctuation, plain-table conversion, image-path rewriting) is done
+# offline; see `scripts/normalize_markdown.py`.
 def _sanitize_markdown(text: Optional[str]) -> Optional[str]:
     if not text:
         return text
-    # 1. Drop pandoc attribute blocks {...} when they contain pandoc-style
-    #    class/key/identifier syntax, e.g. {#sec:foo .unnumbered} or {=html}.
-    text = re.sub(r"\{[#.=][^\}]*\}", "", text)
-    # 2. Collapse **** wrappers around [...] emphasis spans used as headings.
-    #    e.g. **[自动驾驶接驳实践研究]** -> 自动驾驶接驳实践研究
-    text = re.sub(r"\*+\s*\[([^\]\n]+?)\]\s*\*+", r"\1", text)
-    # 3. Drop ** markers used purely for emphasis around bracket labels like
-    #    [**摘要：** ...] -> **摘要：** ...
-    text = re.sub(r"\[\*\*", "[", text)
-    text = re.sub(r"\*\*\]", "]", text)
-    # 4. Trim blank lines created by removals.
+    # 1. Drop pandoc attribute blocks {...} (NOT cross-line: { matches } on the same line)
+    text = re.sub(r"\{[#.=][^\n\}]*\}", "", text)
+    # 2. Unwrap [...]{.mark} BEFORE stripping standalone {...} so the
+    #    bracket-class wrapper gets matched first.
+    text = re.sub(r"\[([^\]\n]+?)\]\{[#.][^\n\}]*\}", r"\1", text)
+    text = re.sub(r"\{[#.=][^\n\}]*\}", "", text)
+    # 3. Unwrap **\[...\]** emphasis around bracket labels. NOTE: `[ \t]*`
+    #    (horizontal whitespace only) so we don't merge a heading's trailing
+    #    `**` with a paragraph's leading `[` across a newline.
+    text = re.sub(r"\*\*[ \t]*\[", "[", text)
+    text = re.sub(r"\][ \t]*\*\*", "]", text)
+    text = re.sub(r"\*\*\[([^\]\n]+?)\]\*\*", r"\1", text)
+    # 4. Unwrap pandoc-escaped brackets (\\[1\\] -> [1]) so the citation links work
+    text = re.sub(r"\\\[(\d+)\\\]", r"[\1]", text)
+    text = re.sub(r"\\\[", "[", text)
+    text = re.sub(r"\\\]", "]", text)
+    # 5. Trim blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
+    # 6. Convert pandoc extended tables (`+---+` separator, `|...|...|` rows)
+    #    to GFM pipe tables so react-markdown + remark-gfm can render them.
+    #    Heavy work is done offline by scripts/normalize_markdown.py; this
+    #    is a defensive catch for content added via the admin UI.
+    text = re.sub(
+        r"^\s*\+(?:[-\s]+\+)+\s*$",
+        lambda _m: "|" + " | ".join(["---"] * (max(2, _m.group(0).count("+") - 1))) + " |",
+        text,
+        flags=re.MULTILINE,
+    )
     return text.strip()
 
 
@@ -49,7 +65,7 @@ def _sanitize_summary(text: Optional[str]) -> Optional[str]:
     # a pandoc artifact. Drop it.
     text = re.sub(r"^\s*\*+\s*\[([^\]\n]+?)\]\s*\*+\s*", "", text)
     text = re.sub(r"^\s*\[([^\]\n]+?)\]\s*", "", text)
-    text = re.sub(r"\{[#.=][^\}]*\}", "", text)
+    text = re.sub(r"\{[#.=][^\n\}]*\}", "", text)
     return text.strip()
 
 def _list_journals_impl(db: Session):

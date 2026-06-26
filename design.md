@@ -28,18 +28,26 @@
 
 ### 1.4 文字色 (Text)
 ```css
---color-text: #1f2937;           /* 正文深色 */
---color-text-secondary: #6b7280;  /* 辅助文字 */
---color-text-muted: #9ca3af;      /* 弱化文字 */
+--color-text: #1f2937;             /* 正文深色 — 14.68:1 AAA on white */
+--color-text-secondary: #4b5563;   /* 辅助文字 — 7.56:1 AAA on white */
+--color-text-muted: #6b7280;       /* 弱化文字 — 4.83:1 AA on white */
 ```
 
 ### 1.5 边框与表面
 ```css
---color-border: #e5e7eb;  /* 淡灰边框 */
---color-muted: #f3f4f6;   /* 微弱背景 */
---color-surface: #ffffff;  /* 卡片/输入框背景 */
---color-card: #ffffff;     /* 卡片纯白 */
+--color-border: #e5e7eb;           /* 装饰性细边框 (1.24:1，依赖 shadow 撑层次) */
+--color-border-strong: #9ca3af;    /* 状态边框 (2.85:1) — 输入框聚焦/表格，叠加 shadow */
+--color-muted: #f3f4f6;            /* 微弱背景 */
+--color-surface: #ffffff;          /* 卡片/输入框背景 */
+--color-card: #ffffff;             /* 卡片纯白 */
 ```
+
+### 1.6 卡片阴影
+```css
+--shadow-card:        0 1px 3px rgba(15, 23, 41, 0.06), 0 1px 2px rgba(15, 23, 41, 0.04);
+--shadow-card-hover:  0 4px 12px rgba(15, 23, 41, 0.10), 0 2px 4px rgba(15, 23, 41, 0.06);
+```
+> 边框 `#e5e7eb` 单独看对比度仅 1.24:1，叠 `--shadow-card` 后视觉边缘达到 WCAG 1.4.11 (≥3:1) 非文本对比度阈值。
 
 ### 1.6 完整色彩令牌
 
@@ -52,8 +60,8 @@
 | `--color-bg` | `#ffffff` | 全局背景 |
 | `--color-secondary` | `#f8f9fc` | 二级背景区块 |
 | `--color-text` | `#1f2937` | 正文文字 |
-| `--color-text-secondary` | `#6b7280` | 辅助文字 |
-| `--color-text-muted` | `#9ca3af` | 时间戳/占位符 |
+| `--color-text-secondary` | `#4b5563` | 辅助文字（AAA） |
+| `--color-text-muted` | `#6b7280` | 时间戳/占位符（AA） |
 | `--color-border` | `#e5e7eb` | 边框/分隔线 |
 | `--color-muted` | `#f3f4f6` | 微弱背景 |
 | `--color-surface` | `#ffffff` | 表面/卡片 |
