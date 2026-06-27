@@ -1,0 +1,95 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Navigation } from './components/Navigation'
+import { Footer } from './components/Footer'
+import { Home } from './pages/Home'
+import { Articles } from './pages/Articles'
+import { ArticleDetail } from './pages/ArticleDetail'
+import { Issues } from './pages/Issues'
+import { IssueDetail } from './pages/IssueDetail'
+import { About } from './pages/About'
+import { SearchPage } from './pages/Search'
+import { ProtectedRoute } from './components/admin/ProtectedRoute'
+import { AdminLayout } from './components/admin/AdminLayout'
+import { Login } from './pages/admin/Login'
+import { Dashboard } from './pages/admin/Dashboard'
+import { ArticleList } from './pages/admin/ArticleList'
+import { ArticleEditor } from './pages/admin/ArticleEditor'
+import { JournalList } from './pages/admin/JournalList'
+import { JournalEditor } from './pages/admin/JournalEditor'
+import { MediaLibrary } from './pages/admin/MediaLibrary'
+import './styles/global.css'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      // Smarter retry: don't retry client errors (4xx) — they're deterministic
+      // and retrying just wastes time. Allow up to 3 retries for transient
+      // failures (5xx, network) which may succeed on retry.
+      retry: (failureCount, error: any) => {
+        const status = error?.status ?? error?.response?.status
+        if (status >= 400 && status < 500) return false
+        return failureCount < 3
+      },
+    },
+  },
+})
+
+function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      {/* Fixed full-viewport background — as a sibling div, not inside document flow.
+          This div sits BEHIND everything (z-index:-1) and covers the ENTIRE viewport
+          at all times, regardless of browser size. */}
+      <div className="app-bg" aria-hidden="true" />
+
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 0 }}>
+        <Navigation />
+        <div style={{ flex: 1 }}>{children}</div>
+        <Footer />
+      </div>
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          {/* 公开站 */}
+          <Route path="/" element={<Layout><Home /></Layout>} />
+          <Route path="/articles" element={<Layout><Articles /></Layout>} />
+          <Route path="/articles/:slug" element={<Layout><ArticleDetail /></Layout>} />
+          <Route path="/issues" element={<Layout><Issues /></Layout>} />
+          <Route path="/issues/:slug" element={<Layout><IssueDetail /></Layout>} />
+          <Route path="/about" element={<Layout><About /></Layout>} />
+          <Route path="/search" element={<Layout><SearchPage /></Layout>} />
+
+          {/* Admin 登录（公开） */}
+          <Route path="/admin/login" element={<Login />} />
+
+          {/* Admin 后台（全部受保护） */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="articles" element={<ArticleList />} />
+            <Route path="articles/new" element={<ArticleEditor />} />
+            <Route path="articles/:id" element={<ArticleEditor />} />
+            <Route path="journals" element={<JournalList />} />
+            <Route path="journals/new" element={<JournalEditor />} />
+            <Route path="journals/:id" element={<JournalEditor />} />
+            <Route path="media" element={<MediaLibrary />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
+  )
+}

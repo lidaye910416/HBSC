@@ -1,0 +1,88 @@
+/* Hero */
+.page-hero {
+  background: var(--color-secondary);
+  padding: calc(var(--nav-height) + var(--space-8)) 0 var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+}
+.page-hero .section-label { color: var(--color-accent); }
+.page-hero h1 { color: var(--color-primary); font-size: 2rem; }
+.page-hero__desc { color: var(--color-text-secondary); font-size: 1rem; margin-top: 8px; }
+
+/* Feed */
+.insights-feed { display: flex; flex-direction: column; gap: 12px; }
+.insight-feed-item {
+  border: 1px solid var(--color-border);
+  border-radius: .75rem;
+  background: var(--color-card);
+  overflow: hidden;
+  transition: all var(--transition-base);
+}
+.insight-feed-item:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-accent-light);
+}
+.insight-feed-item--open { border-color: var(--color-accent); }
+.insight-feed-item__header { padding: var(--space-3) var(--space-4); cursor: pointer; }
+.insight-feed-item__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.insight-feed-item__date {
+  font-family: var(--font-sans-en);
+  font-size: .75rem;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.insight-feed-item__source {
+  font-size: .75rem;
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+.insight-feed-item__source:hover { color: var(--color-accent); }
+.insight-feed-item__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.insight-feed-item__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  line-height: 1.4;
+  flex: 1;
+}
+.insight-feed-item__arrow {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-base);
+  margin-top: 2px;
+}
+.insight-feed-item__arrow.open { transform: rotate(180deg); }
+.insight-feed-item__author {
+  font-size: .75rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+.insight-feed-item__body {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-secondary);
+  font-size: .9375rem;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+
+/* Loading */
+.insights-loading { display: flex; flex-direction: column; gap: 12px; }
+.skeleton-insight {
+  height: 80px;
+  background: linear-gradient(90deg, var(--color-muted) 25%, #e5e7eb 50%, var(--color-muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: .75rem;
+}
+@keyframes shimmer { 0%{background-position:200% 0}100%{background-position:-200% 0} }

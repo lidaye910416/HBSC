@@ -1,0 +1,97 @@
+.article-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card);
+  border-radius: .75rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  transition: all var(--transition-base);
+}
+.article-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+.article-card__image {
+  position: relative;
+  height: 180px;
+  border-radius: 0;
+}
+.article-card:hover .article-card__image img {
+  transform: scale(1.05);
+}
+.article-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+}
+.article-card__category {
+  width: fit-content;
+  margin-bottom: var(--space-2);
+}
+.article-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-primary);
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color var(--transition-fast);
+}
+.article-card:hover .article-card__title {
+  color: var(--color-accent);
+}
+.article-card__summary {
+  font-size: .875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+  margin-bottom: var(--space-3);
+}
+.article-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+.article-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.article-card__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.article-card__author {
+  display: block;
+  font-size: .8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.article-card__date {
+  display: block;
+  font-size: .75rem;
+  color: var(--color-text-muted);
+}
+.article-card__stats {
+  display: flex;
+  gap: 12px;
+  font-size: .75rem;
+  color: var(--color-text-muted);
+}
+.article-card__stats span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

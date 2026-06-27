@@ -1,0 +1,66 @@
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.breadcrumb ol {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex-wrap: wrap;
+}
+
+.breadcrumb li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.breadcrumb__link {
+  font-size: 13px;
+  transition: color var(--transition-fast);
+}
+
+.breadcrumb__current {
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb__separator {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* Light variant (default) — adapts to light backgrounds */
+.breadcrumb--light .breadcrumb__link {
+  color: var(--color-text-secondary);
+}
+
+.breadcrumb--light .breadcrumb__link:hover {
+  color: var(--color-accent);
+}
+
+.breadcrumb--light .breadcrumb__current {
+  color: var(--color-accent);
+}
+
+/* Dark variant — adapts to dark hero backgrounds */
+.breadcrumb--dark .breadcrumb__link {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.breadcrumb--dark .breadcrumb__link:hover {
+  color: var(--color-accent);
+}
+
+.breadcrumb--dark .breadcrumb__current {
+  color: var(--color-accent);
+}
