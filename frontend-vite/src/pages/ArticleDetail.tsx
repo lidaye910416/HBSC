@@ -255,7 +255,7 @@ export function ArticleDetail() {
                 { label: '首页', to: '/' },
                 { label: '文章', to: '/articles' },
                 {
-                  label: article.category,
+                  label: article.category || '未分类',
                   to: `/articles?category=${encodeURIComponent(article.category || '')}`,
                 },
                 { label: article.title },

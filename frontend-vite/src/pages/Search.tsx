@@ -14,9 +14,9 @@ export function SearchPage() {
     return () => clearTimeout(id)
   }, [query])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<{ total: number; articles: Array<{ id: number; title: string; slug: string; type: string }>; insights: Array<{ id: number; title: string; slug: string; type: string }> }>({
     queryKey: ['search', debouncedQuery],
-    queryFn: () => api.search(debouncedQuery),
+    queryFn: () => api.search(debouncedQuery) as Promise<{ total: number; articles: Array<{ id: number; title: string; slug: string; type: string }>; insights: Array<{ id: number; title: string; slug: string; type: string }> }>,
     enabled: debouncedQuery.length >= 2,
   })
 
