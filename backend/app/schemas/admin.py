@@ -91,6 +91,7 @@ class JournalCreate(BaseModel):
     cover_image: Optional[str] = None
     description: Optional[str] = None
     issue_number: Optional[str] = Field(None, max_length=50)
+    status: Literal["draft", "published"] = "draft"
     published_at: Optional[datetime] = None
 
 
@@ -99,6 +100,7 @@ class JournalUpdate(BaseModel):
     cover_image: Optional[str] = None
     description: Optional[str] = None
     issue_number: Optional[str] = Field(None, max_length=50)
+    status: Optional[Literal["draft", "published"]] = None
     published_at: Optional[datetime] = None
 
 
@@ -109,6 +111,7 @@ class JournalAdminOut(BaseModel):
     cover_image: Optional[str] = None
     description: Optional[str] = None
     issue_number: Optional[str] = None
+    status: str = "draft"
     published_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
