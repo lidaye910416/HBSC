@@ -13,6 +13,7 @@ class Journal(Base):
     cover_image = Column(String(500))
     description = Column(Text)
     issue_number = Column(String(50))
+    status = Column(String(20), nullable=False, default="published", index=True)
     published_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
