@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import os
 
 from .config import settings
-from .database import engine, Base
+from .database import engine, Base, get_db
 from .routers import articles_router, team_router, auth_router, admin_router, settings_router
 from .middleware.rate_limit import rate_limit
 from .models import Journal, Article, Researcher
@@ -107,8 +107,45 @@ def root():
 def health():
     return {"status": "healthy", "service": settings.APP_NAME}
 
+def _backfill_journal_status():
+    """One-shot migration: ensure Journal.status column exists and is non-null.
+    For pre-Phase-1 databases that have no `status` column, this runs an
+    idempotent ALTER TABLE first, then backfills any NULL/empty values to
+    'published'. Safe to run on every startup.
+
+    Skipped when the test suite has installed a `get_db` dependency override
+    (pytest tests use a per-test tmp_path SQLite — the dev migration would
+    pollute the wrong database).
+    """
+    from sqlalchemy import text, inspect
+    if get_db in app.dependency_overrides:
+        return
+    insp = inspect(engine)
+    cols = {c["name"] for c in insp.get_columns("journals")}
+    if "status" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE journals ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'published'"))
+        print("[migration] added Journal.status column")
+    db = Session(bind=engine)
+    try:
+        rows = db.execute(text("SELECT id, status FROM journals")).fetchall()
+        updated = 0
+        for rid, status in rows:
+            if status is None or status == "":
+                db.execute(text("UPDATE journals SET status='published' WHERE id=:id"), {"id": rid})
+                updated += 1
+        if updated:
+            db.commit()
+            print(f"[migration] backfilled status='published' on {updated} journals")
+    finally:
+        db.close()
+
+
 def seed_all():
-    """初始化种子数据"""
+    """初始化种子数据。测试套件注入了 get_db 覆盖时跳过 — pytest 用的 tmp_path
+    SQLite 没有 seed 数据，强行运行会污染 dev research.db。"""
+    if get_db in app.dependency_overrides:
+        return
     db = Session(bind=engine)
     try:
         # 检查是否已有数据
@@ -157,4 +194,5 @@ def seed_all():
 
 @app.on_event("startup")
 def on_startup():
+    _backfill_journal_status()
     seed_all()

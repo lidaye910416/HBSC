@@ -92,22 +92,15 @@ def _get_journal_impl(db: Session, slug: str):
 
 
 @router.get("/journals")
-def get_journals():
+def get_journals(db: Session = Depends(get_db)):
     """获取期刊列表 (alias for GET /issues)."""
-    db = Session(bind=engine)
-    try:
-        return _list_journals_impl(db)
-    finally:
-        db.close()
+    return _list_journals_impl(db)
+
 
 @router.get("/journals/{slug}")
-def get_journal(slug: str):
+def get_journal(slug: str, db: Session = Depends(get_db)):
     """获取期刊详情 (alias for GET /issues/{slug})."""
-    db = Session(bind=engine)
-    try:
-        return _get_journal_impl(db, slug)
-    finally:
-        db.close()
+    return _get_journal_impl(db, slug)
 
 @router.get("/articles")
 def get_articles(
@@ -277,23 +270,15 @@ def _journal_to_dict(journal: Journal, include_articles: bool = False):
 
 
 @router.get("/issues")
-def get_issues():
+def get_issues(db: Session = Depends(get_db)):
     """List all journal issues, sorted by published_at desc."""
-    db = Session(bind=engine)
-    try:
-        return _list_journals_impl(db)
-    finally:
-        db.close()
+    return _list_journals_impl(db)
 
 
 @router.get("/issues/{slug}")
-def get_issue(slug: str):
+def get_issue(slug: str, db: Session = Depends(get_db)):
     """Issue detail with all its articles, sorted by published_at desc."""
-    db = Session(bind=engine)
-    try:
-        return _get_journal_impl(db, slug)
-    finally:
-        db.close()
+    return _get_journal_impl(db, slug)
 
 
 @router.get("/issues/{slug}/articles")

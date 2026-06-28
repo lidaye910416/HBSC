@@ -69,6 +69,7 @@ def test_list_issues_only_published(client):
     db = next(db_gen)
     db.add(Journal(title="Pub", slug="pub", status="published"))
     db.add(Journal(title="Drf", slug="drf", status="draft"))
+    db.commit()
     pub = db.query(Journal).filter_by(slug="pub").first()
     db.add(Article(title="A", slug="a", category="战略与政策", status="published", journal_id=pub.id))
     db.commit()
