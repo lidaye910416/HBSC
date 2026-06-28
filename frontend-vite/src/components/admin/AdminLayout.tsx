@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, BookOpen, Image as ImageIcon, ExternalLink } from 'lucide-react'
+import { LayoutDashboard, FileText, BookOpen, Image as ImageIcon, ExternalLink, Settings as SettingsIcon } from 'lucide-react'
 import { api } from '../../services/api'
 import './AdminLayout.css'
 
@@ -34,6 +34,9 @@ export function AdminLayout() {
           </NavLink>
           <NavLink to="/admin/media">
             <ImageIcon size={18} /> 媒体库
+          </NavLink>
+          <NavLink to="/admin/settings">
+            <SettingsIcon size={18} /> 设置
           </NavLink>
           <a href="/" target="_blank" rel="noreferrer">
             <ExternalLink size={18} /> 查看公开站
