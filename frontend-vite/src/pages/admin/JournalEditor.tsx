@@ -9,6 +9,7 @@ interface FormState {
   slug: string
   description: string
   issue_number: string
+  status: 'draft' | 'published'
   published_at: string
 }
 
@@ -17,6 +18,7 @@ const emptyForm = (): FormState => ({
   slug: '',
   description: '',
   issue_number: '',
+  status: 'draft',
   published_at: new Date().toISOString().slice(0, 10),
 })
 
@@ -46,6 +48,7 @@ export function JournalEditor() {
         slug: existing.slug,
         description: existing.description || '',
         issue_number: existing.issue_number || '',
+        status: existing.status || 'draft',
         published_at: existing.published_at ? existing.published_at.slice(0, 10) : '',
       })
       setSlugTouched(true)
@@ -122,6 +125,14 @@ export function JournalEditor() {
             value={form.description}
             onChange={(e) => update('description', e.target.value)}
           />
+        </div>
+
+        <div className="article-editor__field">
+          <label>状态</label>
+          <select value={form.status} onChange={(e) => update('status', e.target.value as 'draft' | 'published')}>
+            <option value="draft">草稿（不公开）</option>
+            <option value="published">已发布（公开）</option>
+          </select>
         </div>
 
         <div className="article-editor__field">
