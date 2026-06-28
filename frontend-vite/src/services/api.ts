@@ -68,9 +68,18 @@ export interface JournalAdmin {
   cover_image?: string;
   description?: string;
   issue_number?: string;
+  status: 'draft' | 'published';
   published_at?: string;
   article_count: number;
   updated_at?: string;
+}
+
+export interface JournalCompleteness {
+  战略与政策: number;
+  技术与产业: number;
+  方案与思考: number;
+  动态与文化: number;
+  complete: boolean;
 }
 
 export interface Issue {
@@ -189,9 +198,10 @@ export const api = {
         request(`/api/admin/articles/${id}`, { method: 'DELETE' }),
     },
     journals: {
-      list: (params?: { q?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<JournalAdmin>> => {
+      list: (params?: { q?: string; status?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<JournalAdmin>> => {
         const sp = new URLSearchParams()
         if (params?.q) sp.set('q', params.q)
+        if (params?.status) sp.set('status', params.status)
         if (params?.page) sp.set('page', String(params.page))
         if (params?.per_page) sp.set('per_page', String(params.per_page))
         return request<PaginatedResponse<JournalAdmin>>('/api/admin/journals?' + sp.toString())
@@ -202,6 +212,24 @@ export const api = {
         request(`/api/admin/journals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
       delete: (id: number) =>
         request(`/api/admin/journals/${id}`, { method: 'DELETE' }),
+      completeness: (id: number): Promise<JournalCompleteness> =>
+        request<JournalCompleteness>(`/api/admin/journals/${id}/completeness`),
+      publish: (id: number): Promise<JournalAdmin> =>
+        request<JournalAdmin>(`/api/admin/journals/${id}/publish`, { method: 'POST' }),
+      unpublish: (id: number): Promise<JournalAdmin> =>
+        request<JournalAdmin>(`/api/admin/journals/${id}/unpublish`, { method: 'POST' }),
+    },
+    settings: {
+      list: (): Promise<{ items: Array<{
+        key: string; value?: string | null; masked?: string | null;
+        is_secret: boolean; description: string;
+        updated_at: string; updated_by: string;
+      }> }> => request('/api/admin/settings'),
+      upsert: (key: string, value: string, description?: string) =>
+        request(`/api/admin/settings/${encodeURIComponent(key)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ value, description }),
+        }),
     },
     media: {
       list: (page = 1, per_page = 50): Promise<PaginatedResponse<MediaOut>> =>
