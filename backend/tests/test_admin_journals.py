@@ -86,3 +86,40 @@ def test_delete_journal(env):
     jid = next(j["id"] for j in res.json()["items"] if j["slug"] == "2026-q1")
     res = env["client"].delete(f"/api/admin/journals/{jid}", headers=_auth(_token()))
     assert res.status_code == 200
+
+
+def test_completeness_endpoint(env):
+    jid = env["client"].get("/api/admin/journals", headers=_auth(_token())).json()["items"][0]["id"]
+    res = env["client"].get(f"/api/admin/journals/{jid}/completeness", headers=_auth(_token()))
+    assert res.status_code == 200
+    body = res.json()
+    assert set(["战略与政策", "技术与产业", "方案与思考", "动态与文化", "complete"]).issubset(body.keys())
+    assert body["complete"] is False  # no articles yet
+
+
+def test_publish_incomplete_journal_422(env):
+    jid = env["client"].get("/api/admin/journals", headers=_auth(_token())).json()["items"][0]["id"]
+    res = env["client"].post(f"/api/admin/journals/{jid}/publish", headers=_auth(_token()))
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "incomplete_journal"
+
+
+def test_publish_then_unpublish(env):
+    from app.models.journal import Article
+    from app.models.journal import Journal as J
+    jid = env["client"].get("/api/admin/journals", headers=_auth(_token())).json()["items"][0]["id"]
+    # Inject 4 published articles directly via DB
+    db_gen = app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    j = db.query(J).filter_by(id=jid).first()
+    for cat in ["战略与政策", "技术与产业", "方案与思考", "动态与文化"]:
+        db.add(Article(title=f"T-{cat}", slug=f"s-{cat}-{jid}", category=cat, status="published", journal_id=jid))
+    db.commit()
+
+    res = env["client"].post(f"/api/admin/journals/{jid}/publish", headers=_auth(_token()))
+    assert res.status_code == 200
+    assert res.json()["status"] == "published"
+
+    res = env["client"].post(f"/api/admin/journals/{jid}/unpublish", headers=_auth(_token()))
+    assert res.status_code == 200
+    assert res.json()["status"] == "draft"

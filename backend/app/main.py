@@ -58,6 +58,15 @@ app.add_middleware(
 #       前端 api.ts 暂时仍按 err.detail 处理，将在 G4 任务中统一适配，这里不要修改 api.ts。
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # If detail is a dict with a "code" key, use it as the error code (semantic errors).
+    if isinstance(exc.detail, dict) and "code" in exc.detail:
+        body = dict(exc.detail)
+        code = body.pop("code")
+        message = body.pop("message", str(body))
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {"code": code, "message": message, **body}},
+        )
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": _code_for_status(exc.status_code), "message": exc.detail}},

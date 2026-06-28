@@ -18,6 +18,7 @@ from .schemas.admin import (
 from .security import get_current_admin
 from .upload_service import save_upload, read_upload_with_limit, UploadTooLarge
 from .services.image_gen import generate_image
+from .services.completeness import is_journal_complete
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -209,6 +210,7 @@ def _journal_to_dict(j: Journal) -> dict:
         "cover_image": j.cover_image,
         "description": j.description,
         "issue_number": j.issue_number,
+        "status": getattr(j, "status", "published"),
         "published_at": j.published_at.isoformat() if j.published_at else None,
         "created_at": j.created_at.isoformat() if j.created_at else None,
         "updated_at": j.updated_at.isoformat() if j.updated_at else None,
@@ -297,6 +299,59 @@ def delete_journal(
     db.delete(j)
     db.commit()
     return OkResponse()
+
+
+@router.get("/journals/{journal_id}/completeness")
+def get_journal_completeness(
+    journal_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    j = db.query(Journal).filter(Journal.id == journal_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+    return is_journal_complete(j)
+
+
+@router.post("/journals/{journal_id}/publish")
+def publish_journal(
+    journal_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    j = db.query(Journal).filter(Journal.id == journal_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+    report = is_journal_complete(j)
+    if not report["complete"]:
+        missing = [c for c in ("战略与政策", "技术与产业", "方案与思考", "动态与文化") if report[c] == 0]
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "incomplete_journal",
+                "message": "期刊必须四类文章齐全才能发布",
+                "missing": missing,
+            },
+        )
+    j.status = "published"
+    db.commit()
+    db.refresh(j)
+    return _journal_to_dict(j)
+
+
+@router.post("/journals/{journal_id}/unpublish")
+def unpublish_journal(
+    journal_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    j = db.query(Journal).filter(Journal.id == journal_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+    j.status = "draft"
+    db.commit()
+    db.refresh(j)
+    return _journal_to_dict(j)
 
 
 # ============== MEDIA ==============
