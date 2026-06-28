@@ -69,22 +69,23 @@ def _sanitize_summary(text: Optional[str]) -> Optional[str]:
     return text.strip()
 
 def _list_journals_impl(db: Session):
-    """Shared implementation for GET /journals and GET /issues.
-
-    Both endpoints return the same payload shape, so the actual query and
-    serialization live here to avoid drift.
-    """
-    journals = db.query(Journal).order_by(Journal.published_at.desc()).all()
+    """Public list — only published journals."""
+    journals = (
+        db.query(Journal)
+        .filter(Journal.status == "published")
+        .order_by(Journal.published_at.desc())
+        .all()
+    )
     return [_journal_to_dict(j) for j in journals]
 
 
 def _get_journal_impl(db: Session, slug: str):
-    """Shared implementation for GET /journals/{slug} and GET /issues/{slug}.
-
-    Returns the serialized journal with its bound articles. Raises 404 when
-    the slug does not match any journal.
-    """
-    journal = db.query(Journal).filter(Journal.slug == slug).first()
+    """Public detail — 404 for drafts."""
+    journal = (
+        db.query(Journal)
+        .filter(Journal.slug == slug, Journal.status == "published")
+        .first()
+    )
     if not journal:
         raise HTTPException(status_code=404, detail="期刊不存在")
     return _journal_to_dict(journal, include_articles=True)

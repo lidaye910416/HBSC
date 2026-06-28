@@ -61,3 +61,31 @@ def test_featured_excludes_drafts(client):
     assert res.status_code == 200
     slugs = {a["slug"] for a in res.json()}
     assert "d1" not in slugs
+
+def test_list_issues_only_published(client):
+    """Pre-existing client fixture has no journals — create them here."""
+    from app.database import get_db
+    db_gen = app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    db.add(Journal(title="Pub", slug="pub", status="published"))
+    db.add(Journal(title="Drf", slug="drf", status="draft"))
+    pub = db.query(Journal).filter_by(slug="pub").first()
+    db.add(Article(title="A", slug="a", category="战略与政策", status="published", journal_id=pub.id))
+    db.commit()
+    db.close()
+
+    res = client.get("/api/issues")
+    assert res.status_code == 200
+    slugs = [j["slug"] for j in res.json()]
+    assert "pub" in slugs
+    assert "drf" not in slugs
+
+
+def test_get_issue_draft_returns_404(client):
+    res = client.get("/api/issues/drf")
+    assert res.status_code == 404
+
+
+def test_get_journal_alias_filters_draft(client):
+    res = client.get("/api/journals/drf")
+    assert res.status_code == 404
