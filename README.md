@@ -1,6 +1,6 @@
-# 寄思科技有限责任公司 (Jisi Technology Co., Ltd.)
+# 湖北数创 (Hubei Digital Innovation)
 
-> 聚焦前沿科技与复杂系统研发的科技公司
+> 湖北数字产业创新研究的内部期刊展示平台，聚焦数字产业政策解读、技术趋势分析、数字化转型案例
 
 ![Node](https://img.shields.io/badge/Node.js-18+-green) ![Python](https://img.shields.io/badge/Python-3.10+-blue) ![License](https://img.shields.io/badge/License-MIT-orange)
 
@@ -47,7 +47,7 @@ npm run dev
 ## 项目结构
 
 ```
-jisi-tech/
+hubei-shuchuang/
 ├── SPEC.md                    # 项目规范文档
 ├── README.md                  # 本文件
 │

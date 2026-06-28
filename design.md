@@ -1,4 +1,4 @@
-# 寄思科技 Design System
+# 湖北数创 Design System
 > 科技简约美学 — 墨色+金色配色体系设计规范
 
 ---

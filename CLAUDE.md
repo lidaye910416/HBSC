@@ -1,4 +1,4 @@
-# 寄思科技有限责任公司 — 项目规范
+# 湖北数创 (Hubei Digital Innovation) — 项目规范
 
 ## 项目概述
 
