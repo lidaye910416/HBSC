@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
-import { api } from '../../services/api'
+import { api, type JournalCompleteness } from '../../services/api'
 import './ArticleList.css'
 
 interface DeleteTarget {
@@ -22,6 +22,18 @@ export function JournalList() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'journals', { q, page }],
     queryFn: () => api.admin.journals.list({ q: q || undefined, page, per_page: 20 }),
+  })
+
+  const { data: completeness } = useQuery({
+    queryKey: ['admin', 'journals', 'completeness', data?.items.map((j) => j.id).join(',')],
+    queryFn: async () => {
+      if (!data?.items) return {} as Record<number, JournalCompleteness>
+      const entries = await Promise.all(
+        data.items.map(async (j) => [j.id, await api.admin.journals.completeness(j.id)] as const)
+      )
+      return Object.fromEntries(entries) as Record<number, JournalCompleteness>
+    },
+    enabled: !!data?.items?.length,
   })
 
   const onMutateError = (err: unknown, op: string) =>
@@ -93,7 +105,25 @@ export function JournalList() {
                     <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>/{j.slug}</div>
                   </td>
                   <td>{j.issue_number || '—'}</td>
-                  <td>{j.article_count}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>{j.article_count}</span>
+                      {completeness?.[j.id] && (
+                        <span
+                          title={completeness[j.id].complete ? '四类齐全' : `缺：${['战略与政策','技术与产业','方案与思考','动态与文化'].filter(c => completeness[j.id][c as keyof JournalCompleteness] === 0).join('、')}`}
+                          style={{
+                            fontSize: '0.6875rem',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: completeness[j.id].complete ? '#16a34a' : '#d97706',
+                            color: '#fff',
+                          }}
+                        >
+                          {completeness[j.id].complete ? '完整' : '不完整'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
                     {j.published_at ? new Date(j.published_at).toLocaleDateString('zh-CN') : '—'}
                   </td>
