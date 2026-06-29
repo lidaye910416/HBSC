@@ -34,7 +34,11 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "UPLOAD_DIR", str(uploads))
     monkeypatch.setattr(settings, "ADMIN_USERNAME", "admin")
     monkeypatch.setattr(settings, "ADMIN_PASSWORD_HASH", hash_password("pw"))
-    return {"client": TestClient(app), "uploads": uploads}
+    return {
+        "client": TestClient(app),
+        "uploads": uploads,
+        "SessionLocal": TestingSessionLocal,
+    }
 
 
 def _auth(token):
@@ -100,3 +104,52 @@ def test_delete_media(env):
     mid = res.json()["id"]
     res = env["client"].delete(f"/api/admin/media/{mid}", headers=_auth(_token()))
     assert res.status_code == 200
+
+
+def test_upload_csv_kind_table(env):
+    """kind=table branch must not NameError on uuid/Path imports."""
+    csv_bytes = b"col1,col2\nrow1,row2\n"
+    res = env["client"].post(
+        "/api/admin/media?kind=table",
+        headers=_auth(_token()),
+        files={"file": ("table.csv", csv_bytes, "text/csv")},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["kind"] == "table"
+    assert body["filename"].endswith(".csv")
+    assert body["mime"] == "text/csv"
+    # File should be on disk
+    rel = body["url"].lstrip("/uploads/")
+    assert (env["uploads"] / rel).exists()
+
+
+def test_delete_media_path_traversal(env):
+    """If the DB has been tampered with filename containing '..', the
+    endpoint must refuse to touch a path outside UPLOAD_DIR."""
+    import uuid
+    from app.models.article_image import ArticleImage
+    from datetime import datetime
+    SessionLocal = env["SessionLocal"]
+    db = SessionLocal()
+    evil_name = f"../../etc/passwd-{uuid.uuid4().hex[:8]}"
+    rec = ArticleImage(
+        filename=evil_name,
+        original_name="passwd",
+        mime="text/plain",
+        size=10,
+        uploaded_by="admin",
+        uploaded_at=datetime.utcnow(),
+    )
+    db.add(rec)
+    db.commit()
+    mid = rec.id
+    db.close()
+
+    res = env["client"].delete(f"/api/admin/media/{mid}", headers=_auth(_token()))
+    assert res.status_code == 400, res.text
+    # Row still exists
+    db2 = SessionLocal()
+    still = db2.query(ArticleImage).filter_by(id=mid).first()
+    assert still is not None
+    db2.close()

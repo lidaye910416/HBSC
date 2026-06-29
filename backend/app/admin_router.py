@@ -1,7 +1,9 @@
 """Admin API：articles/journals/media CRUD + 上传。"""
 import os
 import re
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
@@ -516,10 +518,18 @@ def delete_media(
     m = db.query(ArticleImage).filter(ArticleImage.id == media_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="图片不存在")
-    file_path = os.path.join(settings.UPLOAD_DIR, m.filename)
-    if os.path.exists(file_path):
+    # Path-traversal guard: resolve the upload dir and verify the resolved
+    # target stays inside it. Reject anything that escapes (e.g. tampered
+    # DB rows with filename="../../etc/passwd").
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    target_path = (upload_root / m.filename).resolve()
+    try:
+        target_path.relative_to(upload_root)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="非法的文件路径")
+    if target_path.exists():
         try:
-            os.remove(file_path)
+            target_path.unlink()
         except OSError as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
     db.delete(m)
