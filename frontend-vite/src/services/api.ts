@@ -220,14 +220,15 @@ export const api = {
 
   admin: {
     articles: {
-      list: (params?: { status?: string; category?: string; q?: string; page?: number; per_page?: number }) => {
+      list: (params?: { status?: string; category?: string; q?: string; featured?: boolean; page?: number; per_page?: number }) => {
         const sp = new URLSearchParams()
         if (params?.status) sp.set('status', params.status)
         if (params?.category) sp.set('category', params.category)
         if (params?.q) sp.set('q', params.q)
+        if (params?.featured !== undefined) sp.set('featured', String(params.featured))
         if (params?.page) sp.set('page', String(params.page))
         if (params?.per_page) sp.set('per_page', String(params.per_page))
-        return request<PaginatedResponse<ArticleList & { status: string; updated_at?: string }>>('/api/admin/articles?' + sp.toString())
+        return request<PaginatedResponse<ArticleList & { status: string; featured: boolean; updated_at?: string }>>('/api/admin/articles?' + sp.toString())
       },
       get: (id: number): Promise<Article & { status: string; featured: boolean; cover_image_alt?: string; updated_at?: string }> =>
         request(`/api/admin/articles/${id}`),
@@ -237,6 +238,8 @@ export const api = {
         request(`/api/admin/articles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
       delete: (id: number) =>
         request(`/api/admin/articles/${id}`, { method: 'DELETE' }),
+      toggleFeatured: (id: number) =>
+        request(`/api/admin/articles/${id}/featured`, { method: 'PATCH' }),
       importDocx: async (file: File) => {
         const fd = new FormData()
         fd.append('file', file)

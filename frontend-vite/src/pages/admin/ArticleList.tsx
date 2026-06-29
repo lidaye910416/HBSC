@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Star } from 'lucide-react'
 import { api } from '../../services/api'
 import './ArticleList.css'
 
@@ -10,13 +10,15 @@ export function ArticleList() {
   const qc = useQueryClient()
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
+  const [featuredFilter, setFeaturedFilter] = useState<'' | 'true' | 'false'>('')
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'articles', { status, q, page }],
+    queryKey: ['admin', 'articles', { status, q, featuredFilter, page }],
     queryFn: () => api.admin.articles.list({
       status: status || undefined,
       q: q || undefined,
+      featured: featuredFilter === '' ? undefined : featuredFilter === 'true',
       page,
       per_page: 20,
     }),
@@ -31,6 +33,35 @@ export function ArticleList() {
     onError: (err) => onMutateError(err, '删除文章'),
   })
 
+  const featuredMut = useMutation({
+    mutationFn: (id: number) => api.admin.articles.toggleFeatured(id),
+    // Optimistic update — flip the local row immediately so the user sees
+    // the star fill in before the network round-trip completes.
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ['admin', 'articles'] })
+      const previous = qc.getQueriesData({ queryKey: ['admin', 'articles'] })
+      qc.setQueriesData<{ items: Array<{ id: number; featured?: boolean }> }>(
+        { queryKey: ['admin', 'articles'] },
+        (old) => old ? {
+          ...old,
+          items: old.items.map((it) => it.id === id ? { ...it, featured: !it.featured } : it),
+        } : old,
+      )
+      return { previous }
+    },
+    onError: (err, _id, ctx) => {
+      // Roll back optimistic update
+      if (ctx?.previous) {
+        ctx.previous.forEach(([key, value]) => qc.setQueryData(key, value))
+      }
+      onMutateError(err, '切换精选')
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
+      qc.invalidateQueries({ queryKey: ['featured'] })
+    },
+  })
+
   const handleDelete = (id: number, title: string) => {
     if (confirm(`确认删除文章"${title}"？此操作不可撤销。`)) {
       deleteMut.mutate(id)
@@ -41,6 +72,14 @@ export function ArticleList() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <h2 style={{ margin: 0 }}>文章管理</h2>
+        <button
+          className="article-list__new"
+          onClick={() => navigate('/admin/articles/featured')}
+          style={{ background: 'transparent', color: '#2563eb', border: '1px solid #2563eb' }}
+        >
+          <Star size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+          管理精选
+        </button>
       </div>
 
       <div className="article-list">
@@ -58,6 +97,11 @@ export function ArticleList() {
             <option value="draft">草稿</option>
             <option value="published">已发布</option>
           </select>
+          <select value={featuredFilter} onChange={(e) => { setFeaturedFilter(e.target.value as '' | 'true' | 'false'); setPage(1) }}>
+            <option value="">全部精选</option>
+            <option value="true">仅精选</option>
+            <option value="false">非精选</option>
+          </select>
           <button className="article-list__new" onClick={() => navigate('/admin/articles/new')}>
             <Plus size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
             新建文章
@@ -70,6 +114,7 @@ export function ArticleList() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: '40px' }}>精选</th>
                 <th>标题</th>
                 <th>分类</th>
                 <th>状态</th>
@@ -80,6 +125,19 @@ export function ArticleList() {
             <tbody>
               {data?.items.map((a) => (
                 <tr key={a.id}>
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className={`article-list__star ${a.featured ? 'article-list__star--on' : ''}`}
+                      title={a.featured ? '取消精选' : '设为精选'}
+                      aria-label={a.featured ? '取消精选' : '设为精选'}
+                      aria-pressed={!!a.featured}
+                      onClick={() => featuredMut.mutate(a.id)}
+                      disabled={featuredMut.isPending}
+                    >
+                      <Star size={16} fill={a.featured ? 'currentColor' : 'none'} />
+                    </button>
+                  </td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{a.title}</div>
                     <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>/{a.slug}</div>
@@ -109,7 +167,7 @@ export function ArticleList() {
                 </tr>
               ))}
               {data?.items.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>暂无文章</td></tr>
+                <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>暂无文章</td></tr>
               )}
             </tbody>
           </table>

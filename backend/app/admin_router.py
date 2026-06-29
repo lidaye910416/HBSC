@@ -121,6 +121,7 @@ def list_articles(
     status_: Optional[str] = None,
     category: Optional[str] = None,
     q: Optional[str] = None,
+    featured: Optional[bool] = None,
     page: int = 1,
     per_page: int = 20,
     db: Session = Depends(get_db),
@@ -131,6 +132,8 @@ def list_articles(
         query = query.filter(Article.status == status_)
     if category:
         query = query.filter(Article.category == category)
+    if featured is not None:
+        query = query.filter(Article.featured == (1 if featured else 0))
     safe_q = _validate_search_q(q)
     if safe_q:
         query = query.filter(Article.title.ilike(f"%{safe_q}%", escape="\\"))
@@ -223,6 +226,28 @@ def publish_article(
     if not a:
         raise HTTPException(status_code=404, detail="文章不存在")
     a.status = "published"
+    db.commit()
+    db.refresh(a)
+    return _article_to_dict(a)
+
+
+@router.patch("/articles/{article_id}/featured", response_model=ArticleAdminOut)
+def toggle_featured(
+    article_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Toggle-only endpoint for the featured flag.
+
+    The generic PUT /articles/{id} also accepts `featured` but requires the
+    full payload, which is awkward from list-view quick-toggles. This route
+    flips the bit in place; the public /api/articles/featured endpoint picks
+    up the change on next request.
+    """
+    a = db.query(Article).filter(Article.id == article_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    a.featured = 0 if a.featured else 1
     db.commit()
     db.refresh(a)
     return _article_to_dict(a)

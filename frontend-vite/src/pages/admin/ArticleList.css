@@ -100,6 +100,38 @@
   color: #c44;
 }
 
+/* Quick-toggle star for the featured flag. Filled state uses the gold
+   accent #C9A84C to read as "starred at a glance" without competing with
+   the brand blue. */
+.article-list__star {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted, #a8a8b8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.article-list__star:hover {
+  color: #C9A84C;
+  background: rgba(201, 168, 76, 0.08);
+  border-color: rgba(201, 168, 76, 0.3);
+}
+
+.article-list__star--on {
+  color: #C9A84C;
+}
+
+.article-list__star:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+}
+
 .article-editor {
   background: white;
   padding: 32px;

@@ -18,6 +18,7 @@ import { ArticleEditor } from './pages/admin/ArticleEditor'
 import { JournalList } from './pages/admin/JournalList'
 import { JournalEditor } from './pages/admin/JournalEditor'
 import { JournalDetail } from './pages/admin/JournalDetail'
+import { FeaturedArticles } from './pages/admin/FeaturedArticles'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
 import { AdminSettings } from './pages/admin/AdminSettings'
 import './styles/global.css'
@@ -84,6 +85,11 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="articles" element={<ArticleList />} />
             <Route path="articles/new" element={<ArticleEditor />} />
+            {/* Order matters: 'articles/featured' must come before 'articles/:id'
+                so the literal "featured" segment doesn't get parsed as an
+                article id (which previously caused the editor's
+                parseInt("featured") === NaN → 404 → "error page" symptom). */}
+            <Route path="articles/featured" element={<FeaturedArticles />} />
             <Route path="articles/:id" element={<ArticleEditor />} />
             <Route path="journals" element={<JournalList />} />
             <Route path="journals/new" element={<JournalEditor />} />

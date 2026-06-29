@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, BookOpen, Image as ImageIcon, ExternalLink, Settings as SettingsIcon } from 'lucide-react'
+import { LayoutDashboard, FileText, BookOpen, Image as ImageIcon, ExternalLink, Settings as SettingsIcon, Star } from 'lucide-react'
 import { api } from '../../services/api'
 import { PageAgentMount } from './PageAgentMount'
 import './AdminLayout.css'
@@ -31,6 +31,9 @@ export function AdminLayout() {
             </NavLink>
             <NavLink to="/admin/articles">
               <FileText size={18} /> 文章
+            </NavLink>
+            <NavLink to="/admin/articles/featured" end>
+              <Star size={18} /> 精选管理
             </NavLink>
             <NavLink to="/admin/journals">
               <BookOpen size={18} /> 期刊
