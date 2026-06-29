@@ -434,31 +434,76 @@ def list_media(
 @router.post("/media")
 async def upload_media(
     file: UploadFile = File(...),
+    kind: str = "image",
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
+    """Upload image (default) or CSV (kind=table).
+
+    kind=image: bytes validated by Pillow, saved under /uploads/YYYY/MM/.
+    kind=table: bytes saved as-is with .csv extension, returned as a 'csv'
+                 resource so the front-end can transform it to a GFM table.
+    """
+    if kind not in ("image", "table"):
+        raise HTTPException(status_code=400, detail="kind 必须是 image 或 table")
+
     try:
         content = await read_upload_with_limit(file)
     except UploadTooLarge as e:
         raise HTTPException(status_code=413, detail=str(e))
     safe_name = _sanitize_filename(file.filename or "upload")
-    try:
-        info = save_upload(
-            filename=safe_name,
-            content=content,
-            uploaded_by=admin,
-            db=db,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+
+    if kind == "image":
+        try:
+            info = save_upload(
+                filename=safe_name,
+                content=content,
+                uploaded_by=admin,
+                db=db,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {
+            "id": info["id"],
+            "filename": info["filename"],
+            "url": info["url"],
+            "original_name": info["original_name"],
+            "mime": info["mime"],
+            "size": info["size"],
+            "uploaded_at": info["uploaded_at"],
+            "kind": "image",
+        }
+
+    # kind == "table"
+    if not safe_name.lower().endswith(".csv"):
+        safe_name = safe_name + ".csv"
+    new_filename = f"{uuid.uuid4().hex}.csv"
+    upload_root = Path(settings.UPLOAD_DIR)
+    now = datetime.utcnow()
+    target_dir = upload_root / f"{now.year:04d}" / f"{now.month:02d}"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / new_filename
+    target_path.write_bytes(content)
+    url = f"/uploads/{now.year:04d}/{now.month:02d}/{new_filename}"
+    record = ArticleImage(
+        filename=new_filename,
+        original_name=safe_name,
+        mime="text/csv",
+        size=len(content),
+        uploaded_by=admin,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
     return {
-        "id": info["id"],
-        "filename": info["filename"],
-        "url": info["url"],
-        "original_name": info["original_name"],
-        "mime": info["mime"],
-        "size": info["size"],
-        "uploaded_at": info["uploaded_at"],
+        "id": record.id,
+        "filename": new_filename,
+        "url": url,
+        "original_name": safe_name,
+        "mime": "text/csv",
+        "size": len(content),
+        "uploaded_at": record.uploaded_at.isoformat(),
+        "kind": "table",
     }
 
 
