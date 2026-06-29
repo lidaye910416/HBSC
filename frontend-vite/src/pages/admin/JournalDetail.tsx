@@ -1,0 +1,182 @@
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, ExternalLink, ArrowLeft } from 'lucide-react'
+import { api, type JournalCompleteness } from '../../services/api'
+import './JournalDetail.css'
+
+const TABS = [
+  { key: 'strategy',  label: '战略与政策', category: '战略与政策' },
+  { key: 'technology', label: '技术与产业', category: '技术与产业' },
+  { key: 'solution',  label: '方案与思考', category: '方案与思考' },
+  { key: 'dynamics',  label: '动态与文化', category: '动态与文化' },
+] as const
+
+type TabKey = (typeof TABS)[number]['key']
+
+export function JournalDetail() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const journalId = parseInt(id!, 10)
+  const [tab, setTab] = useState<TabKey>('strategy')
+  const [error, setError] = useState('')
+
+  const journalQ = useQuery({
+    queryKey: ['admin', 'journal', journalId],
+    queryFn: async () => {
+      const list = await api.admin.journals.list({ per_page: 100 })
+      return list.items.find((j) => j.id === journalId)
+    },
+  })
+
+  const groupedQ = useQuery({
+    queryKey: ['admin', 'journal', journalId, 'grouped'],
+    queryFn: () => api.admin.journals.articlesByCategory(journalId),
+  })
+
+  const publishMut = useMutation({
+    mutationFn: () => api.admin.journals.publish(journalId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'journals'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'journal', journalId] })
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : '发布失败'),
+  })
+
+  const completeness: JournalCompleteness | undefined = groupedQ.data?.completeness
+  const canPublish = completeness?.complete && journalQ.data?.status !== 'published'
+
+  const gotoNew = (category: string) => {
+    const q = new URLSearchParams({ journal_id: String(journalId), category })
+    navigate(`/admin/articles/new?${q.toString()}`)
+  }
+
+  if (journalQ.isLoading || groupedQ.isLoading) {
+    return <div style={{ padding: '24px' }}>加载中…</div>
+  }
+  if (!journalQ.data) {
+    return <div style={{ padding: '24px' }}>期刊不存在</div>
+  }
+
+  const j = journalQ.data
+  const articles = groupedQ.data?.[tab] ?? []
+
+  return (
+    <div className="journal-detail">
+      <div className="journal-detail__header">
+        <button
+          type="button"
+          className="journal-detail__back"
+          onClick={() => navigate('/admin/journals')}
+        >
+          <ArrowLeft size={14} /> 返回列表
+        </button>
+        <div className="journal-detail__title">
+          <h2>{j.title}</h2>
+          <span className="journal-detail__meta">/{j.slug}{j.issue_number ? ` · ${j.issue_number}` : ''}</span>
+        </div>
+        <div className="journal-detail__actions">
+          <button
+            type="button"
+            className="journal-detail__btn"
+            onClick={() => navigate(`/admin/journals/${journalId}/edit`)}
+          >
+            编辑元数据
+          </button>
+          <button
+            type="button"
+            className="journal-detail__btn journal-detail__btn--primary"
+            disabled={!canPublish || publishMut.isPending}
+            onClick={() => publishMut.mutate()}
+            title={
+              !completeness?.complete
+                ? '四类文章齐全后才能发布'
+                : j.status === 'published'
+                ? '期刊已是发布状态'
+                : ''
+            }
+          >
+            {j.status === 'published' ? '已发布' : publishMut.isPending ? '发布中…' : '发布期刊'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="journal-detail__error">{error}</div>}
+
+      <div className="journal-detail__completeness">
+        {(['战略与政策', '技术与产业', '方案与思考', '动态与文化'] as const).map((c) => {
+          const n = completeness?.[c] ?? 0
+          return (
+            <div
+              key={c}
+              className={`journal-detail__pill ${n >= 1 ? 'journal-detail__pill--ok' : 'journal-detail__pill--missing'}`}
+            >
+              {c}: {n} 篇
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="journal-detail__tabs" role="tablist">
+        {TABS.map((t) => {
+          const count = groupedQ.data?.[t.key]?.length ?? 0
+          return (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              className={`journal-detail__tab ${tab === t.key ? 'journal-detail__tab--active' : ''}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label} <span className="journal-detail__tab-count">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="journal-detail__panel">
+        <div className="journal-detail__panel-head">
+          <button
+            type="button"
+            className="journal-detail__btn journal-detail__btn--primary"
+            onClick={() => gotoNew(TABS.find((t) => t.key === tab)!.category)}
+          >
+            <Plus size={14} /> 新建 {TABS.find((t) => t.key === tab)!.label}
+          </button>
+        </div>
+        {articles.length === 0 ? (
+          <div className="journal-detail__empty">此分类暂无文章，点上面按钮新建。</div>
+        ) : (
+          <table className="journal-detail__table">
+            <thead>
+              <tr><th>标题</th><th>状态</th><th>更新时间</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              {articles.map((a) => (
+                <tr key={a.id}>
+                  <td>{a.title}</td>
+                  <td>
+                    <span className={`journal-detail__status journal-detail__status--${a.status}`}>
+                      {a.status === 'published' ? '已发布' : '草稿'}
+                    </span>
+                  </td>
+                  <td className="journal-detail__sub">{a.updated_at ? new Date(a.updated_at).toLocaleString('zh-CN') : '—'}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="journal-detail__action"
+                      onClick={() => navigate(`/admin/articles/${a.id}`)}
+                    >
+                      <ExternalLink size={12} /> 编辑
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
