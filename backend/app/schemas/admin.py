@@ -144,10 +144,39 @@ class ImageGenRequest(BaseModel):
     aspect_ratio: Literal["16:9", "1:1", "4:3"] = "16:9"
 
 
+class ArticleAdminSummaryOut(BaseModel):
+    """Same as ArticleAdminOut but without the unbounded Markdown content.
+
+    Used by the 4-Tab JournalDetail endpoint, which serializes many
+    articles at once and only needs summary/title/etc.
+    """
+    id: int
+    title: str
+    slug: str
+    summary: Optional[str] = None
+    cover_image: Optional[str] = None
+    cover_image_alt: Optional[str] = None
+    category: Optional[str] = None
+    author_name: Optional[str] = None
+    author_avatar: Optional[str] = None
+    reading_time: int
+    views: int
+    featured: bool
+    status: str
+    tags: Optional[List[str]] = None
+    journal_id: Optional[int] = None
+    published_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class JournalArticlesByCategoryOut(BaseModel):
     """Per-category article list for the 4-Tab UI. Drafts included."""
-    strategy: list[ArticleAdminOut]      # 战略与政策
-    technology: list[ArticleAdminOut]    # 技术与产业
-    solution: list[ArticleAdminOut]      # 方案与思考
-    dynamics: list[ArticleAdminOut]      # 动态与文化
+    strategy: list[ArticleAdminSummaryOut]      # 战略与政策
+    technology: list[ArticleAdminSummaryOut]    # 技术与产业
+    solution: list[ArticleAdminSummaryOut]      # 方案与思考
+    dynamics: list[ArticleAdminSummaryOut]      # 动态与文化
     completeness: dict

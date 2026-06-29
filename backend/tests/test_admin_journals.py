@@ -148,6 +148,29 @@ def test_articles_by_category_groups_correctly(env):
     assert body["completeness"]["complete"] is False
 
 
+def test_articles_by_category_does_not_load_content(env):
+    """The 4-Tab endpoint serializes many articles at once; loading
+    full Markdown content into memory for the listing is wasteful.
+    The response must not include 'content' in article keys."""
+    from app.models.journal import Article, Journal as J
+    db_gen = app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    jid = db.query(J).filter_by(slug="2026-q1").first().id
+    db.add(Article(
+        title="S1", slug="s1", category="战略与政策", status="published",
+        journal_id=jid, content="<huge markdown body - 200 KB>" * 5000,
+    ))
+    db.commit()
+    db.close()
+
+    res = env["client"].get(f"/api/admin/journals/{jid}/articles-by-category", headers=_auth(_token()))
+    assert res.status_code == 200
+    body = res.json()
+    assert body["strategy"]
+    for art in body["strategy"]:
+        assert "content" not in art, "content key must be deferred/absent in 4-tab listing"
+
+
 def test_articles_by_category_404(env):
     res = env["client"].get("/api/admin/journals/99999/articles-by-category", headers=_auth(_token()))
     assert res.status_code == 404

@@ -86,8 +86,8 @@ def _serialize_tags(tags_field) -> Optional[List[str]]:
     return [t.strip() for t in str(tags_field).split(",") if t.strip()]
 
 
-def _article_to_dict(a: Article) -> dict:
-    return {
+def _article_to_dict(a: Article, include_content: bool = True) -> dict:
+    d = {
         "id": a.id,
         "title": a.title,
         "slug": a.slug,
@@ -108,6 +108,9 @@ def _article_to_dict(a: Article) -> dict:
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }
+    if not include_content:
+        d.pop("content", None)
+    return d
 
 
 # ============== ARTICLES ==============
@@ -364,15 +367,24 @@ def articles_by_category(
     if not j:
         raise HTTPException(status_code=404, detail="期刊不存在")
 
+    # Defer Article.content — the 4-Tab listing serializes many articles
+    # and full Markdown content is not needed (only summary/title/etc.).
+    from sqlalchemy.orm import defer
+    articles = (
+        db.query(Article)
+        .options(defer(Article.content))
+        .filter(Article.journal_id == journal_id)
+        .all()
+    )
     buckets: dict[str, list] = {key: [] for key in _CATEGORY_KEYS.values()}
     for a in sorted(
-        j.articles,
+        articles,
         key=lambda x: (x.published_at or x.created_at or datetime.min),
         reverse=True,
     ):
         key = _CATEGORY_KEYS.get(a.category)
         if key:
-            buckets[key].append(_article_to_dict(a))
+            buckets[key].append(_article_to_dict(a, include_content=False))
 
     return {
         "strategy": buckets["strategy"],
