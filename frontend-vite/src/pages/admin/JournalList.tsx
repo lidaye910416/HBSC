@@ -27,11 +27,15 @@ export function JournalList() {
   const { data: completeness } = useQuery({
     queryKey: ['admin', 'journals', 'completeness', data?.items.map((j) => j.id).join(',')],
     queryFn: async () => {
-      if (!data?.items) return {} as Record<number, JournalCompleteness>
-      const entries = await Promise.all(
-        data.items.map(async (j) => [j.id, await api.admin.journals.completeness(j.id)] as const)
-      )
-      return Object.fromEntries(entries) as Record<number, JournalCompleteness>
+      if (!data?.items || data.items.length === 0) return {} as Record<number, JournalCompleteness>
+      // Single batch call instead of one request per row
+      const map = await api.admin.journals.completenessBatch(data.items.map((j) => j.id))
+      const out: Record<number, JournalCompleteness> = {}
+      for (const j of data.items) {
+        const v = map[String(j.id)]
+        if (v) out[j.id] = v
+      }
+      return out
     },
     enabled: !!data?.items?.length,
   })

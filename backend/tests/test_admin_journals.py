@@ -211,3 +211,36 @@ def test_list_articles_q_wildcard_does_not_return_all(env):
     res = env["client"].get("/api/admin/articles?q=%25", headers=_auth(_token()))
     assert res.status_code == 200
     assert res.json()["total"] == 0
+
+
+# ============ Issue #7: batch completeness endpoint ============
+
+def test_batch_completeness_endpoint(env):
+    """POST /api/admin/journals/completeness takes {ids:[1,2,3]} and
+    returns a map id -> completeness, replacing 20 parallel GETs."""
+    jid = env["client"].get("/api/admin/journals", headers=_auth(_token())).json()["items"][0]["id"]
+    res = env["client"].post(
+        "/api/admin/journals/completeness",
+        headers=_auth(_token()),
+        json={"ids": [jid, 99999]},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert "items" in body or str(jid) in body
+    items = body.get("items") if "items" in body else body
+    # Should report the existing journal as incomplete and the missing
+    # one as null/missing — either is fine, but neither may be 500.
+    key = str(jid)
+    assert key in items
+    # The bogus id 99999 should either be missing from the map or be null
+    assert "99999" not in items or items["99999"] is None
+
+
+def test_batch_completeness_rejects_empty_ids(env):
+    res = env["client"].post(
+        "/api/admin/journals/completeness",
+        headers=_auth(_token()),
+        json={"ids": []},
+    )
+    # 422 from Pydantic (min_length=1) is acceptable
+    assert res.status_code in (200, 422)

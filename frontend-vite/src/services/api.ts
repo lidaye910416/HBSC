@@ -242,6 +242,11 @@ export const api = {
         request(`/api/admin/journals/${id}`, { method: 'DELETE' }),
       completeness: (id: number): Promise<JournalCompleteness> =>
         request<JournalCompleteness>(`/api/admin/journals/${id}/completeness`),
+      completenessBatch: (ids: number[]): Promise<Record<string, JournalCompleteness>> =>
+        request<Record<string, JournalCompleteness>>(`/api/admin/journals/completeness`, {
+          method: 'POST',
+          body: JSON.stringify({ ids }),
+        }),
       publish: (id: number): Promise<JournalAdmin> =>
         request<JournalAdmin>(`/api/admin/journals/${id}/publish`, { method: 'POST' }),
       unpublish: (id: number): Promise<JournalAdmin> =>

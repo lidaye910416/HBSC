@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -342,6 +343,26 @@ def get_journal_completeness(
     if not j:
         raise HTTPException(status_code=404, detail="期刊不存在")
     return is_journal_complete(j)
+
+
+class BatchCompletenessRequest(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=200)
+
+
+@router.post("/journals/completeness")
+def batch_journal_completeness(
+    body: BatchCompletenessRequest,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Batch variant of /journals/{id}/completeness.
+
+    The list view previously fired one request per row (20 parallel
+    HTTP calls for a 20-item page). This endpoint collapses them into
+    a single round-trip; missing ids are simply absent from the map.
+    """
+    journals = db.query(Journal).filter(Journal.id.in_(body.ids)).all()
+    return {str(j.id): is_journal_complete(j) for j in journals}
 
 
 _CATEGORY_KEYS = {
