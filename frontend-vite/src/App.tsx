@@ -17,6 +17,7 @@ import { ArticleList } from './pages/admin/ArticleList'
 import { ArticleEditor } from './pages/admin/ArticleEditor'
 import { JournalList } from './pages/admin/JournalList'
 import { JournalEditor } from './pages/admin/JournalEditor'
+import { JournalDetail } from './pages/admin/JournalDetail'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
 import { AdminSettings } from './pages/admin/AdminSettings'
 import './styles/global.css'
@@ -86,7 +87,8 @@ export default function App() {
             <Route path="articles/:id" element={<ArticleEditor />} />
             <Route path="journals" element={<JournalList />} />
             <Route path="journals/new" element={<JournalEditor />} />
-            <Route path="journals/:id" element={<JournalEditor />} />
+            <Route path="journals/:id" element={<JournalDetail />} />
+            <Route path="journals/:id/edit" element={<JournalEditor />} />
             <Route path="media" element={<MediaLibrary />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>

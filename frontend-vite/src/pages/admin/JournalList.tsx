@@ -130,7 +130,10 @@ export function JournalList() {
                   <td>
                     <div className="article-list__actions">
                       <button className="article-list__action" onClick={() => navigate(`/admin/journals/${j.id}`)}>
-                        编辑
+                        查看
+                      </button>
+                      <button className="article-list__action" onClick={() => navigate(`/admin/journals/${j.id}/edit`)}>
+                        编辑元数据
                       </button>
                       <button
                         className="article-list__action article-list__action--danger"
