@@ -49,13 +49,16 @@ def test_login_wrong_password_401(client):
     res = client.post("/api/auth/login", json={"username": "testadmin", "password": "wrong"})
     assert res.status_code == 401
     # 合并文案防止用户名枚举（任何人不应能从响应区分"用户不存在" vs "密码错"）
-    assert res.json()["detail"] == "用户名或密码错误"
+    # 全局异常处理器返回 {error: {code, message}} 而非 FastAPI 默认的 {detail}
+    assert res.json()["error"]["message"] == "用户名或密码错误"
+    assert res.json()["error"]["code"] == "unauthorized"
 
 
 def test_login_unknown_user_401(client):
     res = client.post("/api/auth/login", json={"username": "nobody", "password": "x"})
     assert res.status_code == 401
-    assert res.json()["detail"] == "用户名或密码错误"
+    assert res.json()["error"]["message"] == "用户名或密码错误"
+    assert res.json()["error"]["code"] == "unauthorized"
 
 
 def test_me_requires_token(client):
