@@ -103,3 +103,66 @@ def test_settings_test_endpoint_pings_llm(env):
         res = env["client"].post("/api/admin/settings/page_agent.api_key/test", headers=_auth())
     assert res.status_code == 200
     assert res.json() == {"ok": True, "sample": "pong"}
+
+
+def _enable_agent(env):
+    env["client"].put("/api/admin/settings/page_agent.enabled", headers=_auth(),
+                      json={"value": "true"})
+    env["client"].put("/api/admin/settings/page_agent.api_key", headers=_auth(),
+                      json={"value": "sk-test"})
+    env["client"].put("/api/admin/settings/page_agent.base_url", headers=_auth(),
+                      json={"value": "https://example.com/v1"})
+    env["client"].put("/api/admin/settings/page_agent.model", headers=_auth(),
+                      json={"value": "m"})
+
+
+def test_execute_rate_limit_kicks_in(env):
+    """The 21st call within 60s must return 429."""
+    _enable_agent(env)
+    # Patch chat_complete to be fast; reset the rate_limit in-memory state
+    from app.middleware import rate_limit
+    rate_limit._buckets.clear()
+    with patch("app.routers.agent_router.chat_complete",
+               new=AsyncMock(return_value="ok")):
+        for i in range(20):
+            r = env["client"].post("/api/admin/agent/execute", headers=_auth(),
+                                   json={"messages": [{"role": "user", "content": "hi"}]})
+            assert r.status_code == 200, f"call {i+1}: {r.status_code} {r.text}"
+        # 21st call should be rate limited
+        r = env["client"].post("/api/admin/agent/execute", headers=_auth(),
+                               json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 429, r.text
+
+
+def test_execute_rejects_too_many_messages(env):
+    """Sending > MAX_AGENT_MESSAGES (50) messages must return 422."""
+    _enable_agent(env)
+    msgs = [{"role": "user", "content": f"msg {i}"} for i in range(51)]
+    r = env["client"].post("/api/admin/agent/execute", headers=_auth(),
+                           json={"messages": msgs})
+    assert r.status_code == 422, r.text
+
+
+def test_execute_error_path_does_not_leak_secret(env):
+    """When the upstream raises, the response must NOT contain the secret
+    key text (which some httpx exceptions include in their message)."""
+    from app.services.llm_client import LLMUnavailable
+    from app.middleware import rate_limit
+    # Reset in-memory rate-limit buckets so we don't conflict with other tests
+    rate_limit._buckets.clear()
+    _enable_agent(env)
+    # Override the api_key so we can assert it does not appear
+    env["client"].put("/api/admin/settings/page_agent.api_key", headers=_auth(),
+                      json={"value": "sk-secret-key-do-not-leak"})
+
+    async def boom(**kwargs):
+        # Simulate httpx-style error that includes the auth header text
+        raise LLMUnavailable("401 Unauthorized: Bearer sk-secret-key-do-not-leak")
+
+    with patch("app.routers.agent_router.chat_complete", new=boom):
+        r = env["client"].post("/api/admin/agent/execute", headers=_auth(),
+                               json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 502, r.text
+    assert "sk-secret-key-do-not-leak" not in r.text
+    # Generic Chinese message present
+    assert "LLM" in r.text or "调用" in r.text or "失败" in r.text

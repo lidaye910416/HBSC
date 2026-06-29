@@ -1,8 +1,9 @@
 """Admin: page-agent configuration + server-side LLM proxy."""
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -10,6 +11,7 @@ from ..models.admin_setting import AdminSetting
 from ..security import get_current_admin
 from ..services.crypto import decrypt_value
 from ..services.llm_client import chat_complete, LLMUnavailable
+from ..middleware.rate_limit import rate_limit
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin-agent"])
@@ -17,6 +19,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin-agent"])
 
 _DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 _DEFAULT_MODEL = "MiniMax-M3"
+
+# Security guard-rails for the LLM proxy.
+MAX_AGENT_MESSAGES = 50
+MAX_AGENT_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
 def _get_setting(db: Session, key: str) -> Optional[str]:
@@ -45,13 +51,26 @@ def get_agent_config(
 class ExecuteRequest(BaseModel):
     messages: list[dict]
 
+    @field_validator("messages")
+    @classmethod
+    def _cap_messages(cls, v: list[dict]) -> list[dict]:
+        if len(v) > MAX_AGENT_MESSAGES:
+            raise ValueError(f"messages 长度超过最大限制 {MAX_AGENT_MESSAGES}")
+        return v
+
 
 @router.post("/agent/execute")
+@rate_limit(max_calls=20, window_seconds=60)
 async def execute_llm(
+    request: Request,
     body: ExecuteRequest,
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
+    # Enforce body-size cap (1 MB) — reject obvious abuse early.
+    raw = await request.body()
+    if len(raw) > MAX_AGENT_BYTES:
+        raise HTTPException(status_code=413, detail="请求体超过 1MB 限制")
     config = get_agent_config(db=db, admin=admin)
     if not config["enabled"]:
         raise HTTPException(status_code=409, detail="page-agent 未启用")
@@ -66,7 +85,14 @@ async def execute_llm(
             messages=body.messages,
         )
     except LLMUnavailable as e:
-        raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
+        # SECURITY: never echo the raw exception text. Some httpx versions
+        # include request headers (e.g. "Authorization: Bearer ...") in the
+        # message string, which would leak the API key. Log the full detail
+        # server-side and return a generic Chinese message to the client.
+        logging.getLogger(__name__).warning(
+            "page-agent LLM call failed: %s", e, exc_info=True
+        )
+        raise HTTPException(status_code=502, detail="上游 LLM 调用失败，请检查网络或 API Key")
     return {"content": content}
 
 
@@ -92,5 +118,8 @@ async def test_setting(
             messages=[{"role": "user", "content": "ping"}],
         )
     except LLMUnavailable as e:
-        raise HTTPException(status_code=502, detail=f"连通性测试失败: {e}")
+        logging.getLogger(__name__).warning(
+            "page-agent connectivity test failed: %s", e, exc_info=True
+        )
+        raise HTTPException(status_code=502, detail="连通性测试失败，请检查网络或 API Key")
     return {"ok": True, "sample": sample[:200]}
