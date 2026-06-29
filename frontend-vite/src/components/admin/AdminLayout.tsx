@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, FileText, BookOpen, Image as ImageIcon, ExternalLink, Settings as SettingsIcon } from 'lucide-react'
 import { api } from '../../services/api'
+import { PageAgentMount } from './PageAgentMount'
 import './AdminLayout.css'
 
 export function AdminLayout() {
@@ -17,6 +18,7 @@ export function AdminLayout() {
 
   return (
     <div className="admin-layout">
+      <PageAgentMount />
       <aside className="admin-sidebar">
         <div className="admin-sidebar__brand">
           <h2>湖北数创 CMS</h2>
