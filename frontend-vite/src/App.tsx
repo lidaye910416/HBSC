@@ -18,6 +18,7 @@ import { ArticleEditor } from './pages/admin/ArticleEditor'
 import { JournalList } from './pages/admin/JournalList'
 import { JournalEditor } from './pages/admin/JournalEditor'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
+import { AdminSettings } from './pages/admin/AdminSettings'
 import './styles/global.css'
 
 const queryClient = new QueryClient({
@@ -87,7 +88,7 @@ export default function App() {
             <Route path="journals/new" element={<JournalEditor />} />
             <Route path="journals/:id" element={<JournalEditor />} />
             <Route path="media" element={<MediaLibrary />} />
-            <Route path="settings" element={<div style={{ padding: '24px' }}><h2>设置（Phase 4 实现）</h2></div>} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>
