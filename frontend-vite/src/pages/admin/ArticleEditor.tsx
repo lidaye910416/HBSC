@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
 import { api } from '../../services/api'
 import { ImageUploader } from '../../components/admin/ImageUploader'
+import { MarkdownToolbar } from '../../components/admin/MarkdownToolbar'
+import { InsertImageButton } from '../../components/admin/Mde/insertImagePlugin'
+import { InsertTableButton } from '../../components/admin/Mde/insertTablePlugin'
 import './ArticleList.css'
 
 interface FormState {
@@ -53,6 +56,28 @@ export function ArticleEditor() {
   const [form, setForm] = useState<FormState>(emptyForm())
   const [error, setError] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
+  const [importBusy, setImportBusy] = useState(false)
+  const [importError, setImportError] = useState('')
+
+  const handleImportDocx = async (file: File) => {
+    setImportBusy(true)
+    setImportError('')
+    try {
+      const result = await api.admin.articles.importDocx(file)
+      update('title', result.title || form.title)
+      update('content', result.content_markdown || form.content)
+      if (!form.slug && result.suggested_slug) {
+        update('slug', result.suggested_slug)
+      }
+      if (result.warnings?.length) {
+        setImportError(`提示：${result.warnings.join('；')}`)
+      }
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : '导入失败')
+    } finally {
+      setImportBusy(false)
+    }
+  }
 
   // Prefill from query params (used by JournalDetail's "新建" button)
   const [searchParams] = useSearchParams()
@@ -181,6 +206,24 @@ export function ArticleEditor() {
         </div>
 
         <div className="article-editor__field">
+          <label>从 .docx 导入（自动转 Markdown）</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              disabled={importBusy}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) handleImportDocx(f)
+                e.target.value = ''
+              }}
+            />
+            {importBusy && <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>转换中…</span>}
+          </div>
+          {importError && <div style={{ fontSize: '0.8125rem', color: '#d97706', marginTop: '4px' }}>{importError}</div>}
+        </div>
+
+        <div className="article-editor__field">
           <label>封面图</label>
           <ImageUploader value={form.cover_image} onChange={(url) => update('cover_image', url)} />
         </div>
@@ -204,7 +247,21 @@ export function ArticleEditor() {
               onChange={(v) => update('content', v || '')}
               height={500}
               preview="live"
+              components={{
+                toolbar: (props: any) => (
+                  <>
+                    {props.children}
+                    <MarkdownToolbar>
+                      <InsertImageButton onInsert={(md) => update('content', (form.content || '') + md)} />
+                      <InsertTableButton onInsert={(md) => update('content', (form.content || '') + md)} />
+                    </MarkdownToolbar>
+                  </>
+                ),
+              }}
             />
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+              提示：点击预览中的图片/表格可 inline 编辑（图片可改 URL/alt；表格暂为只读）。
+            </div>
           </div>
         </div>
 
