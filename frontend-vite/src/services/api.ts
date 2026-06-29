@@ -218,6 +218,14 @@ export const api = {
         request<JournalAdmin>(`/api/admin/journals/${id}/publish`, { method: 'POST' }),
       unpublish: (id: number): Promise<JournalAdmin> =>
         request<JournalAdmin>(`/api/admin/journals/${id}/unpublish`, { method: 'POST' }),
+      articlesByCategory: (id: number): Promise<{
+        strategy: Array<{ id: number; title: string; slug: string; category: string; status: string; updated_at?: string }>
+        technology: Array<{ id: number; title: string; slug: string; category: string; status: string; updated_at?: string }>
+        solution: Array<{ id: number; title: string; slug: string; category: string; status: string; updated_at?: string }>
+        dynamics: Array<{ id: number; title: string; slug: string; category: string; status: string; updated_at?: string }>
+        completeness: JournalCompleteness
+      }> =>
+        request(`/api/admin/journals/${id}/articles-by-category`),
     },
     settings: {
       list: (): Promise<{ items: Array<{
@@ -246,10 +254,10 @@ export const api = {
       list: (page = 1, per_page = 50): Promise<PaginatedResponse<MediaOut>> =>
         request<PaginatedResponse<MediaOut>>(`/api/admin/media?page=${page}&per_page=${per_page}`),
       // Multipart upload — must NOT set Content-Type: application/json
-      upload: async (file: File) => {
+      upload: async (file: File, kind: 'image' | 'table' = 'image') => {
         const fd = new FormData()
         fd.append('file', file)
-        const res = await fetch(API_BASE + '/api/admin/media', {
+        const res = await fetch(API_BASE + `/api/admin/media?kind=${kind}`, {
           method: 'POST',
           credentials: 'include',
           body: fd,
