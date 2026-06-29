@@ -21,6 +21,7 @@ import { JournalDetail } from './pages/admin/JournalDetail'
 import { FeaturedArticles } from './pages/admin/FeaturedArticles'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
 import { AdminSettings } from './pages/admin/AdminSettings'
+import { ToastProvider } from './components/admin/Toast'
 import './styles/global.css'
 
 const queryClient = new QueryClient({
@@ -59,7 +60,8 @@ function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
         <Routes>
           {/* 公开站 */}
           <Route path="/" element={<Layout><Home /></Layout>} />
@@ -100,6 +102,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </QueryClientProvider>
   )
 }

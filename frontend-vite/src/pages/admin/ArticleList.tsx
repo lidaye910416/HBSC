@@ -1,17 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Star } from 'lucide-react'
 import { api } from '../../services/api'
+import { listRowStagger } from '../../components/admin/animations'
+import { useToast } from '../../components/admin/Toast'
 import './ArticleList.css'
 
 export function ArticleList() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const toast = useToast()
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
   const [featuredFilter, setFeaturedFilter] = useState<'' | 'true' | 'false'>('')
   const [page, setPage] = useState(1)
+  const tableRef = useRef<HTMLTableElement>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'articles', { status, q, featuredFilter, page }],
@@ -25,7 +29,7 @@ export function ArticleList() {
   })
 
   const onMutateError = (err: unknown, op: string) =>
-    alert(`${op}失败: ${err instanceof Error ? err.message : String(err)}`)
+    toast.error(`${op}失败: ${err instanceof Error ? err.message : String(err)}`)
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.admin.articles.delete(id),
@@ -67,6 +71,13 @@ export function ArticleList() {
       deleteMut.mutate(id)
     }
   }
+
+  // Stagger rows in on data change so the table feels responsive when filters
+  // or pagination update the rows.
+  useEffect(() => {
+    const cleanup = listRowStagger(tableRef.current?.parentElement ?? null)
+    return cleanup
+  }, [data])
 
   return (
     <div>
@@ -111,7 +122,7 @@ export function ArticleList() {
         {isLoading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>加载中...</div>
         ) : (
-          <table>
+          <table ref={tableRef}>
             <thead>
               <tr>
                 <th style={{ width: '40px' }}>精选</th>

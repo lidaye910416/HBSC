@@ -1,11 +1,16 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, FileText, BookOpen, Image as ImageIcon, ExternalLink, Settings as SettingsIcon, Star } from 'lucide-react'
 import { api } from '../../services/api'
 import { PageAgentMount } from './PageAgentMount'
+import { pageEnterAnimation, sidebarAnimations } from './animations'
 import './AdminLayout.css'
 
 export function AdminLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const contentRef = useRef<HTMLElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
 
   const handleLogout = async () => {
     try {
@@ -16,10 +21,24 @@ export function AdminLayout() {
     navigate('/admin/login', { replace: true })
   }
 
+  // Page-enter animation: re-run on every route change. The cleanup function
+  // from pageEnterAnimation reverts the context so the previous tween doesn't
+  // pile up on rapid navigation.
+  useEffect(() => {
+    const cleanup = pageEnterAnimation(contentRef.current)
+    return cleanup
+  }, [location.pathname])
+
+  // Sidebar entrance stagger — runs once on mount.
+  useEffect(() => {
+    const cleanup = sidebarAnimations(sidebarRef.current)
+    return cleanup
+  }, [])
+
   return (
     <div className="admin-layout">
       <PageAgentMount />
-      <aside className="admin-sidebar">
+      <aside className="admin-sidebar" ref={sidebarRef}>
         <div className="admin-sidebar__sticky">
           <div className="admin-sidebar__brand">
             <h2>湖北数创 CMS</h2>
@@ -57,7 +76,7 @@ export function AdminLayout() {
             <button className="admin-logout" onClick={handleLogout}>退出登录</button>
           </div>
         </header>
-        <main className="admin-content">
+        <main className="admin-content" ref={contentRef}>
           <Outlet />
         </main>
       </div>

@@ -1,0 +1,68 @@
+.admin-toast-stack {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.admin-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  color: #1A1A2E;
+  border: 1px solid #e8e8e0;
+  border-left: 4px solid #2563eb;
+  border-radius: 6px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  font-size: 0.875rem;
+  max-width: 360px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.admin-toast__msg {
+  flex: 1;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.admin-toast--success {
+  border-left-color: #2a6e2a;
+}
+
+.admin-toast--success svg {
+  color: #2a6e2a;
+  flex-shrink: 0;
+}
+
+.admin-toast--error {
+  border-left-color: #c44;
+}
+
+.admin-toast--error svg {
+  color: #c44;
+  flex-shrink: 0;
+}
+
+.admin-toast--info {
+  border-left-color: #2563eb;
+}
+
+.admin-toast--info svg {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+/* Respect reduced motion — toasts appear/disappear instantly */
+@media (prefers-reduced-motion: reduce) {
+  .admin-toast {
+    transition: none !important;
+    animation: none !important;
+  }
+}
