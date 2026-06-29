@@ -244,3 +244,19 @@ def test_batch_completeness_rejects_empty_ids(env):
     )
     # 422 from Pydantic (min_length=1) is acceptable
     assert res.status_code in (200, 422)
+
+
+# ============ Issue #8: GET /api/admin/journals/{id} ============
+
+def test_get_journal_admin(env):
+    jid = env["client"].get("/api/admin/journals", headers=_auth(_token())).json()["items"][0]["id"]
+    res = env["client"].get(f"/api/admin/journals/{jid}", headers=_auth(_token()))
+    assert res.status_code == 200
+    body = res.json()
+    assert body["id"] == jid
+    assert body["slug"] == "2026-q1"
+
+
+def test_get_journal_admin_404(env):
+    res = env["client"].get("/api/admin/journals/99999", headers=_auth(_token()))
+    assert res.status_code == 404

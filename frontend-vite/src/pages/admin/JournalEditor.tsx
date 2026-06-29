@@ -34,10 +34,7 @@ export function JournalEditor() {
 
   const { data: existing, isLoading } = useQuery({
     queryKey: ['admin', 'journals', id],
-    queryFn: async () => {
-      const list = await api.admin.journals.list({ per_page: 100 })
-      return list.items.find((j) => j.id === parseInt(id!, 10))
-    },
+    queryFn: () => api.admin.journals.get(parseInt(id!, 10)),
     enabled: !isNew,
   })
 

@@ -24,10 +24,7 @@ export function JournalDetail() {
 
   const journalQ = useQuery({
     queryKey: ['admin', 'journal', journalId],
-    queryFn: async () => {
-      const list = await api.admin.journals.list({ per_page: 100 })
-      return list.items.find((j) => j.id === journalId)
-    },
+    queryFn: () => api.admin.journals.get(journalId),
   })
 
   const groupedQ = useQuery({

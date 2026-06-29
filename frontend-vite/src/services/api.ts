@@ -236,6 +236,8 @@ export const api = {
       },
       create: (body: Record<string, unknown>) =>
         request('/api/admin/journals', { method: 'POST', body: JSON.stringify(body) }),
+      get: (id: number): Promise<JournalAdmin> =>
+        request<JournalAdmin>(`/api/admin/journals/${id}`),
       update: (id: number, body: Record<string, unknown>) =>
         request(`/api/admin/journals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
       delete: (id: number) =>
