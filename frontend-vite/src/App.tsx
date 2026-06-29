@@ -21,6 +21,7 @@ import { JournalDetail } from './pages/admin/JournalDetail'
 import { FeaturedArticles } from './pages/admin/FeaturedArticles'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
 import { AdminSettings } from './pages/admin/AdminSettings'
+import { NotFound } from './pages/NotFound'
 import { ToastProvider } from './components/admin/Toast'
 import './styles/global.css'
 
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="/issues/:slug" element={<Layout><IssueDetail /></Layout>} />
           <Route path="/about" element={<Layout><About /></Layout>} />
           <Route path="/search" element={<Layout><SearchPage /></Layout>} />
+          <Route path="*" element={<NotFound />} />
 
           {/* Admin 登录（公开） */}
           <Route path="/admin/login" element={<Login />} />

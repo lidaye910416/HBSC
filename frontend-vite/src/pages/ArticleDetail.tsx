@@ -13,7 +13,6 @@ import {
   Link as LinkIcon,
   Check,
   BookOpen,
-  MessageCircle,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
@@ -172,12 +171,6 @@ export function ArticleDetail() {
     } catch {
       /* noop */
     }
-  }
-
-  const handleShareTwitter = () => {
-    const url = encodeURIComponent(window.location.href)
-    const text = encodeURIComponent(article?.title ?? '')
-    window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, '_blank', 'noopener,noreferrer')
   }
 
   const handleShareWeibo = () => {
@@ -412,14 +405,6 @@ export function ArticleDetail() {
               >
                 {copied ? <Check size={14} strokeWidth={1.75} /> : <LinkIcon size={14} strokeWidth={1.5} />}
                 {copied ? '已复制' : '复制链接'}
-              </button>
-              <button
-                type="button"
-                className="article-detail__share-btn"
-                onClick={handleShareTwitter}
-                aria-label="分享到 Twitter"
-              >
-                <MessageCircle size={14} strokeWidth={1.5} /> Twitter
               </button>
               <button
                 type="button"
