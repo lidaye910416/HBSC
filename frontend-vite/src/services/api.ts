@@ -196,6 +196,34 @@ export const api = {
         request(`/api/admin/articles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
       delete: (id: number) =>
         request(`/api/admin/articles/${id}`, { method: 'DELETE' }),
+      importDocx: async (file: File) => {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch(API_BASE + '/api/admin/articles/import-docx', {
+          method: 'POST',
+          credentials: 'include',
+          body: fd,
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            window.location.href = '/admin/login'
+            throw new Error('Session expired')
+          }
+          let msg = res.statusText
+          try {
+            const body = await res.json()
+            msg = body.error?.message || body.detail || msg
+          } catch {}
+          throw new Error(msg)
+        }
+        return res.json() as Promise<{
+          title: string
+          content_markdown: string
+          suggested_slug: string
+          warnings: string[]
+          images: Array<{ url: string; filename: string; size: number; original_name: string }>
+        }>
+      },
     },
     journals: {
       list: (params?: { q?: string; status?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<JournalAdmin>> => {
