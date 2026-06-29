@@ -56,6 +56,28 @@ def _sanitize_prompt(prompt: str) -> str:
     return prompt[:500].strip()
 
 
+# Maximum characters allowed in a free-text search query. Anything longer is
+# almost certainly abuse (or a script error); we reject with 422 to fail fast
+# before hitting the database with an expensive LIKE.
+_MAX_SEARCH_Q = 100
+
+
+def _escape_like(q: str) -> str:
+    """Escape SQL LIKE wildcards in user input so a query like q='%' does
+    not match every row. Pair with .ilike(f"%{q}%", escape="\\\\")."""
+    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _validate_search_q(q: Optional[str]) -> Optional[str]:
+    """Validate and normalize the search query. Returns the query to use,
+    or raises HTTPException(422) if too long."""
+    if q is None:
+        return None
+    if len(q) > _MAX_SEARCH_Q:
+        raise HTTPException(status_code=422, detail=f"q 长度不能超过 {_MAX_SEARCH_Q}")
+    return _escape_like(q)
+
+
 def _serialize_tags(tags_field) -> Optional[List[str]]:
     if tags_field is None:
         return None
@@ -105,8 +127,9 @@ def list_articles(
         query = query.filter(Article.status == status_)
     if category:
         query = query.filter(Article.category == category)
-    if q:
-        query = query.filter(Article.title.contains(q))
+    safe_q = _validate_search_q(q)
+    if safe_q:
+        query = query.filter(Article.title.ilike(f"%{safe_q}%", escape="\\"))
     total = query.count()
     items = query.order_by(Article.published_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     return {
@@ -231,8 +254,9 @@ def list_journals(
     admin: str = Depends(get_current_admin),
 ):
     query = db.query(Journal)
-    if q:
-        query = query.filter(Journal.title.contains(q))
+    safe_q = _validate_search_q(q)
+    if safe_q:
+        query = query.filter(Journal.title.ilike(f"%{safe_q}%", escape="\\"))
     total = query.count()
     items = query.order_by(Journal.published_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     return {

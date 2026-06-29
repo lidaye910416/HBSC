@@ -151,3 +151,40 @@ def test_articles_by_category_groups_correctly(env):
 def test_articles_by_category_404(env):
     res = env["client"].get("/api/admin/journals/99999/articles-by-category", headers=_auth(_token()))
     assert res.status_code == 404
+
+
+# ============ Issue #5: LIKE wildcard escape + q length cap ============
+
+def test_list_journals_q_wildcard_does_not_return_all(env):
+    """q='%' must not match every row (LIKE wildcard injection)."""
+    res = env["client"].get("/api/admin/journals?q=%25", headers=_auth(_token()))
+    assert res.status_code == 200
+    assert res.json()["total"] == 0
+
+
+def test_list_journals_q_underscore_does_not_match(env):
+    """q='_' must not match every row (LIKE wildcard)."""
+    res = env["client"].get("/api/admin/journals?q=_", headers=_auth(_token()))
+    assert res.status_code == 200
+    assert res.json()["total"] == 0
+
+
+def test_list_journals_q_too_long_422(env):
+    """q longer than 100 chars must be rejected with 422."""
+    long_q = "a" * 101
+    res = env["client"].get(f"/api/admin/journals?q={long_q}", headers=_auth(_token()))
+    assert res.status_code == 422
+
+
+def test_list_articles_q_wildcard_does_not_return_all(env):
+    """Article search: q='%' must not match every row."""
+    from app.models.journal import Article
+    db_gen = app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    db.add(Article(title="First", slug="s1", category="战略与政策", status="published"))
+    db.add(Article(title="Second", slug="s2", category="技术与产业", status="published"))
+    db.commit()
+    db.close()
+    res = env["client"].get("/api/admin/articles?q=%25", headers=_auth(_token()))
+    assert res.status_code == 200
+    assert res.json()["total"] == 0
