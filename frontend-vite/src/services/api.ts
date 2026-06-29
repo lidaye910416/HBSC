@@ -230,6 +230,17 @@ export const api = {
           method: 'PUT',
           body: JSON.stringify({ value, description }),
         }),
+      test: (key: string) =>
+        request(`/api/admin/settings/${encodeURIComponent(key)}/test`, { method: 'POST' }),
+    },
+    agent: {
+      config: (): Promise<{ enabled: boolean; model: string; base_url: string }> =>
+        request('/api/admin/agent/config'),
+      execute: (messages: Array<{ role: string; content: string }>) =>
+        request('/api/admin/agent/execute', {
+          method: 'POST',
+          body: JSON.stringify({ messages }),
+        }),
     },
     media: {
       list: (page = 1, per_page = 50): Promise<PaginatedResponse<MediaOut>> =>
