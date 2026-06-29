@@ -9,7 +9,15 @@ import os
 
 from .config import settings
 from .database import engine, Base, get_db
-from .routers import articles_router, team_router, auth_router, admin_router, settings_router
+from .routers import (
+    articles_router,
+    team_router,
+    auth_router,
+    admin_router,
+    settings_router,
+    agent_router,
+    admin_articles_import_router,
+)
 from .middleware.rate_limit import rate_limit
 from .models import Journal, Article, Researcher
 from .services.seed_data import seed_journals, seed_articles, seed_researchers
@@ -98,6 +106,8 @@ app.include_router(team_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(settings_router)
+app.include_router(agent_router)
+app.include_router(admin_articles_import_router)
 
 @app.get("/")
 def root():
