@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
 import { api } from '../../services/api'
@@ -54,6 +54,19 @@ export function ArticleEditor() {
   const [error, setError] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
 
+  // Prefill from query params (used by JournalDetail's "新建" button)
+  const [searchParams] = useSearchParams()
+  const presetJournalId = searchParams.get('journal_id')
+  const presetCategory = searchParams.get('category')
+  const presetJournalIdNum = presetJournalId ? parseInt(presetJournalId, 10) : null
+
+  useEffect(() => {
+    if (isNew && presetCategory && CATEGORIES.includes(presetCategory)) {
+      setForm((f) => ({ ...f, category: presetCategory }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const { data: existing, isLoading } = useQuery({
     queryKey: ['admin', 'articles', id],
     queryFn: () => api.admin.articles.get(parseInt(id!, 10)),
@@ -86,11 +99,14 @@ export function ArticleEditor() {
   const saveMut = useMutation({
     mutationFn: async (status: 'draft' | 'published') => {
       const tagsArr = form.tags.split(',').map((t) => t.trim()).filter(Boolean)
-      const body = {
+      const body: Record<string, unknown> = {
         ...form,
         tags: tagsArr,
         status,
         reading_time: Number(form.reading_time),
+      }
+      if (presetJournalIdNum) {
+        body.journal_id = presetJournalIdNum
       }
       if (isNew) {
         return api.admin.articles.create(body)
