@@ -1,6 +1,38 @@
 // 同源相对路径：开发期由 Vite proxy 转给后端 8000，生产期由 Nginx 转给后端
 const API_BASE = ''
 
+/**
+ * Structured error from the API. Carries the stable error code from the
+ * backend envelope `{error: {code, message, ...extras}}` plus the raw body
+ * so callers can branch on `err.code` (e.g. "incomplete_journal") and read
+ * extras like `missing` categories.
+ */
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  body: unknown;
+  constructor(message: string, code: string, status: number, body: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function codeForStatus(status: number): string {
+  return {
+    400: 'bad_request',
+    401: 'unauthorized',
+    403: 'forbidden',
+    404: 'not_found',
+    409: 'conflict',
+    422: 'validation_error',
+    429: 'rate_limited',
+    500: 'internal_error',
+  }[status] || 'error';
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -15,15 +47,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     // Global 401 handler
     if (res.status === 401 && !path.startsWith('/api/auth/')) {
       window.location.href = '/admin/login'
-      throw new Error('Session expired')
+      throw new ApiError('Session expired', 'unauthorized', 401, null)
     }
-    // Try to parse new error format {error: {code, message}}
-    let msg = res.statusText
+    // Parse new error envelope {error: {code, message, ...extras}} with
+    // backward-compat fallback to legacy {detail}.
+    let body: unknown = null
     try {
-      const body = await res.json()
-      msg = body.error?.message || body.detail || msg
+      body = await res.json()
     } catch {}
-    throw new Error(msg)
+    const errBody = (body as { error?: { code?: string; message?: string } } | null)?.error
+    const message =
+      errBody?.message ||
+      (body as { detail?: string } | null)?.detail ||
+      res.statusText ||
+      'Request failed'
+    const code = errBody?.code || codeForStatus(res.status)
+    throw new ApiError(message, code, res.status, body)
   }
   if (res.status === 204) return undefined as T
   return res.json()
@@ -166,14 +205,16 @@ export const api = {
         method: 'POST',
         credentials: 'include',
       })
-      if (!res.ok && res.status !== 401) {
-        let msg = res.statusText
-        try {
-          const body = await res.json()
-          msg = body.error?.message || body.detail || msg
-        } catch {}
-        throw new Error(msg)
-      }
+      if (res.ok || res.status === 401) return
+      let body: unknown = null
+      try { body = await res.json() } catch {}
+      const errBody = (body as { error?: { code?: string; message?: string } } | null)?.error
+      const message =
+        errBody?.message ||
+        (body as { detail?: string } | null)?.detail ||
+        res.statusText ||
+        'Logout failed'
+      throw new ApiError(message, errBody?.code || codeForStatus(res.status), res.status, body)
     },
   },
 
@@ -207,14 +248,17 @@ export const api = {
         if (!res.ok) {
           if (res.status === 401) {
             window.location.href = '/admin/login'
-            throw new Error('Session expired')
+            throw new ApiError('Session expired', 'unauthorized', 401, null)
           }
-          let msg = res.statusText
-          try {
-            const body = await res.json()
-            msg = body.error?.message || body.detail || msg
-          } catch {}
-          throw new Error(msg)
+          let body: unknown = null
+          try { body = await res.json() } catch {}
+          const errBody = (body as { error?: { code?: string; message?: string } } | null)?.error
+          const message =
+            errBody?.message ||
+            (body as { detail?: string } | null)?.detail ||
+            res.statusText ||
+            'Import failed'
+          throw new ApiError(message, errBody?.code || codeForStatus(res.status), res.status, body)
         }
         return res.json() as Promise<{
           title: string
@@ -300,14 +344,17 @@ export const api = {
         if (!res.ok) {
           if (res.status === 401) {
             window.location.href = '/admin/login'
-            throw new Error('Session expired')
+            throw new ApiError('Session expired', 'unauthorized', 401, null)
           }
-          let msg = res.statusText
-          try {
-            const body = await res.json()
-            msg = body.error?.message || body.detail || msg
-          } catch {}
-          throw new Error(msg)
+          let body: unknown = null
+          try { body = await res.json() } catch {}
+          const errBody = (body as { error?: { code?: string; message?: string } } | null)?.error
+          const message =
+            errBody?.message ||
+            (body as { detail?: string } | null)?.detail ||
+            res.statusText ||
+            'Upload failed'
+          throw new ApiError(message, errBody?.code || codeForStatus(res.status), res.status, body)
         }
         return res.json()
       },

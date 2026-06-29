@@ -57,13 +57,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
-# 全局异常处理 — 统一错误响应格式为 {"error": {"code", "message"}}
-# NOTE: 响应格式从 {detail: "..."} 变为 {error: {code, message}}。
-#       前端 api.ts 暂时仍按 err.detail 处理，将在 G4 任务中统一适配，这里不要修改 api.ts。
+# 全局异常处理 — 统一错误响应格式为 {"error": {"code", "message", ...extras}}
+# 前端 api.ts 已经按 {error: {code, message}} 解析。
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # If detail is a dict with a "code" key, use it as the error code (semantic errors).

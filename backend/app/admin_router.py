@@ -157,6 +157,11 @@ def create_article(
     data["featured"] = 1 if data.get("featured") else 0
 
     article = Article(**data)
+    # If created directly as published, stamp published_at so the public
+    # ordering by published_at desc puts the new article at the top.
+    if data.get("status") == "published" and article.published_at is None:
+        article.published_at = datetime.utcnow()
+
     db.add(article)
     try:
         db.commit()
@@ -197,6 +202,12 @@ def update_article(
         data["featured"] = 1 if data["featured"] else 0
     for k, v in data.items():
         setattr(a, k, v)
+    # Auto-stamp published_at when an article transitions draft → published
+    # via the generic update path. Stamping here keeps front-end editor
+    # behaviour symmetric with POST /publish and prevents the public list
+    # ordering by published_at desc from sinking freshly published articles.
+    if data.get("status") == "published" and a.published_at is None:
+        a.published_at = datetime.utcnow()
     db.commit()
     db.refresh(a)
     return _article_to_dict(a)

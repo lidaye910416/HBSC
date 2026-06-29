@@ -35,8 +35,11 @@ export function JournalDetail() {
   const publishMut = useMutation({
     mutationFn: () => api.admin.journals.publish(journalId),
     onSuccess: () => {
+      // Prefix-match invalidation: covers both ['admin', 'journal', id]
+      // and ['admin', 'journal', id, 'grouped'] in one call.
       qc.invalidateQueries({ queryKey: ['admin', 'journals'] })
       qc.invalidateQueries({ queryKey: ['admin', 'journal', journalId] })
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
     },
     onError: (err) => setError(err instanceof Error ? err.message : '发布失败'),
   })

@@ -54,12 +54,13 @@ export function MediaLibrary() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  minHeight: '120px',
                 }}>
                   <CoverImage
                     src={m.url}
                     alt={m.original_name}
                     category={m.original_name.split('.').pop()?.toUpperCase() ?? 'IMG'}
-                    aspectRatio="1 / 1"
+                    aspectRatio="auto"
                     className="media-library-thumb"
                   />
                 </div>

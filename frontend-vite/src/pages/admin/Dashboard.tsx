@@ -2,18 +2,21 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../services/api'
 
 export function Dashboard() {
+  // Use stable object-shaped query keys (with a `count` marker) instead of
+  // arbitrary string suffixes so the keys don't collide with list-view keys
+  // and so React Query's default prefix-match invalidation works correctly.
   const { data: articles } = useQuery({
-    queryKey: ['admin', 'articles', 'all'],
+    queryKey: ['admin', 'articles', { count: true }],
     queryFn: () => api.admin.articles.list({ per_page: 1 }),
   })
 
   const { data: journals } = useQuery({
-    queryKey: ['admin', 'journals', 'all'],
+    queryKey: ['admin', 'journals', { count: true }],
     queryFn: () => api.admin.journals.list({ per_page: 1 }),
   })
 
   const { data: media } = useQuery({
-    queryKey: ['admin', 'media', 'all'],
+    queryKey: ['admin', 'media', { count: true }],
     queryFn: () => api.admin.media.list(1, 1),
   })
 
