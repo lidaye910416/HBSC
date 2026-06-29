@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import io
 import re
+import shutil
+import subprocess
+import tempfile
 import uuid
 import zipfile
 from dataclasses import dataclass, field
@@ -70,3 +73,97 @@ def extract_docx_images(docx_bytes: bytes, dest_root: Path) -> dict[str, dict]:
                 "url": f"/uploads/imports/{request_id}/{candidate}",
             }
     return extracted
+
+
+def _find_pandoc() -> Optional[str]:
+    """Return path to pandoc binary, or None if missing."""
+    return shutil.which("pandoc")
+
+
+def _slugify(text: str, max_len: int = 80) -> str:
+    text = text.strip().lower()
+    text = re.sub(r"[^a-z0-9一-鿿]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-")
+    return text[:max_len] or "untitled"
+
+
+def convert_docx_to_markdown(
+    docx_bytes: bytes,
+    *,
+    media_dir: Optional[Path] = None,
+) -> ImportResult:
+    """Convert .docx → Markdown via pandoc. Optionally extract media into media_dir.
+
+    Image references in the produced Markdown are rewritten from
+    `media/image1.png` to the URL returned by extract_docx_images (caller
+    supplies media_dir to enable rewriting).
+    """
+    pandoc_path = _find_pandoc()
+    if pandoc_path is None:
+        raise PandocUnavailable(
+            "pandoc 未安装。请在 Docker 镜像或开发机安装 pandoc 后重试。"
+        )
+
+    with tempfile.TemporaryDirectory() as td:
+        in_path = Path(td) / "input.docx"
+        out_path = Path(td) / "output.md"
+        in_path.write_bytes(docx_bytes)
+        proc = subprocess.run(
+            [
+                pandoc_path,
+                str(in_path),
+                "-f", "docx",
+                "-t", "gfm",
+                "--wrap=none",
+                "-o", str(out_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"pandoc 转换失败: {proc.stderr.strip()}")
+        markdown = out_path.read_text(encoding="utf-8")
+
+    # First H1 → title; everything else → content
+    lines = markdown.splitlines()
+    title = ""
+    body_start = 0
+    for i, line in enumerate(lines):
+        if line.startswith("# "):
+            title = line[2:].strip()
+            body_start = i + 1
+            break
+    content = "\n".join(lines[body_start:]).strip()
+
+    warnings: list[str] = []
+    images: list[dict] = []
+
+    if media_dir is not None:
+        extracted = extract_docx_images(docx_bytes, dest_root=media_dir)
+        for original, info in extracted.items():
+            # Rewrite markdown references like ![](media/image1.png) to /uploads/imports/...
+            pattern = re.compile(
+                r"(!\[[^\]]*\]\()([^)]*?" + re.escape(original) + r")(\))"
+            )
+            replacement = r"\1" + info["url"] + r"\3"
+            new_content, n = pattern.subn(replacement, content)
+            if n > 0:
+                content = new_content
+            images.append(
+                {
+                    "url": info["url"],
+                    "filename": info["filename"],
+                    "size": info["size"],
+                    "original_name": original,
+                }
+            )
+        if not images:
+            warnings.append("文档中未发现嵌入图片")
+
+    return ImportResult(
+        title=title,
+        content_markdown=content,
+        suggested_slug=_slugify(title),
+        warnings=warnings,
+        images=images,
+    )
