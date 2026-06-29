@@ -1,6 +1,7 @@
 """Admin API：articles/journals/media CRUD + 上传。"""
 import os
 import re
+from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from .schemas.admin import (
     ArticleCreate, ArticleUpdate, ArticleAdminOut,
     JournalCreate, JournalUpdate, JournalAdminOut,
     MediaOut, OkResponse, ImageGenRequest,
+    JournalArticlesByCategoryOut,
 )
 from .security import get_current_admin
 from .upload_service import save_upload, read_upload_with_limit, UploadTooLarge
@@ -311,6 +313,48 @@ def get_journal_completeness(
     if not j:
         raise HTTPException(status_code=404, detail="期刊不存在")
     return is_journal_complete(j)
+
+
+_CATEGORY_KEYS = {
+    "战略与政策": "strategy",
+    "技术与产业": "technology",
+    "方案与思考": "solution",
+    "动态与文化": "dynamics",
+}
+
+
+@router.get("/journals/{journal_id}/articles-by-category", response_model=JournalArticlesByCategoryOut)
+def articles_by_category(
+    journal_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Per-category article list for the 4-Tab JournalDetail UI.
+
+    Drafts are included so the admin can see what still needs work.
+    Sorted newest-first by published_at (falling back to created_at).
+    """
+    j = db.query(Journal).filter(Journal.id == journal_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+
+    buckets: dict[str, list] = {key: [] for key in _CATEGORY_KEYS.values()}
+    for a in sorted(
+        j.articles,
+        key=lambda x: (x.published_at or x.created_at or datetime.min),
+        reverse=True,
+    ):
+        key = _CATEGORY_KEYS.get(a.category)
+        if key:
+            buckets[key].append(_article_to_dict(a))
+
+    return {
+        "strategy": buckets["strategy"],
+        "technology": buckets["technology"],
+        "solution": buckets["solution"],
+        "dynamics": buckets["dynamics"],
+        "completeness": is_journal_complete(j),
+    }
 
 
 @router.post("/journals/{journal_id}/publish")

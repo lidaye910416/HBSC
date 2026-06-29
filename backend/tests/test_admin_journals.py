@@ -123,3 +123,31 @@ def test_publish_then_unpublish(env):
     res = env["client"].post(f"/api/admin/journals/{jid}/unpublish", headers=_auth(_token()))
     assert res.status_code == 200
     assert res.json()["status"] == "draft"
+
+
+def test_articles_by_category_groups_correctly(env):
+    from app.models.journal import Article, Journal as J
+    db_gen = app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    jid = db.query(J).filter_by(slug="2026-q1").first().id
+    db.add_all([
+        Article(title="S1", slug="s1", category="战略与政策", status="published", journal_id=jid),
+        Article(title="S2", slug="s2", category="战略与政策", status="draft", journal_id=jid),
+        Article(title="T1", slug="t1", category="技术与产业", status="published", journal_id=jid),
+        Article(title="O1", slug="o1", category="方案与思考", status="draft", journal_id=jid),
+    ])
+    db.commit()
+
+    res = env["client"].get(f"/api/admin/journals/{jid}/articles-by-category", headers=_auth(_token()))
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body["strategy"]) == 2
+    assert len(body["technology"]) == 1
+    assert len(body["solution"]) == 1
+    assert len(body["dynamics"]) == 0
+    assert body["completeness"]["complete"] is False
+
+
+def test_articles_by_category_404(env):
+    res = env["client"].get("/api/admin/journals/99999/articles-by-category", headers=_auth(_token()))
+    assert res.status_code == 404

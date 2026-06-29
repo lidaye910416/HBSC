@@ -142,3 +142,12 @@ class ImageGenRequest(BaseModel):
     """AI 生图请求（仅 admin 端点使用）。"""
     prompt: str = Field(min_length=1, max_length=2000)
     aspect_ratio: Literal["16:9", "1:1", "4:3"] = "16:9"
+
+
+class JournalArticlesByCategoryOut(BaseModel):
+    """Per-category article list for the 4-Tab UI. Drafts included."""
+    strategy: list[ArticleAdminOut]      # 战略与政策
+    technology: list[ArticleAdminOut]    # 技术与产业
+    solution: list[ArticleAdminOut]      # 方案与思考
+    dynamics: list[ArticleAdminOut]      # 动态与文化
+    completeness: dict
