@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text
-from ..database import Base
+from .base import Base
 
 class Domain(Base):
     __tablename__ = "domains"

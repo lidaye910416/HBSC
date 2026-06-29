@@ -440,6 +440,10 @@
   margin-top: var(--space-2);
 }
 
+.featured-grid > .observe {
+  display: flex;
+}
+
 /* ---------- Team Grid ---------- */
 
 .team-grid {

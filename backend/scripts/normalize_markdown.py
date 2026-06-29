@@ -24,10 +24,6 @@ sources:
    - `media/imageN.ext` → `/uploads/source-images/{slug-subdir}/imageN.ext`
      (slug → subdir mapping below)
 
-4. **Cover image paths** for Q3 articles that reference non-existent files:
-   - 7 Q3 articles point to `/uploads/article-covers/2025-q3-*.jpg` which
-     don't exist; remap to existing files in the same directory.
-
 The script supports `--dry-run` (default) and `--apply`. Diff is printed per
 article before any write.
 """
@@ -58,34 +54,6 @@ SLUG_TO_IMAGE_DIR: dict[str, str] = {
     "xia-junchao-youth-pioneer": "09-xiajunchao",
     "autonomous-driving-wuhan-newcity": "11-zidongjiashijiebo",
 }
-
-
-# Q3 cover-image fixes: slugs whose cover_image references non-existent files
-# are remapped to existing files in /uploads/article-covers/
-Q3_COVER_REMAP: dict[str, str] = {
-    "2025-q3-esb-architecture": "/uploads/article-covers/esb-architecture-liantou.jpg",
-    "2025-q3-archive-management": "/uploads/article-covers/international-tech-research.jpg",
-    "2025-q3-sme-transformation": "/uploads/article-covers/sme-digitalization-case-study.jpg",
-    "2025-q3-autonomous-driving": "/uploads/article-covers/autonomous-driving-wuhan-newcity.jpg",
-    "2025-q3-xiantao-one-network": "/uploads/article-covers/15th-five-year-plan-analysis.jpg",
-    "2025-q3-jiayu-governance": "/uploads/article-covers/jiayu-county-governance-platform.jpg",
-    "2025-q3-llm-mcp": "/uploads/article-covers/digital-industry-2026-policy.jpg",
-}
-
-
-def _rewrite_q3_inline_covers(text: str, slug: str) -> str:
-    """For Q3 articles, also rewrite in-body ![cover](...) references to the
-    remapped cover_image path. Without this, the article body would still
-    try to fetch the non-existent `/uploads/article-covers/2025-q3-*.jpg`.
-    """
-    new_path = Q3_COVER_REMAP.get(slug)
-    if not new_path:
-        return text
-    return re.sub(
-        r"!\[[^\]]*\]\(/uploads/article-covers/2025-q3-[^)]+\)",
-        f"![cover]({new_path})",
-        text,
-    )
 
 
 CJK = "一-鿿㐀-䶿"  # CJK Unified Ideographs + Extension A
@@ -592,12 +560,6 @@ def normalize_article(article: Article) -> tuple[str, list[str]]:
         log.append(f"  images: rewrote {diff} media/ refs to /uploads/source-images/{SLUG_TO_IMAGE_DIR.get(article.slug, '?')}/")
         text = new_text
 
-    # Phase 1b: rewrite Q3 in-body cover refs to the new mapped path
-    new_text = _rewrite_q3_inline_covers(text, article.slug)
-    if new_text != text:
-        log.append("  q3 inline cover: rewrote in-body cover to mapped path")
-        text = new_text
-
     # Phase 2: pandoc residue
     new_text = _normalize_pandoc(text)
     if new_text != text:
@@ -633,54 +595,15 @@ def normalize_article(article: Article) -> tuple[str, list[str]]:
     return text, log
 
 
-def fix_cover_images(db) -> list[tuple[int, str, str]]:
-    """Update cover_image on Q3 articles whose files don't exist. Returns list of (id, old, new)."""
-    changes: list[tuple[int, str, str]] = []
-    for slug, new_path in Q3_COVER_REMAP.items():
-        article = db.query(Article).filter(Article.slug == slug).first()
-        if not article:
-            continue
-        if article.cover_image == new_path:
-            continue
-        old = article.cover_image
-        # Verify the target file actually exists on disk
-        disk_path = BACKEND_ROOT / new_path.lstrip("/")
-        if not disk_path.exists():
-            print(f"  [SKIP] id={article.id} {slug}: target {new_path} not found on disk")
-            continue
-        changes.append((article.id, old, new_path))
-    return changes
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Write changes to DB (default is dry-run)")
-    parser.add_argument("--covers-only", action="store_true", help="Only fix cover images")
-    parser.add_argument("--content-only", action="store_true", help="Only normalize article content")
     args = parser.parse_args()
 
     dry = not args.apply
 
     db = SessionLocal()
     try:
-        # === Cover image fixes ===
-        if not args.content_only:
-            cover_changes = fix_cover_images(db)
-            if cover_changes:
-                print(f"\n[{'DRY' if dry else 'APPLY'}] cover_image changes: {len(cover_changes)}")
-                for aid, old, new in cover_changes:
-                    print(f"  id={aid}: {old} → {new}")
-                if not dry:
-                    for aid, old, new in cover_changes:
-                        db.query(Article).filter(Article.id == aid).update({"cover_image": new})
-                    db.commit()
-                    print("  committed.")
-            else:
-                print("\n[INFO] no cover_image changes needed.")
-
-        if args.covers_only:
-            return 0
-
         # === Content normalization ===
         articles = db.query(Article).filter(Article.content.isnot(None)).all()
         print(f"\n[{'DRY' if dry else 'APPLY'}] normalizing {len(articles)} articles...")

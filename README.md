@@ -158,14 +158,6 @@ UPLOAD_MAX_SIZE_MB=5
 `GET /api/articles` 与 `GET /api/articles/{slug}` **仅返回 `status='published'`** 的文章。
 管理 API 不应用此过滤（管理端能看见草稿）。
 
-### 测试
-
-```bash
-cd backend && python3 -m pytest -v
-```
-
-当前 **41 个测试全部通过**（security/auth/models/schemas/upload/admin CRUD/public filter）。
-
 ### 已知约束
 
 - slug 在文章/期刊发布后不可修改（避免外链失效）
