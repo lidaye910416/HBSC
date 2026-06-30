@@ -1,4 +1,66 @@
 .admin-settings { max-width: 880px; }
+.admin-settings__section { margin-bottom: var(--space-5, 1.5rem); }
+.admin-settings__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-3, 1rem);
+}
+.admin-settings__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  font-size: var(--type-lg, 1.0625rem);
+  font-weight: 600;
+  margin: 0;
+  color: var(--admin-text, inherit);
+}
+.admin-settings__section-blurb {
+  margin: 0;
+  color: var(--admin-text-muted, #666);
+  font-size: var(--type-sm, 0.875rem);
+  line-height: 1.55;
+}
+.admin-settings__preset {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  padding: 4px 10px;
+  border: 1px solid var(--admin-border, #e5e5e5);
+  border-radius: var(--radius-2, 6px);
+  background: var(--admin-surface-2, #f7f7f7);
+  font-size: var(--type-xs, 0.75rem);
+  color: var(--admin-text-muted, #666);
+  align-self: flex-start;
+}
+.admin-settings__preset code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--admin-text, inherit);
+}
+.admin-settings__preset-sep { opacity: 0.5; }
+
+.admin-settings__label-text { display: inline-block; font-weight: 500; }
+.admin-settings__hint-inline {
+  display: block;
+  font-size: var(--type-xs, 0.75rem);
+  color: var(--admin-text-muted, #888);
+  margin-top: 2px;
+}
+.admin-settings__preset-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: var(--type-xs, 0.75rem);
+  font-weight: 500;
+  background: color-mix(in srgb, #C9A84C 18%, transparent);
+  color: #6e5b29;
+  border-radius: var(--radius-1, 4px);
+}
+.admin-settings__meta {
+  font-size: var(--type-xs, 0.75rem);
+  color: var(--admin-text-muted, #888);
+}
 .admin-settings__list { display: flex; flex-direction: column; gap: var(--space-4); }
 .admin-settings__row { display: flex; flex-direction: column; gap: var(--space-3); }
 .admin-settings__label {

@@ -323,7 +323,8 @@ export const api = {
       list: (): Promise<{ items: Array<{
         key: string; value?: string | null; masked?: string | null;
         is_secret: boolean; description: string;
-        updated_at: string; updated_by: string;
+        default_value?: string | null;
+        updated_at?: string | null; updated_by?: string | null;
       }> }> => request('/api/admin/settings'),
       upsert: (key: string, value: string, description?: string) =>
         request(`/api/admin/settings/${encodeURIComponent(key)}`, {

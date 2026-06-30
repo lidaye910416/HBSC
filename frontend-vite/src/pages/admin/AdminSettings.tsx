@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, RefreshCw, Zap, ZapOff } from 'lucide-react'
+import { Save, Sparkles, Wand2, RefreshCw, Zap, ZapOff } from 'lucide-react'
 import { api } from '../../services/api'
-import { PageHeader, Button, Card, CardHeader, CardTitle } from '../../components/ui'
+import { PageHeader, Button, Card } from '../../components/ui'
 import './AdminSettings.css'
 
 interface Setting {
@@ -11,23 +11,66 @@ interface Setting {
   masked?: string | null
   is_secret: boolean
   description: string
-  updated_at: string
-  updated_by: string
+  default_value?: string | null
+  updated_at?: string | null
+  updated_by?: string | null
 }
 
-const KNOWN_KEYS = [
-  { key: 'page_agent.enabled',     label: '启用 page-agent', kind: 'bool'   as const },
-  { key: 'page_agent.model',       label: '模型',             kind: 'string' as const },
-  { key: 'page_agent.base_url',    label: 'API Base URL',     kind: 'string' as const },
-  { key: 'page_agent.api_key',     label: 'API Key',          kind: 'secret' as const },
-  { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）', kind: 'string' as const },
-  // ----- article typesetter (AI 排版) -----
-  { key: 'article_typesetter.enabled',  label: '启用 AI 排版',         kind: 'bool'   as const },
-  { key: 'article_typesetter.model',       label: '模型 (AI 排版)',     kind: 'string' as const },
-  { key: 'article_typesetter.base_url',    label: 'API Base URL',        kind: 'string' as const },
-  { key: 'article_typesetter.api_key',     label: 'API Key (AI 排版)',   kind: 'secret' as const },
-  { key: 'article_typesetter.system_prompt', label: '系统 Prompt（可覆盖）', kind: 'string' as const },
-]
+type SettingKind = 'bool' | 'string' | 'secret' | 'textarea'
+
+interface KnownKey {
+  key: string
+  label: string
+  kind: SettingKind
+  hint?: string  // one-line hint shown below label
+}
+
+interface SettingSection {
+  title: string
+  icon: React.ReactNode
+  blurb: string  // intro paragraph
+  defaults: { model: string; baseUrl: string }  // preset chips for the preset badge
+  rows: KnownKey[]
+}
+
+const PAGE_AGENT_SECTION: SettingSection = {
+  title: 'page-agent — 自然语言操作 admin',
+  icon: <Zap size={16} />,
+  blurb:
+    '基于自然语言操作 admin 页面的代理。启用后，admin 路由右下角会出现代理输入框。关闭后下次进入 admin 页面即消失（刷新当前页可立即生效）。',
+  defaults: {
+    model: 'MiniMax-M3',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  },
+  rows: [
+    { key: 'page_agent.enabled',       label: '启用',                   kind: 'bool' },
+    { key: 'page_agent.model',         label: '模型',                   kind: 'string' },
+    { key: 'page_agent.base_url',      label: 'API Base URL',           kind: 'string' },
+    { key: 'page_agent.api_key',       label: 'API Key',                kind: 'secret' },
+    { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）',   kind: 'textarea' },
+  ],
+}
+
+const AI_TYPESETTER_SECTION: SettingSection = {
+  title: 'AI 排版 — Word 导入后的 Markdown 清洗',
+  icon: <Sparkles size={16} />,
+  blurb:
+    '把 .docx 导入生成的 pandoc Markdown 调一次 LLM 进行格式清理（不动语义、不修改图片路径、不修改元数据）。通常只需要填入 API Key 即可启用，其余配置已按 minimax token plan 预设好。',
+  defaults: {
+    model: 'MiniMax-M3',
+    baseUrl: 'https://api.minimax.chat/v1',
+  },
+  rows: [
+    { key: 'article_typesetter.enabled',       label: '启用',           kind: 'bool' },
+    { key: 'article_typesetter.model',         label: '模型',           kind: 'string' },
+    { key: 'article_typesetter.base_url',      label: 'API Base URL',   kind: 'string' },
+    { key: 'article_typesetter.api_key',       label: 'API Key',        kind: 'secret', hint: '获取方式：登录 minimax 控制台 → Token Plan → 复制 sk-cp-...' },
+    { key: 'article_typesetter.system_prompt', label: '系统 Prompt',     kind: 'textarea' },
+  ],
+}
+
+const ALL_SECTIONS = [PAGE_AGENT_SECTION, AI_TYPESETTER_SECTION]
+const ALL_KNOWN_KEYS: KnownKey[] = ALL_SECTIONS.flatMap((s) => s.rows)
 
 export function AdminSettings() {
   const qc = useQueryClient()
@@ -39,14 +82,20 @@ export function AdminSettings() {
     queryFn: () => api.admin.settings.list(),
   })
 
-  // Pre-fill draft from existing values
+  // Pre-fill draft from the row's stored `value`; if absent, fall back to
+  // the synthesized `default_value` so the form opens with the minimax
+  // preset already visible (and NOT making the admin retype it).
   useEffect(() => {
     const items = listQ.data?.items ?? []
     const next: Record<string, string> = {}
     for (const it of items) {
-      // secret rows return null value; we leave draft blank unless user types
-      if (!it.is_secret && it.value != null) {
+      if (it.is_secret) continue  // secrets are NEVER auto-filled
+      if (it.value != null && it.value !== '') {
         next[it.key] = it.value
+        continue
+      }
+      if (it.default_value) {
+        next[it.key] = it.default_value
       }
     }
     setDraft((d) => ({ ...next, ...d }))  // preserve user-typed secrets
@@ -72,112 +121,162 @@ export function AdminSettings() {
   })
 
   const items: Setting[] = listQ.data?.items ?? []
-  const lookup = Object.fromEntries(items.map((i) => [i.key, i]))
+  const lookup = useMemo(() => Object.fromEntries(items.map((i) => [i.key, i])), [items])
+  const otherItems = useMemo(
+    () => items.filter((i) => !ALL_KNOWN_KEYS.some((k) => k.key === i.key)),
+    [items],
+  )
 
   const setDraftFor = (k: string, v: string) =>
     setDraft((d) => ({ ...d, [k]: v }))
+
+  const isPreset = (s: Setting, k: KnownKey) =>
+    !k.key.endsWith('api_key') &&
+    (s.value == null || s.value === '') &&
+    !!s.default_value
 
   return (
     <div className="admin-settings">
       <PageHeader
         title="设置"
-        description="page-agent 是基于自然语言操作 admin 页面的代理；AI 排版是上传 .docx 后可选的 LLM Markdown 清洗服务。两者独立配置。预设 base_url = https://api.minimax.chat/v1、model = MiniMax-M3。仅在 admin 路由内启用。API Key 在服务端 Fernet 加密落库，不会发送到浏览器。"
+        description="两个独立的功能模块各自配置一组 LLM 设置；API Key 在服务端 Fernet 加密落库，不会发送到浏览器。"
       />
 
-      <div className="admin-settings__list">
-        {KNOWN_KEYS.map((k) => {
-          const row = lookup[k.key]
-          const value = draft[k.key] ?? ''
-          return (
-            <Card key={k.key} variant="outlined">
-              <div className="admin-settings__row">
-                <label className="admin-settings__label">
-                  {k.label}
-                  <span className="admin-settings__key">{k.key}</span>
-                  {row?.description && <span className="admin-settings__desc">{row.description}</span>}
-                </label>
-                <div className="admin-settings__field">
-                  {k.kind === 'bool' ? (
-                    <select
-                      value={value || 'false'}
-                      onChange={(e) => setDraftFor(k.key, e.target.value)}
-                    >
-                      <option value="true">启用</option>
-                      <option value="false">关闭</option>
-                    </select>
-                  ) : k.kind === 'secret' ? (
-                    <input
-                      type="password"
-                      placeholder={row?.masked || '尚未配置'}
-                      value={value}
-                      onChange={(e) => setDraftFor(k.key, e.target.value)}
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      value={value}
-                      onChange={(e) => setDraftFor(k.key, e.target.value)}
-                    />
-                  )}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={<Save size={14} />}
-                    onClick={() => upsertMut.mutate({ key: k.key, value })}
-                    loading={upsertMut.isPending}
-                  >
-                    保存
-                  </Button>
-                  {k.kind === 'secret' && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      icon={<Zap size={14} />}
-                      onClick={() => testMut.mutate(k.key)}
-                      disabled={testMut.isPending || !row}
-                    >
-                      测试连通
-                    </Button>
-                  )}
-                </div>
-                {feedback[k.key] && (
-                  <div className={`admin-settings__feedback ${feedback[k.key].startsWith('×') ? 'admin-settings__feedback--err' : ''}`}>
-                    {feedback[k.key]}
-                  </div>
-                )}
-              </div>
-            </Card>
-          )
-        })}
-      </div>
+      {ALL_SECTIONS.map((section) => (
+        <section key={section.title} className="admin-settings__section">
+          <header className="admin-settings__section-head">
+            <h2 className="admin-settings__section-title">
+              {section.icon} {section.title}
+            </h2>
+            <p className="admin-settings__section-blurb">{section.blurb}</p>
+            <div className="admin-settings__preset">
+              <Wand2 size={12} />
+              <span>预设模型</span>
+              <code>{section.defaults.model}</code>
+              <span className="admin-settings__preset-sep">·</span>
+              <code>{section.defaults.baseUrl}</code>
+            </div>
+          </header>
 
-      <Card variant="outlined" style={{ marginTop: 'var(--space-5)' }}>
-        <CardHeader>
-          <CardTitle>其他设置（只读）</CardTitle>
-        </CardHeader>
-        <table className="admin-table" style={{ margin: 0 }}>
-          <thead>
-            <tr><th>Key</th><th>值</th><th>更新时间</th><th>更新人</th></tr>
-          </thead>
-          <tbody>
-            {items.filter((i) => !KNOWN_KEYS.some((k) => k.key === i.key)).map((i) => (
-              <tr key={i.key}>
-                <td>{i.key}</td>
-                <td>{i.is_secret ? i.masked : i.value}</td>
-                <td>{new Date(i.updated_at).toLocaleString('zh-CN')}</td>
-                <td>{i.updated_by}</td>
-              </tr>
-            ))}
-            {items.filter((i) => !KNOWN_KEYS.some((k) => k.key === i.key)).length === 0 && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--admin-text-muted)' }}>无</td></tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+          <div className="admin-settings__list">
+            {section.rows.map((k) => {
+              const row = lookup[k.key]
+              const persisted = row?.value != null && row.value !== ''
+              const value = draft[k.key] ?? ''
+              return (
+                <Card key={k.key} variant="outlined">
+                  <div className="admin-settings__row">
+                    <label className="admin-settings__label">
+                      <span className="admin-settings__label-text">{k.label}</span>
+                      <span className="admin-settings__key">{k.key}</span>
+                      {row && isPreset(row, k) && (
+                        <span className="admin-settings__preset-chip">预设</span>
+                      )}
+                      {row?.description && (
+                        <span className="admin-settings__desc">{row.description}</span>
+                      )}
+                      {k.hint && (
+                        <span className="admin-settings__hint-inline">{k.hint}</span>
+                      )}
+                    </label>
+                    <div className="admin-settings__field">
+                      {k.kind === 'bool' ? (
+                        <select
+                          value={value || 'false'}
+                          onChange={(e) => setDraftFor(k.key, e.target.value)}
+                        >
+                          <option value="true">启用</option>
+                          <option value="false">关闭</option>
+                        </select>
+                      ) : k.kind === 'secret' ? (
+                        <input
+                          type="password"
+                          placeholder={row?.masked || '尚未配置（请填入新 Key）'}
+                          value={value}
+                          onChange={(e) => setDraftFor(k.key, e.target.value)}
+                        />
+                      ) : k.kind === 'textarea' ? (
+                        <textarea
+                          rows={Math.min(6, Math.max(3, value.split('\n').length))}
+                          value={value}
+                          onChange={(e) => setDraftFor(k.key, e.target.value)}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder={row?.default_value ?? undefined}
+                          value={value}
+                          onChange={(e) => setDraftFor(k.key, e.target.value)}
+                        />
+                      )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<Save size={14} />}
+                        onClick={() => upsertMut.mutate({ key: k.key, value })}
+                        loading={upsertMut.isPending}
+                      >
+                        保存
+                      </Button>
+                      {k.kind === 'secret' && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon={<Zap size={14} />}
+                          onClick={() => testMut.mutate(k.key)}
+                          disabled={testMut.isPending || !row?.masked}
+                        >
+                          测试连通
+                        </Button>
+                      )}
+                    </div>
+                    {row?.updated_at && persisted && (
+                      <div className="admin-settings__meta">
+                        上次更新：{new Date(row.updated_at).toLocaleString('zh-CN')}
+                        {row.updated_by && ` · ${row.updated_by}`}
+                      </div>
+                    )}
+                    {feedback[k.key] && (
+                      <div className={`admin-settings__feedback ${feedback[k.key].startsWith('×') ? 'admin-settings__feedback--err' : ''}`}>
+                        {feedback[k.key]}
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </section>
+      ))}
+
+      {otherItems.length > 0 && (
+        <Card variant="outlined" style={{ marginTop: 'var(--space-5)' }}>
+          <h3 style={{ margin: '0 0 var(--space-3) 0', fontSize: 'var(--type-base)' }}>
+            其他设置（只读）
+          </h3>
+          <table className="admin-table" style={{ margin: 0 }}>
+            <thead>
+              <tr><th>Key</th><th>值</th><th>默认值</th><th>更新时间</th><th>更新人</th></tr>
+            </thead>
+            <tbody>
+              {otherItems.map((i) => (
+                <tr key={i.key}>
+                  <td>{i.key}</td>
+                  <td>{i.is_secret ? i.masked : i.value ?? '—'}</td>
+                  <td style={{ color: 'var(--admin-text-muted)' }}>{i.default_value ?? '—'}</td>
+                  <td>{i.updated_at ? new Date(i.updated_at).toLocaleString('zh-CN') : '—'}</td>
+                  <td>{i.updated_by ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
 
       <div className="admin-settings__hint">
-        <ZapOff size={14} /> page-agent 仅在 admin 路由加载。启用后右下角会出现代理输入框，
-        关闭后下次进入 admin 页面即消失（<RefreshCw size={14} /> 刷新当前页可立即生效）。
+        <ZapOff size={14} /> 两组设置互不影响 — page-agent 关闭后右下角的代理输入框消失；
+        AI 排版关闭后 ArticleEditor 里的「AI 排版」按钮变 disabled。
+        改完点 <RefreshCw size={14} /> 刷新当前页可立即生效。
       </div>
     </div>
   )
