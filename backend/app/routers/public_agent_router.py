@@ -279,6 +279,11 @@ async def agent_llm(
     if not _is_same_origin_referer(referer, base_host):
         _send("referer_not_allowed", "Referer 不匹配同源", 403)
 
+    # ALSO bound the upstream body so a small wrapper around a huge body can't bypass.
+    upstream_body = (body.init or {}).get("body") or ""
+    if isinstance(upstream_body, str) and len(upstream_body.encode("utf-8")) > MAX_PUBLIC_AGENT_LLM_BYTES:
+        _send("payload_too_large", "上游请求体超过 2MB 限制", 413)
+
     upstream_init = dict(body.init or {})
     upstream_init.setdefault("method", "POST")
     # Strip any Authorization the client tried to smuggle; we inject our own.

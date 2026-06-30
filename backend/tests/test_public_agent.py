@@ -417,7 +417,16 @@ def test_agent_llm_payload_too_large(client_factory):
     assert r.json()["error"]["code"] == "payload_too_large"
 
 
-def test_agent_llm_rate_limit_separate_from_chat(client_factory, monkeypatch):
+def test_agent_llm_5_calls_then_429(client_factory, monkeypatch):
+    """5/min rate-limit on /agent/llm: 6th call within 60s returns 429.
+
+    NOTE: the rate-limit middleware uses a single bucket per (client_ip, max_calls).
+    Tests like ``test_agent_llm_*`` share buckets with /execute under
+    the same client_ip. To keep each /llm test independent, ``client_factory``
+    clears ``rate_limit._buckets`` per-test (see the fixture). True per-endpoint
+    isolation (so /llm traffic isn't co-eroded with /execute traffic) is a
+    separate ticket — see middleware/rate_limit.py.
+    """
     fake_send = AsyncMock(return_value=_FakeResponse(
         json_data={"choices": [{"message": {}}], "usage": {}}))
     monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
@@ -456,3 +465,19 @@ def test_agent_llm_no_api_key_leak(client_factory, monkeypatch):
     )
     assert r.status_code == 502
     assert "sk-real" not in r.text
+
+
+def test_agent_llm_inner_body_too_large(client_factory):
+    """A small outer JSON envelope wrapping a huge init.body must still 413.
+
+    Without this check, an attacker could POST a 100-byte outer body and shove
+    50MB into init.body, which the proxy would forward verbatim to upstream.
+    """
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "a" * (2 * 1024 * 1024 + 1)}
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+    )
+    assert r.status_code == 413
+    assert r.json()["error"]["code"] == "payload_too_large"
