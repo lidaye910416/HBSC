@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, ExternalLink, ArrowLeft } from 'lucide-react'
 import { api, type JournalCompleteness } from '../../services/api'
+import { PageHeader, Button, IconButton, Card, StatusBadge, Empty } from '../../components/ui'
 import './JournalDetail.css'
 
 const TABS = [
@@ -64,43 +65,38 @@ export function JournalDetail() {
 
   return (
     <div className="journal-detail">
-      <div className="journal-detail__header">
-        <button
-          type="button"
-          className="journal-detail__back"
-          onClick={() => navigate('/admin/journals')}
-        >
-          <ArrowLeft size={14} /> 返回列表
-        </button>
-        <div className="journal-detail__title">
-          <h2>{j.title}</h2>
-          <span className="journal-detail__meta">/{j.slug}{j.issue_number ? ` · ${j.issue_number}` : ''}</span>
-        </div>
-        <div className="journal-detail__actions">
-          <button
-            type="button"
-            className="journal-detail__btn"
-            onClick={() => navigate(`/admin/journals/${journalId}/edit`)}
-          >
-            编辑元数据
-          </button>
-          <button
-            type="button"
-            className="journal-detail__btn journal-detail__btn--primary"
-            disabled={!canPublish || publishMut.isPending}
-            onClick={() => publishMut.mutate()}
-            title={
-              !completeness?.complete
-                ? '四类文章齐全后才能发布'
-                : j.status === 'published'
-                ? '期刊已是发布状态'
-                : ''
-            }
-          >
-            {j.status === 'published' ? '已发布' : publishMut.isPending ? '发布中…' : '发布期刊'}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={j.title}
+        description={`/${j.slug}${j.issue_number ? ` · ${j.issue_number}` : ''}`}
+        breadcrumb={[
+          { label: '期刊', to: '/admin/journals' },
+          { label: j.title },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" icon={<ArrowLeft size={16} />} onClick={() => navigate('/admin/journals')}>
+              返回列表
+            </Button>
+            <Button variant="secondary" onClick={() => navigate(`/admin/journals/${journalId}/edit`)}>
+              编辑元数据
+            </Button>
+            <Button
+              onClick={() => publishMut.mutate()}
+              loading={publishMut.isPending}
+              disabled={!canPublish || j.status === 'published'}
+              title={
+                !completeness?.complete
+                  ? '四类文章齐全后才能发布'
+                  : j.status === 'published'
+                  ? '期刊已是发布状态'
+                  : ''
+              }
+            >
+              {j.status === 'published' ? '已发布' : publishMut.isPending ? '发布中…' : '发布期刊'}
+            </Button>
+          </>
+        }
+      />
 
       {error && <div className="journal-detail__error">{error}</div>}
 
@@ -135,48 +131,40 @@ export function JournalDetail() {
         })}
       </div>
 
-      <div className="journal-detail__panel">
+      <Card>
         <div className="journal-detail__panel-head">
-          <button
-            type="button"
-            className="journal-detail__btn journal-detail__btn--primary"
-            onClick={() => gotoNew(TABS.find((t) => t.key === tab)!.category)}
-          >
-            <Plus size={14} /> 新建 {TABS.find((t) => t.key === tab)!.label}
-          </button>
+          <Button icon={<Plus size={16} />} onClick={() => gotoNew(TABS.find((t) => t.key === tab)!.category)}>
+            新建 {TABS.find((t) => t.key === tab)!.label}
+          </Button>
         </div>
         {articles.length === 0 ? (
-          <div className="journal-detail__empty">此分类暂无文章，点上面按钮新建。</div>
+          <Empty title="此分类暂无文章" description="点上面按钮新建一篇。" />
         ) : (
-          <table className="journal-detail__table">
+          <table className="admin-table">
             <thead>
               <tr><th>标题</th><th>状态</th><th>更新时间</th><th>操作</th></tr>
             </thead>
             <tbody>
               {articles.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.title}</td>
+                  <td style={{ fontWeight: 500 }}>{a.title}</td>
+                  <td><StatusBadge status={a.status === 'published' ? 'published' : 'draft'} /></td>
+                  <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>{a.updated_at ? new Date(a.updated_at).toLocaleString('zh-CN') : '—'}</td>
                   <td>
-                    <span className={`journal-detail__status journal-detail__status--${a.status}`}>
-                      {a.status === 'published' ? '已发布' : '草稿'}
-                    </span>
-                  </td>
-                  <td className="journal-detail__sub">{a.updated_at ? new Date(a.updated_at).toLocaleString('zh-CN') : '—'}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="journal-detail__action"
+                    <IconButton
+                      label="编辑"
+                      variant="ghost"
+                      size="sm"
+                      icon={<ExternalLink size={14} />}
                       onClick={() => navigate(`/admin/articles/${a.id}`)}
-                    >
-                      <ExternalLink size={12} /> 编辑
-                    </button>
+                    />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </div>
+      </Card>
     </div>
   )
 }
