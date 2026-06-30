@@ -24,6 +24,7 @@ import { AdminSettings } from './pages/admin/AdminSettings'
 import NotFound from './pages/NotFound'
 import { ToastProvider } from './components/admin/Toast'
 import './styles/global.css'
+import './styles/admin-tokens.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

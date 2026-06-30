@@ -1,0 +1,67 @@
+/* Admin Design Tokens — 仅在 admin scope 用，不污染公开站 */
+:root {
+  /* Brand */
+  --brand-ink: #1A1A2E;
+  --brand-ink-2: #16213E;
+  --brand-gold: #C9A84C;
+  --brand-gold-50: #F5EEDC;
+
+  /* Surface */
+  --admin-bg: #FAFAF7;
+  --admin-surface: #FFFFFF;
+  --admin-surface-2: #F5F4EE;
+  --admin-border: #E8E5DC;
+  --admin-border-strong: #D4D0C4;
+
+  /* Text */
+  --admin-text: #1A1A2E;
+  --admin-text-2: #5C5C68;
+  --admin-text-muted: #8C8C9A;
+  --admin-text-inverse: #FAFAF7;
+
+  /* Status */
+  --status-published-bg: #E8F4EA;
+  --status-published-fg: #1B5E20;
+  --status-draft-bg: #F4F1E8;
+  --status-draft-fg: #8C7A3E;
+  --status-archived-bg: #F0EFEA;
+  --status-archived-fg: #5C5C68;
+
+  /* Risk */
+  --danger: #B04040;
+  --danger-bg: #F8E6E6;
+
+  /* Spacing — 8px scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Radius */
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 10px;
+
+  /* Shadow */
+  --shadow-1: 0 1px 2px rgba(26, 26, 46, 0.04);
+  --shadow-2: 0 4px 16px rgba(26, 26, 46, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(201, 168, 76, 0.25);
+
+  /* Type */
+  --type-xs: 12px;
+  --type-sm: 13px;
+  --type-base: 14px;
+  --type-md: 16px;
+  --type-lg: 20px;
+  --type-xl: 28px;
+  --type-display: 36px;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --header-height: 64px;
+  --content-max: 1280px;
+}
