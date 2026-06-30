@@ -34,18 +34,15 @@ interface SettingSection {
 }
 
 const PAGE_AGENT_SECTION: SettingSection = {
-  title: 'page-agent — 自然语言操作 admin + 首页 FAB',
+  title: 'page-agent — 公开页面 AI 助手',
   icon: <Zap size={16} />,
   blurb:
-    '基于自然语言操作 admin 页面的代理，并驱动首页右下角的访客 FAB。启用后，admin 路由和公网首页都会出现代理输入框。关闭后两个入口同时消失（刷新当前页可立即生效）。',
-  defaults: {
-    model: 'deepseek-v4-flash',
-    baseUrl: 'https://api.deepseek.com/v1',
-  },
+    '用于配置首页右下角 AI 助手 FAB。支持聊天（问他）与页面操作（让他操作）两种模式。',
+  defaults: { model: 'deepseek-v4-flash', baseUrl: 'https://api.deepseek.com/v1' },
   rows: [
     { key: 'page_agent.enabled',       label: '启用',                   kind: 'bool' },
     { key: 'page_agent.model',         label: '模型',                   kind: 'string' },
-    { key: 'page_agent.base_url',      label: 'API Base URL',           kind: 'string', hint: 'deepseek token plan key 通常用于 https://api.deepseek.com/v1' },
+    { key: 'page_agent.base_url',      label: 'API Base URL',           kind: 'string', hint: '聊天 / 页面操作共用。DOM 模式仅允许 https。' },
     { key: 'page_agent.api_key',       label: 'API Key',                kind: 'secret' },
     { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）',   kind: 'textarea' },
   ],
