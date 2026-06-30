@@ -33,6 +33,10 @@ def client():
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
 
+    # Reset the global rate-limit bucket so test order doesn't matter.
+    from app.middleware import rate_limit as rl
+    rl._buckets.clear()
+
     def _db():
         s = Session()
         try:
@@ -170,3 +174,35 @@ def test_typeset_missing_body_field_returns_422(client):
     _seed(Session)
     r = c.post("/api/admin/articles/typeset", headers=headers, json={})
     assert r.status_code == 422
+
+
+def test_typeset_rate_limit_returns_429(client):
+    """5 calls/minute — the 6th in the same window must be rate-limited."""
+    c, headers, Session = client
+    _seed(Session)
+
+    async def fake_chat(**kwargs):
+        return "# ok"
+
+    with patch.object(markdown_typesetter, "chat_complete", new=AsyncMock(side_effect=fake_chat)):
+        codes = []
+        for i in range(6):
+            r = c.post(
+                "/api/admin/articles/typeset",
+                headers=headers,
+                json={"content_markdown": f"# call {i}"},
+            )
+            codes.append(r.status_code)
+        # First 5 succeed, 6th is rate-limited.
+        assert codes[:5] == [200, 200, 200, 200, 200], codes
+        assert codes[5] == 429, codes
+    # Rate-limit error must still use the project's {error:{code,message}} envelope.
+    body = c.post(
+        "/api/admin/articles/typeset",
+        headers=headers,
+        json={"content_markdown": "# last"},
+    ).json()
+    assert "error" in body and "code" in body["error"]
+
+
+
