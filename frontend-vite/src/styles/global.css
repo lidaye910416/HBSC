@@ -662,3 +662,39 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
   background: var(--danger-bg);
 }
 
+/* Card */
+.ui-card {
+  background: var(--admin-surface);
+  border-radius: var(--radius-2);
+  --card-pad: var(--space-5);
+}
+.ui-card--p-none { --card-pad: 0; }
+.ui-card--p-sm   { --card-pad: var(--space-3); }
+.ui-card--p-md   { --card-pad: var(--space-5); }
+.ui-card--p-lg   { --card-pad: var(--space-6); }
+
+.ui-card--outlined { border: 1px solid var(--admin-border); }
+.ui-card--flat { border: 1px solid transparent; }
+.ui-card--elevated {
+  border: 1px solid var(--admin-border);
+  box-shadow: var(--shadow-1);
+}
+
+.ui-card > .ui-card__section,
+.ui-card > .ui-card__header {
+  padding: var(--card-pad);
+}
+.ui-card > .ui-card__header {
+  border-bottom: 1px solid var(--admin-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.ui-card__title {
+  margin: 0;
+  font-size: var(--type-md);
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
