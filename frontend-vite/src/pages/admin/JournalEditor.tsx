@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../services/api'
+import { PageHeader, Button, Card } from '../../components/ui'
 import './ArticleList.css'
 
 interface FormState {
@@ -75,7 +76,22 @@ export function JournalEditor() {
 
   return (
     <div>
-      <h2>{isNew ? '新建期刊' : `编辑：${existing?.title || ''}`}</h2>
+      <PageHeader
+        title={isNew ? '新建期刊' : (existing?.title || '编辑期刊')}
+        description={isNew ? '创建一本期刊集合，用于组织同一期号的多篇文章' : `编辑期刊 · /${existing?.slug || ''}`}
+        breadcrumb={[
+          { label: '期刊', to: '/admin/journals' },
+          { label: isNew ? '新建' : '编辑' },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => navigate('/admin/journals')}>取消</Button>
+            <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
+              {saveMut.isPending ? '保存中...' : '保存'}
+            </Button>
+          </>
+        }
+      />
       <div className="article-editor">
         {error && <div className="article-editor__error">{error}</div>}
 
@@ -141,21 +157,16 @@ export function JournalEditor() {
           />
         </div>
 
-        <div className="article-editor__actions">
-          <button
-            className="article-editor__btn article-editor__btn--primary"
-            onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
-          >
-            {saveMut.isPending ? '保存中...' : '保存'}
-          </button>
-          <button
-            className="article-editor__btn article-editor__btn--secondary"
-            onClick={() => navigate('/admin/journals')}
-          >
-            取消
-          </button>
-        </div>
+        <Card>
+          <div className="article-editor__actions">
+            <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
+              {saveMut.isPending ? '保存中...' : '保存'}
+            </Button>
+            <Button variant="secondary" onClick={() => navigate('/admin/journals')}>
+              取消
+            </Button>
+          </div>
+        </Card>
       </div>
     </div>
   )
