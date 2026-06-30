@@ -18,8 +18,10 @@ Security guards:
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -33,6 +35,12 @@ from ..services.admin_setting_defaults import (
     KNOWN_KEYS_DEFAULTS,
     default_for,
 )
+from ..services.page_agent_config import (
+    ChatConfig,
+    PageAgentConfigError,
+    load_chat_config,
+    is_allowed_url,
+)
 
 
 router = APIRouter(prefix="/api/public/agent", tags=["public-agent"])
@@ -43,6 +51,7 @@ _log = logging.getLogger(__name__)
 # endpoint is anonymous.
 MAX_PUBLIC_AGENT_MESSAGES = 50
 MAX_PUBLIC_AGENT_BYTES = 1 * 1024 * 1024  # 1 MB
+MAX_PUBLIC_AGENT_LLM_BYTES = 2 * 1024 * 1024  # 2 MB (dom — tools schema makes bodies larger)
 
 
 def _is_enabled(value: str | None) -> bool:
@@ -120,12 +129,17 @@ def get_public_agent_config(db: Session = Depends(get_db)):
     `enabled` is True ONLY when the admin has set `page_agent.enabled=true`
     AND configured a non-empty api_key. Without a key, the FAB does not
     render — we don't want to confuse visitors with a non-functional widget.
+
+    `system_prompt` is exposed so the front-end PageAgent instance can
+    forward it via `customSystemPrompt` — without it the safety rails
+    appended in admin_setting_defaults never reach the LLM.
     """
     cfg = _resolve_config(db)
     return {
         "enabled": _is_fab_visible(cfg),
         "model": cfg["model"],
         "base_url": cfg["base_url"],
+        "system_prompt": _get_or_default(db, "page_agent.system_prompt") or "",
     }
 
 
@@ -195,4 +209,117 @@ async def execute_public_llm(
     return {"content": content}
 
 
-__all__ = ["router", "MAX_PUBLIC_AGENT_MESSAGES", "MAX_PUBLIC_AGENT_BYTES"]
+# =============================================================================
+# Plan Task 2: /api/public/agent/llm — OpenAI proxy used by DOM-mode page-agent
+# =============================================================================
+
+class AgentLLMRequest(BaseModel):
+    url: str
+    init: dict
+
+
+def _is_same_origin_referer(referer: str | None, expected_host: str) -> bool:
+    """Accept empty Referer (curl, native fetch); reject cross-origin Referer."""
+    if not referer:
+        return True
+    try:
+        return urlparse(referer).hostname == expected_host
+    except ValueError:
+        return False
+
+
+@router.post("/llm")
+@rate_limit(max_calls=5, window_seconds=60)
+async def agent_llm(
+    request: Request,
+    body: AgentLLMRequest,
+    db: Session = Depends(get_db),
+):
+    """Proxy a page-agent OpenAI /chat/completions call to the configured LLM.
+
+    Body schema:
+        {
+          "url": "<absolute upstream URL — must match page_agent.base_url>",
+          "init": {
+            "method": "POST",
+            "headers": { ... non-Authorization headers ... },
+            "body": "<raw JSON or other string>"
+          }
+        }
+
+    Security guards (anonymous DOM proxy):
+      409 not_enabled / no_api_key           — page_agent.* admin gates
+      409 dom_requires_https_base_url        — base_url must be https
+      403 url_not_allowed                    — URL strict match fails
+      403 referer_not_allowed                — cross-origin Referer
+      413 payload_too_large                  — raw body > 2 MB
+      429 rate_limited                       — 6th call within 60s
+      502 upstream_llm_failed                — generic; never echoes headers / api_key
+    """
+    raw = await request.body()
+    if len(raw) > MAX_PUBLIC_AGENT_LLM_BYTES:
+        _send("payload_too_large", "请求体超过 2MB 限制", 413)
+
+    rows = {
+        "page_agent.enabled":  _get_or_default(db, "page_agent.enabled") or "",
+        "page_agent.api_key":  _get_setting(db, "page_agent.api_key") or "",
+        "page_agent.base_url": _get_or_default(db, "page_agent.base_url") or "",
+        "page_agent.model":    _get_or_default(db, "page_agent.model") or "",
+    }
+    try:
+        cfg = load_chat_config(rows, mode="dom")
+    except PageAgentConfigError as e:
+        _send(e.code, e.message, 409)
+
+    if not is_allowed_url(body.url, cfg.base_url):
+        _send("url_not_allowed", "上游 URL 不在 base_url 白名单内", 403)
+
+    base_host = urlparse(cfg.base_url).hostname or ""
+    referer = request.headers.get("referer")
+    if not _is_same_origin_referer(referer, base_host):
+        _send("referer_not_allowed", "Referer 不匹配同源", 403)
+
+    upstream_init = dict(body.init or {})
+    upstream_init.setdefault("method", "POST")
+    # Strip any Authorization the client tried to smuggle; we inject our own.
+    headers = {k: v for k, v in (upstream_init.get("headers") or {}).items()
+               if k.lower() != "authorization"}
+    headers["Authorization"] = f"Bearer {cfg.api_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+            upstream_req = client.build_request(
+                upstream_init["method"], body.url, headers=headers,
+                content=upstream_init.get("body"),
+            )
+            resp = await client.send(upstream_req, stream=False)
+            content = resp.content
+            upstream_status = resp.status_code
+            # Only forward safe headers; drop hop-by-hop.
+            response_headers = {
+                k: v for k, v in resp.headers.items()
+                if k.lower() not in {"connection", "keep-alive", "proxy-authenticate",
+                                     "proxy-authorization", "te", "trailers",
+                                     "transfer-encoding", "upgrade"}
+            }
+    except httpx.HTTPError as e:
+        # SECURITY: never echo the raw httpx exception (may contain
+        # "Authorization: Bearer ..." in some httpx versions). Log it
+        # server-side, return generic Chinese 502.
+        _log.warning("agent_llm upstream failed: %s", e, exc_info=True)
+        _send("upstream_llm_failed", "上游 LLM 调用失败，请检查网络或稍后重试", 502)
+
+    return Response(
+        content=content,
+        status_code=upstream_status,
+        headers=response_headers,
+        media_type=response_headers.get("content-type"),
+    )
+
+
+__all__ = [
+    "router",
+    "MAX_PUBLIC_AGENT_MESSAGES",
+    "MAX_PUBLIC_AGENT_BYTES",
+    "MAX_PUBLIC_AGENT_LLM_BYTES",
+]

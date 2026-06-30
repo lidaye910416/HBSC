@@ -223,3 +223,236 @@ def test_execute_upstream_failure_does_not_leak_api_key(client):
     # CRITICAL: api_key must not appear in the response body.
     assert "public-leak-test-XXXXXXXX" not in r.text
     assert r.json()["error"]["code"] == "upstream_llm_failed"
+
+
+# =============================================================================
+# Plan Task 2: /api/public/agent/llm proxy endpoint (DOM Mode)
+# =============================================================================
+
+from unittest.mock import AsyncMock, patch
+import httpx
+
+
+class _FakeResponse:
+    def __init__(self, *, status_code=200, json_data=None, text="", content=None):
+        self.status_code = status_code
+        self._json = json_data
+        self.text = text if not json_data else ""
+        self.headers = httpx.Headers({"content-type": "application/json"})
+        self.content = content if content is not None else (
+            b"" if json_data is None else httpx.Response(200, json=json_data).content
+        )
+
+    def json(self):
+        return self._json
+
+
+@pytest.fixture
+def client_factory(monkeypatch):
+    """Yield a factory that builds a TestClient with configurable page_agent.* rows.
+
+    Each call gets its own in-memory SQLite + dependency override so tests
+    are isolated. Rate-limit buckets are reset between calls.
+    """
+    engines: list = []
+
+    def factory(*, enabled="true", api_key="sk-test",
+                base_url="https://api.deepseek.com/v1",
+                model="deepseek-v4-flash", system_prompt=None):
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=engine)
+        engines.append(engine)
+        SessionLocal = sessionmaker(bind=engine)
+        db = SessionLocal()
+        rows = [
+            ("page_agent.enabled",  enabled,  False),
+            ("page_agent.api_key",  api_key,  True),
+            ("page_agent.base_url", base_url, False),
+            ("page_agent.model",    model,    False),
+        ]
+        if system_prompt is not None:
+            rows.append(("page_agent.system_prompt", system_prompt, False))
+        for key, value, is_secret in rows:
+            db.add(AdminSetting(
+                key=key,
+                value_encrypted=encrypt_value(value),
+                is_secret=is_secret,
+                updated_by="test",
+            ))
+        db.commit()
+
+        def _override_get_db():
+            try:
+                s2 = SessionLocal()
+                yield s2
+            finally:
+                s2.close()
+
+        # Reset rate-limit buckets so each factory call is independent.
+        from app.middleware import rate_limit as rl
+        rl._buckets.clear()
+
+        app.dependency_overrides[get_db] = _override_get_db
+        return TestClient(app)
+
+    yield factory
+
+    for e in engines:
+        e.dispose()
+    app.dependency_overrides.pop(get_db, None)
+
+
+def test_public_config_returns_system_prompt(client_factory):
+    """The /config response must surface system_prompt so the front-end
+    PageAgent instance can forward it via customSystemPrompt."""
+    client = client_factory(
+        api_key="sk-real",
+        system_prompt="你是湖北数创助手（自定义 prompt）。",
+    )
+    r = client.get("/api/public/agent/config")
+    assert r.status_code == 200
+    body = r.json()
+    assert "system_prompt" in body
+    assert body["system_prompt"].startswith("你是")
+    assert "api_key" not in body  # double-check no leak
+
+
+def test_public_config_falls_back_to_default_prompt(client_factory):
+    """When no DB row for system_prompt exists, the preset default
+    (with safety rails) must still be returned."""
+    client = client_factory(api_key="sk-real", system_prompt=None)
+    r = client.get("/api/public/agent/config")
+    assert r.status_code == 200
+    sp = r.json().get("system_prompt", "")
+    # The deepseek preset default in admin_setting_defaults must surface.
+    assert "湖北数创" in sp
+    assert len(sp) > 50
+
+
+def test_agent_llm_passes_tools_schema_through(client_factory, monkeypatch):
+    """page-agent sends OpenAI-format {messages, tools, tool_choice='required'}.
+    The proxy must forward this body verbatim to the upstream LLM."""
+    upstream = _FakeResponse(
+        status_code=200,
+        json_data={
+            "choices": [{
+                "index": 0,
+                "finish_reason": "tool_calls",
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{"function": {"name": "click", "arguments": "{}"}}],
+                },
+            }],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+        },
+    )
+
+    captured: dict = {}
+
+    async def fake_send(self, request, **kwargs):
+        captured["url"] = str(request.url)
+        import json as _json
+        captured["body"] = _json.loads(request.content.decode())
+        return upstream
+
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+
+    client = client_factory(
+        api_key="sk-real",
+        base_url="https://api.deepseek.com/v1",
+    )
+    init = {
+        "method": "POST",
+        "headers": {"content-type": "application/json"},
+        "body": '{"messages":[{"role":"user","content":"hi"}],"tools":[],"tool_choice":"required"}',
+    }
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+        # Use the real upstream host as Referer so the same-origin check passes.
+        headers={"Referer": "https://api.deepseek.com/v1/chat/completions"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["choices"][0]["finish_reason"] == "tool_calls"
+    assert "Authorization" not in captured["body"]
+    assert captured["body"]["tools"] == []
+
+
+def test_agent_llm_rejects_non_allowed_url(client_factory):
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://evil.com/v1/chat/completions", "init": init},
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "url_not_allowed"
+
+
+def test_agent_llm_rejects_bad_referer(client_factory):
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+        headers={"Referer": "https://evil.com"},
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "referer_not_allowed"
+
+
+def test_agent_llm_payload_too_large(client_factory):
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "a" * (2 * 1024 * 1024 + 1)}
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+    )
+    assert r.status_code == 413
+    assert r.json()["error"]["code"] == "payload_too_large"
+
+
+def test_agent_llm_rate_limit_separate_from_chat(client_factory, monkeypatch):
+    fake_send = AsyncMock(return_value=_FakeResponse(
+        json_data={"choices": [{"message": {}}], "usage": {}}))
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    # 5 calls allowed for dom; 6th must fail.
+    for _ in range(5):
+        r = client.post(
+            "/api/public/agent/llm",
+            json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+        )
+        assert r.status_code == 200, r.text
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+    )
+    assert r.status_code == 429
+    assert r.json()["error"]["code"] == "rate_limited"
+
+
+def test_agent_llm_no_api_key_leak(client_factory, monkeypatch):
+    async def boom(self, request, **kwargs):
+        raise httpx.RemoteProtocolError(
+            "Authorization: Bearer sk-real",
+            request=request,
+        )
+
+    monkeypatch.setattr("httpx.AsyncClient.send", boom)
+    client = client_factory(api_key="sk-real")
+    r = client.post(
+        "/api/public/agent/llm",
+        json={
+            "url": "https://api.deepseek.com/v1/chat/completions",
+            "init": {"method": "POST", "body": "{}"},
+        },
+    )
+    assert r.status_code == 502
+    assert "sk-real" not in r.text
