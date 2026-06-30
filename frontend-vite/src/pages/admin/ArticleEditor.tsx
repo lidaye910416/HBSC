@@ -5,9 +5,8 @@ import MDEditor from '@uiw/react-md-editor'
 import { Calendar, User as UserIcon } from 'lucide-react'
 import { api } from '../../services/api'
 import { ImageUploader } from '../../components/admin/ImageUploader'
-import { MarkdownToolbar } from '../../components/admin/MarkdownToolbar'
-import { InsertImageButton } from '../../components/admin/Mde/insertImagePlugin'
-import { InsertTableButton } from '../../components/admin/Mde/insertTablePlugin'
+import { imageCommand } from '../../components/admin/Mde/insertImagePlugin'
+import { tableCommand, csvCommand } from '../../components/admin/Mde/insertTablePlugin'
 import { ArticleBody } from '../../components/ArticleBody'
 import { PageHeader, Button, Card } from '../../components/ui'
 import './ArticleList.css'
@@ -65,30 +64,6 @@ export function ArticleEditor() {
 
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
-
-  // Insert markdown at the current selection by splitting the content
-  // around the saved textarea selection. The MDEditor `onChange` returns
-  // the full text, so we mutate that text and push it back through
-  // `update('content', ...)` — the cursor position is best-effort.
-  const insertAtCursor = (md: string) => {
-    const ta = document.querySelector<HTMLTextAreaElement>(
-      '.article-editor__md textarea',
-    )
-    if (!ta) {
-      update('content', form.content + md)
-      return
-    }
-    const start = ta.selectionStart ?? form.content.length
-    const end = ta.selectionEnd ?? form.content.length
-    const next = form.content.slice(0, start) + md + form.content.slice(end)
-    update('content', next)
-    // restore focus and place cursor after the inserted block
-    requestAnimationFrame(() => {
-      ta.focus()
-      const pos = start + md.length
-      ta.setSelectionRange(pos, pos)
-    })
-  }
 
   const handleImportDocx = async (file: File) => {
     setImportBusy(true)
@@ -342,14 +317,7 @@ export function ArticleEditor() {
                 onChange={(v) => update('content', v || '')}
                 height={500}
                 preview="edit"
-                components={{
-                  toolbar: () => (
-                    <MarkdownToolbar>
-                      <InsertImageButton onInsert={insertAtCursor} />
-                      <InsertTableButton onInsert={insertAtCursor} />
-                    </MarkdownToolbar>
-                  ),
-                }}
+                extraCommands={[imageCommand, tableCommand, csvCommand]}
               />
             </div>
           ) : (
