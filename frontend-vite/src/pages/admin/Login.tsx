@@ -32,6 +32,7 @@ export function Login() {
     <div className="admin-login">
       <div className="admin-login__card">
         <div className="admin-login__brand">
+          <span className="admin-login__mark" aria-hidden />
           <h1>湖北数创 CMS</h1>
           <p>管理员登录</p>
         </div>

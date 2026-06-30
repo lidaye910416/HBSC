@@ -18,6 +18,19 @@
 .admin-login__brand {
   text-align: center;
   margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-login__brand .admin-login__mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--brand-gold);
+  display: inline-block;
+  box-shadow: 0 2px 8px rgba(201, 168, 76, 0.35);
 }
 
 .admin-login__brand h1 {
@@ -27,7 +40,7 @@
 }
 
 .admin-login__brand p {
-  margin: 8px 0 0;
+  margin: 0;
   color: var(--color-text-secondary);
   font-size: 0.875rem;
 }
@@ -59,7 +72,8 @@
 
 .admin-login__field input:focus {
   outline: none;
-  border-color: #2563eb;
+  border-color: var(--brand-gold);
+  box-shadow: var(--shadow-focus);
 }
 
 .admin-login__error {
@@ -69,22 +83,30 @@
 }
 
 .admin-login__submit {
-  background: #2563eb;
-  color: #ffffff;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 1rem;
+  width: 100%;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 0.9375rem;
   font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--brand-gold);
+  background: var(--brand-gold);
+  color: var(--brand-ink);
   cursor: pointer;
-  margin-top: 8px;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.admin-login__submit:hover {
-  background: #1d4ed8;
+.admin-login__submit:hover:not(:disabled) {
+  background: #B89740;
+  border-color: #B89740;
+}
+
+.admin-login__submit:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .admin-login__submit:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
 }
