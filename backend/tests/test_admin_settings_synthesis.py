@@ -87,6 +87,50 @@ def test_list_synthesizes_defaults_when_db_empty(client):
     assert sysprompt["value"].startswith("你是一名中文科技期刊")
 
 
+def test_list_synthesizes_page_agent_defaults_when_db_empty(client):
+    c, headers, _ = client
+    r = c.get("/api/admin/settings", headers=headers)
+    assert r.status_code == 200
+    items = r.json()["items"]
+    keys = {it["key"] for it in items}
+    assert {
+        "page_agent.enabled",
+        "page_agent.model",
+        "page_agent.base_url",
+        "page_agent.api_key",
+        "page_agent.system_prompt",
+    } <= keys
+
+    by_key = {it["key"]: it for it in items}
+
+    # page_agent defaults to deepseek-v4-flash on api.deepseek.com
+    assert by_key["page_agent.model"]["value"] == "deepseek-v4-flash"
+    assert by_key["page_agent.model"]["default_value"] == "deepseek-v4-flash"
+    assert by_key["page_agent.base_url"]["value"] == "https://api.deepseek.com/v1"
+    assert by_key["page_agent.enabled"]["value"] == "true"
+
+    # api_key is secret — never auto-filled
+    api_key = by_key["page_agent.api_key"]
+    assert api_key["is_secret"] is True
+    assert api_key["value"] is None
+    assert api_key["default_value"] is None
+
+    # system_prompt has its own default (public concierge, not admin-tool flavor)
+    assert "湖北数创" in by_key["page_agent.system_prompt"]["value"]
+
+
+def test_list_article_typesetter_defaults_unchanged(client):
+    """Regression guard: the article_typesetter namespace must NOT have been
+    altered by the page-agent refactor (model still MiniMax-M3, base_url still
+    api.minimax.chat)."""
+    c, headers, _ = client
+    r = c.get("/api/admin/settings", headers=headers)
+    items = r.json()["items"]
+    by_key = {it["key"]: it for it in items}
+    assert by_key["article_typesetter.model"]["value"] == "MiniMax-M3"
+    assert by_key["article_typesetter.base_url"]["value"] == "https://api.minimax.chat/v1"
+
+
 def test_list_returns_db_value_when_present(client):
     c, headers, Session = client
     s = Session()

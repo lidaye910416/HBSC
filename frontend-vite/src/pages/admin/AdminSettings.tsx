@@ -34,18 +34,18 @@ interface SettingSection {
 }
 
 const PAGE_AGENT_SECTION: SettingSection = {
-  title: 'page-agent — 自然语言操作 admin',
+  title: 'page-agent — 自然语言操作 admin + 首页 FAB',
   icon: <Zap size={16} />,
   blurb:
-    '基于自然语言操作 admin 页面的代理。启用后，admin 路由右下角会出现代理输入框。关闭后下次进入 admin 页面即消失（刷新当前页可立即生效）。',
+    '基于自然语言操作 admin 页面的代理，并驱动首页右下角的访客 FAB。启用后，admin 路由和公网首页都会出现代理输入框。关闭后两个入口同时消失（刷新当前页可立即生效）。',
   defaults: {
-    model: 'MiniMax-M3',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'deepseek-v4-flash',
+    baseUrl: 'https://api.deepseek.com/v1',
   },
   rows: [
     { key: 'page_agent.enabled',       label: '启用',                   kind: 'bool' },
     { key: 'page_agent.model',         label: '模型',                   kind: 'string' },
-    { key: 'page_agent.base_url',      label: 'API Base URL',           kind: 'string' },
+    { key: 'page_agent.base_url',      label: 'API Base URL',           kind: 'string', hint: 'deepseek token plan key 通常用于 https://api.deepseek.com/v1' },
     { key: 'page_agent.api_key',       label: 'API Key',                kind: 'secret' },
     { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）',   kind: 'textarea' },
   ],

@@ -218,6 +218,24 @@ export const api = {
     },
   },
 
+  public: {
+    /**
+     * Public page-agent proxy used by the home-page FAB. No admin auth.
+     * The same backend AdminSetting rows (`page_agent.*`) drive the
+     * enablement flag; flipping the admin toggle to true makes the FAB
+     * appear on the next visitor refetch.
+     */
+    agent: {
+      config: (): Promise<{ enabled: boolean; model: string; base_url: string }> =>
+        request('/api/public/agent/config'),
+      execute: (messages: Array<{ role: string; content: string }>) =>
+        request('/api/public/agent/execute', {
+          method: 'POST',
+          body: JSON.stringify({ messages }),
+        }),
+    },
+  },
+
   admin: {
     articles: {
       list: (params?: { status?: string; category?: string; q?: string; featured?: boolean; page?: number; per_page?: number }) => {

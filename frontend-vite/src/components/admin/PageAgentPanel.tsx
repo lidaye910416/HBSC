@@ -4,14 +4,6 @@ import { MessageSquare, X, Send, Loader2, Sparkles } from 'lucide-react'
 import { api } from '../../services/api'
 import './PageAgentPanel.css'
 
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  ts: number
-}
-
-const STORAGE_KEY = 'hbsc.page-agent.messages'
-
 /**
  * In-house admin chat panel.
  *
@@ -27,13 +19,56 @@ const STORAGE_KEY = 'hbsc.page-agent.messages'
  * impossible without forking. The cleanest path is therefore a thin
  * in-house chat UI that calls the same backend endpoint, and reserves
  * the page-agent v1.10 upgrade for when we adopt a tool-calling model.
+ *
+ * Public variant: see ./PublicPageAgentMount.tsx — same UI, different
+ * data source (`/api/public/agent/*` instead of `/api/admin/agent/*`).
  */
+
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  ts: number
+}
+
+interface AgentConfig {
+  enabled: boolean
+  model: string
+  base_url: string
+}
+
+interface AgentSource {
+  /** useQuery for the agent config — must NOT auto-fetch when auth is missing. */
+  useConfig: () => { data?: AgentConfig }
+  /** POST messages and return { content: string }. */
+  execute: (messages: Array<{ role: string; content: string }>) => Promise<{ content: string }>
+  /** Identifier used for sessionStorage key separation. */
+  storageId: string
+}
+
+const ADMIN_SOURCE: AgentSource = {
+  useConfig: () =>
+    useQuery({ queryKey: ['admin', 'agent', 'config'], queryFn: () => api.admin.agent.config(), staleTime: 60_000 }),
+  execute: (messages) => api.admin.agent.execute(messages) as Promise<{ content: string }>,
+  storageId: 'admin',
+}
+
+export const ADMIN_AGENT_STORAGE_KEY = 'hbsc.page-agent.messages.admin'
+
 export function PageAgentPanel() {
-  const configQ = useQuery({
-    queryKey: ['admin', 'agent', 'config'],
-    queryFn: () => api.admin.agent.config(),
-    staleTime: 60_000,
-  })
+  return <ChatPanel source={ADMIN_SOURCE} storageKey={ADMIN_AGENT_STORAGE_KEY} />
+}
+
+// ---------------------------------------------------------------------------
+// Shared render layer. Both admin and public mounts go through this so any
+// visual / behavioral change applies to both.
+// ---------------------------------------------------------------------------
+interface ChatPanelProps {
+  source: AgentSource
+  storageKey: string
+}
+
+export function ChatPanel({ source, storageKey }: ChatPanelProps) {
+  const configQ = source.useConfig()
 
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -42,10 +77,10 @@ export function PageAgentPanel() {
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  // Hydrate history from sessionStorage (admin-only, ephemeral)
+  // Hydrate history from sessionStorage (ephemeral)
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY)
+      const raw = sessionStorage.getItem(storageKey)
       if (raw) {
         const parsed = JSON.parse(raw) as ChatMessage[]
         if (Array.isArray(parsed)) setMessages(parsed)
@@ -53,18 +88,18 @@ export function PageAgentPanel() {
     } catch {
       // ignore corrupt storage
     }
-  }, [])
+  }, [storageKey])
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+      sessionStorage.setItem(storageKey, JSON.stringify(messages))
     } catch {
       // ignore quota
     }
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, storageKey])
 
   if (!configQ.data?.enabled) return null
 
@@ -83,7 +118,7 @@ export function PageAgentPanel() {
       const apiMessages = next
         .filter((m) => m.role !== 'system')
         .map((m) => ({ role: m.role, content: m.content }))
-      const res = await api.admin.agent.execute(apiMessages) as { content: string }
+      const res = await source.execute(apiMessages)
       setMessages((m) => [
         ...m,
         { role: 'assistant', content: res.content, ts: Date.now() },

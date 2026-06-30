@@ -101,8 +101,8 @@ async def execute_llm(
 _TESTABLE_API_KEYS: dict[str, tuple[str, str]] = {
     # setting key → (default_base_url, default_model)
     "page_agent.api_key": (
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "MiniMax-M3",
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
     ),
     "article_typesetter.api_key": (
         "https://api.minimax.chat/v1",

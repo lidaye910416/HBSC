@@ -11,6 +11,7 @@ import { About } from './pages/About'
 import { SearchPage } from './pages/Search'
 import { ProtectedRoute } from './components/admin/ProtectedRoute'
 import { AdminLayout } from './components/admin/AdminLayout'
+import { PublicPageAgentMount } from './components/admin/PublicPageAgentMount'
 import { Login } from './pages/admin/Login'
 import { Dashboard } from './pages/admin/Dashboard'
 import { ArticleList } from './pages/admin/ArticleList'
@@ -21,6 +22,7 @@ import { JournalDetail } from './pages/admin/JournalDetail'
 import { FeaturedArticles } from './pages/admin/FeaturedArticles'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
 import { AdminSettings } from './pages/admin/AdminSettings'
+import { AdminTypeset } from './pages/admin/AdminTypeset'
 import NotFound from './pages/NotFound'
 import { ToastProvider } from './components/admin/Toast'
 import './styles/global.css'
@@ -55,6 +57,10 @@ function Layout({ children }: { children: React.ReactNode }) {
         <div style={{ flex: 1 }}>{children}</div>
         <Footer />
       </div>
+      {/* Public page-agent FAB — sits above the background and footer, scrolls
+          with the public Layout but only renders when `page_agent.enabled`
+          AND a non-empty api_key are configured in the admin settings. */}
+      <PublicPageAgentMount />
     </>
   )
 }
@@ -101,6 +107,7 @@ export default function App() {
             <Route path="journals/:id" element={<JournalDetail />} />
             <Route path="journals/:id/edit" element={<JournalEditor />} />
             <Route path="media" element={<MediaLibrary />} />
+            <Route path="typeset" element={<AdminTypeset />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>

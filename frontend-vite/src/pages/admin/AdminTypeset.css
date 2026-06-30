@@ -1,0 +1,101 @@
+/* AdminTypeset — independent markdown typesetter page */
+
+.admin-typeset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+  max-width: 1280px;
+}
+
+.admin-typeset__notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #6b6b7a;
+}
+
+.admin-typeset__notice-link {
+  margin-left: auto;
+  color: #C9A84C;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.admin-typeset__notice-link:hover { text-decoration: underline; }
+
+.admin-typeset__error {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.admin-typeset__editor {
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-typeset__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e8e8e0;
+  background: #FAFAF7;
+}
+
+.admin-typeset__toolbar-label {
+  font-size: 0.8125rem;
+  color: #6b6b7a;
+  font-weight: 500;
+}
+
+.admin-typeset__count {
+  font-size: 0.75rem;
+  color: #6b6b7a;
+  font-variant-numeric: tabular-nums;
+}
+.admin-typeset__count--warn {
+  color: #b45309;
+  font-weight: 500;
+}
+
+.admin-typeset__hints {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #6b6b7a;
+  padding: 4px 4px 0;
+}
+
+.admin-typeset__hints code {
+  background: #F5F0E8;
+  color: #1A1A2E;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.admin-typeset__float-actions {
+  position: sticky;
+  bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none; /* let clicks fall through to the page underneath; the inner button re-enables */
+}
+
+.admin-typeset__float-actions > * {
+  pointer-events: auto;
+}
+
+/* On smaller viewports, compress the editor and stack hints. */
+@media (max-width: 720px) {
+  .admin-typeset__toolbar {
+    padding: 8px 12px;
+  }
+}

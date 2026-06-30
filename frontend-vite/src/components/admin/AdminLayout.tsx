@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useMatch } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, BookOpen, Image as ImageIcon,
-  ExternalLink, Settings as SettingsIcon, Star, Search, Bell, LogOut,
+  ExternalLink, Settings as SettingsIcon, Star, Search, Bell, LogOut, Sparkles,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { PageAgentMount } from './PageAgentMount'
@@ -24,6 +24,7 @@ const NAV: NavItem[] = [
   { to: '/admin/articles/featured', end: true, label: '精选管理', icon: <Star size={18} /> },
   { to: '/admin/journals', label: '期刊', icon: <BookOpen size={18} /> },
   { to: '/admin/media', label: '媒体库', icon: <ImageIcon size={18} /> },
+  { to: '/admin/typeset', label: 'AI 排版', icon: <Sparkles size={18} /> },
   { to: '/admin/settings', label: '设置', icon: <SettingsIcon size={18} /> },
 ]
 
@@ -51,6 +52,8 @@ function useBreadcrumbFromPath(): BreadcrumbItem[] {
     items.push({ label: '期刊' })
   } else if (match?.pathname.includes('/media')) {
     items.push({ label: '媒体库' })
+  } else if (match?.pathname.includes('/typeset')) {
+    items.push({ label: 'AI 排版' })
   } else if (match?.pathname.includes('/settings')) {
     items.push({ label: '设置' })
   }

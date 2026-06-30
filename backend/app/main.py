@@ -16,6 +16,7 @@ from .routers import (
     admin_router,
     settings_router,
     agent_router,
+    public_agent_router,
     admin_articles_import_router,
     admin_articles_typeset_router,
 )
@@ -107,6 +108,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(settings_router)
 app.include_router(agent_router)
+app.include_router(public_agent_router)
 app.include_router(admin_articles_import_router)
 app.include_router(admin_articles_typeset_router)
 

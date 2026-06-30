@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     UPLOAD_MAX_SIZE_MB: int = 5
     UPLOAD_ALLOWED_MIMES: str = "image/png,image/jpeg,image/webp,image/gif"
 
+    # 加密 AdminSetting 行用的 Fernet key。生产环境必须设置；dev 未设置时
+    # _load_or_generate_key 会生成一次性 key 并发出警告（这些加密过的行将不会
+    # 跨进程存活 — 适合本机开发；切勿用于生产）。
+    ADMIN_SETTINGS_SECRET: Optional[str] = None
+
     # AI 图像生成（minimax 平台；空 token 时使用占位图）
     MINIMAX_TOKEN: Optional[str] = None
     MINIMAX_API_URL: str = "https://api.minimax.chat/v1/image/generation"

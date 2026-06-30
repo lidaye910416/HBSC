@@ -12,13 +12,29 @@ class InvalidEncryptedValue(Exception):
 
 def _load_or_generate_key() -> bytes:
     """Read ADMIN_SETTINGS_SECRET (44-char url-safe base64) from env.
-    Dev: generate an ephemeral key and print a warning.
-    Prod: raise.
+
+    Priority:
+      1. ``os.environ['ADMIN_SETTINGS_SECRET']`` — typical when the shell or
+         a parent process already exported it.
+      2. ``settings.ADMIN_SETTINGS_SECRET`` — picked up by pydantic-settings
+         from `.env`. This is the common dev path: the user puts the key in
+         `.env`, and crypto follows where pydantic-settings read from.
+      3. Production (``ENV=production``): no key → raise.
+      4. Dev fallback: ephemeral key — printed warning so it's obvious the
+         admin rows are about to be unreadable across restarts.
     """
-    key = os.getenv("ADMIN_SETTINGS_SECRET")
+    import os as _os
+
+    key = _os.getenv("ADMIN_SETTINGS_SECRET")
+    if not key:
+        # Pull from pydantic-settings (which reads .env). Import lazily so the
+        # circular-import order doesn't matter — config.py is already
+        # imported everywhere by the time crypto is used at request time.
+        from ..config import settings as _settings
+        key = getattr(_settings, "ADMIN_SETTINGS_SECRET", None)
     if key:
         return key.encode("utf-8")
-    if os.getenv("ENV") == "production":
+    if _os.getenv("ENV") == "production":
         raise RuntimeError(
             "ADMIN_SETTINGS_SECRET must be set in production "
             "(44-char url-safe base64 Fernet key)"
