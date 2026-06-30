@@ -481,3 +481,57 @@ def test_agent_llm_inner_body_too_large(client_factory):
     )
     assert r.status_code == 413
     assert r.json()["error"]["code"] == "payload_too_large"
+
+
+# =============================================================================
+# Plan Task 3: thread mode='dom' through /api/public/agent/execute
+# =============================================================================
+
+
+def test_execute_rejects_invalid_mode(client_factory):
+    """mode must be 'chat' or 'dom' (Literal type); anything else → pydantic 422.
+
+    Pydantic-driven 422 responses use the FastAPI default ``{"detail": [...]}``
+    envelope (NOT the project's ``{error: {code, message}}`` envelope, which is
+    only produced for explicit ``HTTPException`` raises). We only assert the
+    status code so this test is robust against future envelope changes.
+    """
+    client = client_factory(api_key="sk-real")
+    r = client.post(
+        "/api/public/agent/execute",
+        json={"mode": "hacker", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 422
+
+
+def test_execute_chat_mode_still_works(client_factory):
+    """Backward-compat: default mode is 'chat', old request shape still works."""
+    with patch(
+        "app.routers.public_agent_router.chat_complete",
+        new=AsyncMock(return_value="hello back"),
+    ):
+        client = client_factory(api_key="sk-real")
+        r = client.post(
+            "/api/public/agent/execute",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert r.status_code == 200
+    assert r.json() == {"content": "hello back"}
+
+
+def test_execute_dom_mode_rejects_missing_tools(client_factory):
+    """dom path through /execute must reject (use /llm instead).
+
+    Hits our explicit HTTPException(422) → project envelope, so we can
+    assert the semantic code:
+    """
+    client = client_factory(api_key="sk-real")
+    r = client.post(
+        "/api/public/agent/execute",
+        json={
+            "mode": "dom",
+            "messages": [{"role": "user", "content": "click submit"}],
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "tools_required_for_dom"

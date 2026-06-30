@@ -18,6 +18,7 @@ Security guards:
 from __future__ import annotations
 
 import logging
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -144,7 +145,8 @@ def get_public_agent_config(db: Session = Depends(get_db)):
 
 
 class ExecuteRequest(BaseModel):
-    messages: list[dict]
+    mode: Literal["chat", "dom"] = "chat"
+    messages: list[dict] = []
 
     @field_validator("messages")
     @classmethod
@@ -166,12 +168,18 @@ async def execute_public_llm(
     body: ExecuteRequest,
     db: Session = Depends(get_db),
 ):
-    """Anonymous visitor triggers a chat turn.
+    """Anonymous visitor triggers a chat turn (mode='chat' default).
+
+    When mode='dom' the client SHOULD bypass this endpoint and call
+    /api/public/agent/llm directly through the page-agent customFetch hook.
+    Accepting mode='dom' here is only kept for compatibility — it must
+    carry a non-empty tools array; otherwise 422.
 
     Errors:
         409 not_enabled           — admin disabled, or api_key still empty
         413 payload_too_large     — raw body > 1 MB
-        422 validation_error      — messages > 50 (Pydantic)
+        422 validation_error      — messages > 50 (Pydantic) / bad mode /
+                                    dom mode without tools (use /llm instead)
         429 rate_limited          — 11th call within 60s for the same IP
         502 upstream_llm_failed   — generic; never echoes headers/api_key
     """
@@ -180,12 +188,27 @@ async def execute_public_llm(
     if len(raw) > MAX_PUBLIC_AGENT_BYTES:
         _send("payload_too_large", "请求体超过 1MB 限制", 413)
 
-    cfg = _resolve_config(db)
-    if not cfg["enabled_toggle"]:
-        _send("not_enabled", "page-agent 未启用", 409)
-    if not cfg["api_key"]:
-        # Distinct error code so admin can tell "needs enable" from "needs key"
-        _send("no_api_key", "未配置 page_agent.api_key", 409)
+    if body.mode == "dom":
+        # Defensive: refuse dom without tools schema even via this route.
+        # The dom path lives at /api/public/agent/llm, so any dom call here
+        # is a malformed client; respond with a clear 422.
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "tools_required_for_dom",
+                    "message": "dom 模式必须通过 /api/public/agent/llm 调用并提供 tools schema"},
+        )
+
+    # Shared gate-check via the helper module (Important #4 fix from Task 2 review).
+    rows = {
+        "page_agent.enabled":  _get_or_default(db, "page_agent.enabled") or "",
+        "page_agent.api_key":  _get_setting(db, "page_agent.api_key") or "",
+        "page_agent.base_url": _get_or_default(db, "page_agent.base_url") or "",
+        "page_agent.model":    _get_or_default(db, "page_agent.model") or "",
+    }
+    try:
+        cfg = load_chat_config(rows, mode="chat")
+    except PageAgentConfigError as e:
+        _send(e.code, str(e), 409)
 
     system_prompt = _get_or_default(db, "page_agent.system_prompt")
     messages: list[dict] = list(body.messages)
@@ -194,9 +217,9 @@ async def execute_public_llm(
 
     try:
         content = await chat_complete(
-            base_url=str(cfg["base_url"]),
-            api_key=cfg["api_key"],  # type: ignore[arg-type]
-            model=str(cfg["model"]),
+            base_url=cfg.base_url,
+            api_key=cfg.api_key,
+            model=cfg.model,
             messages=messages,
         )
     except LLMUnavailable as e:
