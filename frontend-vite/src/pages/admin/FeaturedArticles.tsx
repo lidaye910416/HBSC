@@ -3,7 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Star, ArrowLeft, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../services/api'
-import './ArticleList.css'
+import { useToast } from '../../components/admin/Toast'
+import {
+  PageHeader, Card, CardHeader, CardTitle, Button, IconButton, Empty,
+} from '../../components/ui'
 
 /**
  * Bulk featured-article management.
@@ -22,6 +25,7 @@ import './ArticleList.css'
 export function FeaturedArticles() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const toast = useToast()
 
   const { data: featured, isLoading: featLoading } = useQuery({
     queryKey: ['admin', 'articles', { featured: true, per_page: 50 }],
@@ -51,7 +55,7 @@ export function FeaturedArticles() {
       if (ctx?.previous) {
         ctx.previous.forEach(([key, value]) => qc.setQueryData(key, value))
       }
-      alert(`切换精选失败: ${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`切换精选失败: ${err instanceof Error ? err.message : String(err)}`)
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
@@ -64,73 +68,78 @@ export function FeaturedArticles() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <button
-          type="button"
-          className="article-list__action"
-          onClick={() => navigate('/admin/articles')}
-        >
-          <ArrowLeft size={14} /> 返回列表
-        </button>
-        <h2 style={{ margin: 0 }}>精选文章管理</h2>
-        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
-          公开站首页「精选文章」区域从下方列表中按发布时间倒序展示前 3 篇。
-        </span>
-      </div>
+      <PageHeader
+        title="精选文章管理"
+        description="公开站首页「精选文章」区域从下方列表中按发布时间倒序展示前 3 篇。"
+        breadcrumb={[
+          { label: '文章', to: '/admin/articles' },
+          { label: '精选管理' },
+        ]}
+        actions={
+          <Button
+            variant="secondary"
+            icon={<ArrowLeft size={16} />}
+            onClick={() => navigate('/admin/articles')}
+          >
+            返回列表
+          </Button>
+        }
+      />
 
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
-        gap: '16px',
+        gap: 'var(--space-5)',
       }}>
         {/* LEFT: currently featured */}
-        <section className="article-list">
-          <div className="article-list__toolbar" style={{ borderBottom: 'none' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A1A2E' }}>
-              <Star size={16} fill="#C9A84C" color="#C9A84C" style={{ verticalAlign: 'middle', marginRight: '4px' }} />
-              精选中 <span style={{ color: 'var(--color-text-secondary)', fontWeight: 400 }}>（{featuredItems.length}）</span>
-            </h3>
-          </div>
+        <Card padding="none">
+          <CardHeader>
+            <CardTitle>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <Star size={16} fill="var(--brand-gold)" stroke="var(--brand-gold)" />
+                精选中
+                <span style={{ color: 'var(--admin-text-2)', fontWeight: 400 }}>（{featuredItems.length}）</span>
+              </span>
+            </CardTitle>
+          </CardHeader>
           {featLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>加载中…</div>
+            <p style={{ padding: 'var(--space-5)', textAlign: 'center', color: 'var(--admin-text-2)' }}>加载中…</p>
           ) : featuredItems.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-              尚未设置精选文章。从右侧选择。
-            </div>
+            <Empty title="尚未设置精选文章" description="从右侧候选中选择。" />
           ) : (
-            <table>
+            <table className="admin-table">
               <thead>
                 <tr>
-                  <th style={{ width: '40px' }}>#</th>
+                  <th style={{ width: 48 }}>#</th>
                   <th>标题</th>
-                  <th style={{ width: '100px' }}>操作</th>
+                  <th style={{ width: 100 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
                 {featuredItems.map((a, i) => (
                   <tr key={a.id}>
-                    <td style={{ color: 'var(--color-text-secondary)' }}>{i + 1}</td>
+                    <td style={{ color: 'var(--admin-text-2)' }}>{i + 1}</td>
                     <td>
                       <div style={{ fontWeight: 500 }}>{a.title}</div>
-                      <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>/{a.slug}</div>
+                      <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{a.slug}</div>
                     </td>
                     <td>
-                      <div className="article-list__actions">
-                        <button
-                          className="article-list__action"
-                          title="编辑文章"
+                      <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                        <IconButton
+                          label="编辑文章"
+                          variant="ghost"
+                          size="sm"
+                          icon={<ExternalLink size={14} />}
                           onClick={() => navigate(`/admin/articles/${a.id}`)}
-                        >
-                          <ExternalLink size={12} />
-                        </button>
-                        <button
-                          className="article-list__action article-list__action--danger"
-                          title="取消精选"
+                        />
+                        <IconButton
+                          label="取消精选"
+                          variant="danger"
+                          size="sm"
+                          icon={<Star size={14} fill="currentColor" />}
                           onClick={() => toggleMut.mutate(a.id)}
                           disabled={toggleMut.isPending}
-                        >
-                          <Star size={12} fill="currentColor" />
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>
@@ -138,29 +147,30 @@ export function FeaturedArticles() {
               </tbody>
             </table>
           )}
-        </section>
+        </Card>
 
         {/* RIGHT: candidates */}
-        <section className="article-list">
-          <div className="article-list__toolbar" style={{ borderBottom: 'none' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', color: '#1A1A2E' }}>
-              <Star size={16} color="var(--color-text-muted)" style={{ verticalAlign: 'middle', marginRight: '4px' }} />
-              候选文章 <span style={{ color: 'var(--color-text-secondary)', fontWeight: 400 }}>（已发布 · {otherItems.length}）</span>
-            </h3>
-          </div>
+        <Card padding="none">
+          <CardHeader>
+            <CardTitle>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <Star size={16} stroke="var(--admin-text-muted)" />
+                候选文章
+                <span style={{ color: 'var(--admin-text-2)', fontWeight: 400 }}>（已发布 · {otherItems.length}）</span>
+              </span>
+            </CardTitle>
+          </CardHeader>
           {othersLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>加载中…</div>
+            <p style={{ padding: 'var(--space-5)', textAlign: 'center', color: 'var(--admin-text-2)' }}>加载中…</p>
           ) : otherItems.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-              暂无可精选的文章。请先发布更多文章。
-            </div>
+            <Empty title="暂无可精选的文章" description="请先发布更多文章。" />
           ) : (
-            <table>
+            <table className="admin-table">
               <thead>
                 <tr>
                   <th>标题</th>
                   <th>分类</th>
-                  <th style={{ width: '80px' }}>操作</th>
+                  <th style={{ width: 80 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,30 +178,29 @@ export function FeaturedArticles() {
                   <tr key={a.id}>
                     <td>
                       <div style={{ fontWeight: 500 }}>{a.title}</div>
-                      <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>/{a.slug}</div>
+                      <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{a.slug}</div>
                     </td>
-                    <td style={{ fontSize: '0.8125rem' }}>{a.category || '—'}</td>
+                    <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>{a.category || '—'}</td>
                     <td>
-                      <button
-                        className="article-list__action"
-                        title="加入精选"
+                      <IconButton
+                        label="加入精选"
+                        variant="ghost"
+                        size="sm"
+                        icon={<Star size={14} />}
                         onClick={() => toggleMut.mutate(a.id)}
                         disabled={toggleMut.isPending}
-                      >
-                        <Star size={12} />
-                      </button>
+                      />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-        </section>
+        </Card>
       </div>
 
-      <p style={{ marginTop: '24px', color: 'var(--color-text-secondary)', fontSize: '0.8125rem' }}>
-        <ArrowUp size={12} /> <ArrowDown size={12} />{' '}
-        说明：精选区域按「发布时间倒序」自动排序，无需手动拖拽。
+      <p style={{ marginTop: 'var(--space-5)', color: 'var(--admin-text-2)', fontSize: 'var(--type-xs)' }}>
+        <ArrowUp size={12} /> <ArrowDown size={12} /> 说明：精选区域按「发布时间倒序」自动排序，无需手动拖拽。
       </p>
     </div>
   )
