@@ -5,7 +5,6 @@ import {
   ExternalLink, Settings as SettingsIcon, Star, Search, Bell, LogOut, Sparkles,
 } from 'lucide-react'
 import { api } from '../../services/api'
-import { PageAgentMount } from './PageAgentMount'
 import { pageEnterAnimation, sidebarAnimations } from './animations'
 import { IconButton } from '../ui/IconButton'
 import { Breadcrumb, type BreadcrumbItem } from '../ui'
@@ -82,7 +81,6 @@ export function AdminLayout() {
 
   return (
     <div className="admin-layout">
-      <PageAgentMount />
       <aside className="admin-sidebar" ref={sidebarRef}>
         <div className="admin-sidebar__sticky">
           <div className="admin-sidebar__brand">
