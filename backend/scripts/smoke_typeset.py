@@ -120,7 +120,7 @@ def _run_mocked() -> int:
             seed_rows = [
                 ("article_typesetter.enabled",       "true",                                False),
                 ("article_typesetter.model",         "MiniMax-M3",                          False),
-                ("article_typesetter.base_url",      "https://api.minimax.chat/v1",         False),
+                ("article_typesetter.base_url",      "https://api.minimaxi.com/v1",        False),
                 ("article_typesetter.api_key",       "smoke-fake-key-DEADBEEF",             True),
                 ("article_typesetter.system_prompt", "你只清洗 Markdown，不要润色。",        False),
             ]
@@ -139,7 +139,7 @@ def _run_mocked() -> int:
             items = {it["key"]: it for it in r.json()["items"]}
             assert items["article_typesetter.enabled"]["value"] == "true"
             assert items["article_typesetter.model"]["value"] == "MiniMax-M3"
-            assert items["article_typesetter.base_url"]["value"] == "https://api.minimax.chat/v1"
+            assert items["article_typesetter.base_url"]["value"] == "https://api.minimaxi.com/v1"
             assert items["article_typesetter.api_key"]["is_secret"] is True
             assert items["article_typesetter.api_key"]["value"] is None
             assert items["article_typesetter.api_key"]["masked"] == "smok***"
@@ -172,7 +172,7 @@ def _run_mocked() -> int:
 
             assert patched.call_count == 1
             call = patched.call_args.kwargs
-            assert call["base_url"] == "https://api.minimax.chat/v1"
+            assert call["base_url"] == "https://api.minimaxi.com/v1"
             assert call["api_key"] == "smoke-fake-key-DEADBEEF"
             assert call["model"] == "MiniMax-M3"
             assert len(call["messages"]) == 2
@@ -286,7 +286,7 @@ def _run_real() -> int:
         for key, value, _sec in [
             ("article_typesetter.enabled",  "true",                            False),
             ("article_typesetter.model",    "MiniMax-M3",                      False),
-            ("article_typesetter.base_url", "https://api.minimax.chat/v1",     False),
+            ("article_typesetter.base_url", "https://api.minimaxi.com/v1",    False),
             ("article_typesetter.api_key",  api_key,                           True),
         ]:
             r = c.put(

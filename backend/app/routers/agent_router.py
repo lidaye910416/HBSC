@@ -105,7 +105,7 @@ _TESTABLE_API_KEYS: dict[str, tuple[str, str]] = {
         "deepseek-v4-flash",
     ),
     "article_typesetter.api_key": (
-        "https://api.minimax.chat/v1",
+        "https://api.minimaxi.com/v1",
         "MiniMax-M3",
     ),
 }

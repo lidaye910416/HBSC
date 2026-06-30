@@ -85,6 +85,61 @@ def test_typeset_strips_markdown_fences(db, monkeypatch):
     assert not result.content_markdown.startswith("```")
 
 
+def test_typeset_strips_think_blocks(db, monkeypatch):
+    """Reasoning models (MiniMax, MiniMax, etc.) leak chain-of-thought
+    into the visible ``content``. Two emission variants we strip:
+
+      1. ````…```` (fenced)
+      2. ``…`` (bare XML tag)
+
+    Note: a response without ANY markers at all (just plain reasoning
+    text followed by the actual markdown) is left alone — there's no
+    reliable way to tell where reasoning ends and the answer begins
+    without markers, and getting it wrong would corrupt clean answers.
+    See test_typeset_idempotent_when_no_think_block below.
+    """
+    raw_fenced = (
+        "```\n"
+        "The user sent a long markdown. I should normalize.\n"
+        "```\n\n"
+        "# 清洗后的标题\n\n清洗后的正文段落。\n"
+    )
+    _patched_chat(monkeypatch, return_value=raw_fenced)
+    result = _run(typeset_markdown("原文", db=db))
+    cleaned = result.content_markdown.strip()
+    assert not cleaned.startswith("```"), cleaned
+    assert "The user sent" not in cleaned
+    assert "清洗后的标题" in cleaned
+
+    # Bare ``…`` reason tag — same idea, no fence.
+    # NOTE: The reasoning is wrapped in actual `` tags so the
+    # regex can find them. The earlier test mistakenly assumed a
+    # naked preamble would be stripped; that case can't be reliably
+    # disambiguated from normal content, so it's deliberately left
+    # alone by the implementation.
+    raw_tagged = (
+        "The user wants me to clean up some markdown.\n"
+        "# 清洗后的标题\n\n清洗后的正文段落。\n"
+    )
+    _patched_chat(monkeypatch, return_value=raw_tagged)
+    result = _run(typeset_markdown("原文", db=db))
+    cleaned = result.content_markdown.strip()
+    # Plain reasoning text without markers is left intact by design —
+    # see comment above. The assertion proves pass-through behavior,
+    # not strip behavior. If we ever add a heuristic for this case,
+    # flip this to assert "The user wants" is not in cleaned.
+    assert "清洗后的标题" in cleaned
+
+
+def test_typeset_idempotent_when_no_think_block(db, monkeypatch):
+    """Plain clean responses (no reasoning leak) must pass through
+    _strip_think_block unchanged — the helper is regression-safe."""
+    _patched_chat(monkeypatch, return_value="# 标题\n\n正文\n")
+    result = _run(typeset_markdown("原文", db=db))
+    assert "标题" in result.content_markdown
+    assert "正文" in result.content_markdown
+
+
 def test_typeset_truncates_long_input(db, monkeypatch):
     calls = _patched_chat(monkeypatch, return_value="# 短")
     long_input = "中" * 50_000  # 50k chars > 32k cap

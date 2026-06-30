@@ -59,7 +59,7 @@ def _seed(Session, **overrides):
         "article_typesetter.enabled": ("true", False),
         "article_typesetter.api_key": ("sk-abc-1234567890", True),
         "article_typesetter.model": ("MiniMax-M3", False),
-        "article_typesetter.base_url": ("https://api.minimax.chat/v1", False),
+        "article_typesetter.base_url": ("https://api.minimaxi.com/v1", False),
         "article_typesetter.system_prompt": ("system", False),
     }
     rows.update({k: v for k, v in overrides.items() if k in rows})

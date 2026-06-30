@@ -107,6 +107,36 @@ def _strip_fences(text: str) -> str:
     return s.strip()
 
 
+def _strip_think_block(text: str) -> str:
+    """Strip MiniMax/MiniMax-style reasoning tags when they're leaked into
+    the assistant's visible content.
+
+    Two variants are emitted by these reasoning models on the same
+    OpenAI-compatible surface:
+      1. ````…````  (a fenced-thinking block)
+      2. ``…``  (a bare tag, not fenced)
+
+    Both belong to the same family of "chain-of-thought leakage". The
+    system prompt we send already forbids any preamble or annotation, so
+    these blocks are noise from the admin's perspective. Strip them.
+    """
+    import re
+    if not text:
+        return text
+    # Variant 1: ```thinking / ``` block at the start, optional fence
+    text = re.sub(r"^\s*```(?:thinking|think)?\n.*?\n```\s*\n?", "", text, count=1, flags=re.DOTALL)
+    # Variant 2: bare  reasoning tag at the start (closing tag may or
+    # may not appear depending on truncation). Match opening tag greedily
+    # up to first matching close OR a long stretch that looks like content.
+    text = re.sub(
+        r"^\s*<(?:think|thinking|reasoning|reason)>[\s\S]*?(?:</(?:think|thinking|reasoning|reason)>|$)",
+        "",
+        text,
+        count=1,
+    )
+    return text.lstrip()
+
+
 def _resolve_config(db: Session) -> tuple[str, str, str, str]:
     """Return (api_key, model, base_url, system_prompt). Raises TypesetError on missing required keys."""
     # enabled: default is "true" (article_typesetter is on by default in this
@@ -147,9 +177,14 @@ async def typeset_markdown(content: str, *, db: Session) -> TypesetResult:
         api_key=api_key,
         model=model,
         messages=messages,
+        # Reason: MiniMax's reasoning models leak ```` and ``
+        # tags into the visible content, and their first-token latency
+        # can run to 60+ seconds on long inputs. 90s gives a comfortable
+        # margin while still failing fast enough for the admin UX.
+        timeout=90.0,
     )
 
-    cleaned = _strip_fences(raw or "")
+    cleaned = _strip_fences(_strip_think_block(raw or ""))
     if not cleaned:
         warnings.append("模型返回为空，请重试或更换模型")
 

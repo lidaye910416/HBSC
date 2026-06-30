@@ -18,10 +18,10 @@ share state, never share keys.
 from __future__ import annotations
 
 
-# ---- AI 排版 (article_typesetter) — minimax token plan preset -------------
+# ---- AI 排版 (article_typesetter) — MiniMax Token Plan preset -------------
 DEFAULT_TYPESETTER_ENABLED = "true"
 DEFAULT_TYPESETTER_MODEL = "MiniMax-M3"
-DEFAULT_TYPESETTER_BASE_URL = "https://api.minimax.chat/v1"
+DEFAULT_TYPESETTER_BASE_URL = "https://api.minimaxi.com/v1"
 
 
 DEFAULT_SYSTEM_PROMPT = """你是一名中文科技期刊的资深排版编辑，专精于把 pandoc 从 Word 导出的 Markdown 清洗为可直接发布的稿件。

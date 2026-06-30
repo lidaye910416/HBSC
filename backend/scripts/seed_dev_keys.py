@@ -74,7 +74,7 @@ USER_PROVIDED_DEEPSEEK_KEY = os.environ.get(
 )
 USER_PROVIDED_MINIMAX_KEY = os.environ.get(
     "HUBEI_MINIMAX_KEY",
-    "sk-cp-tV4TuUIpZt64tdZO3kjFDIydJtrgaSDPDAXNo8zYk8CTHD39wz7vg1JN7_Dqd8LpevwJoZozDcpRo1REhX3PaCak4A8M-Rl8MXAEMvGbMoNOSi73B27yoM",
+    "sk-cp-tV4TuUIpZt64tdZO3kjFDIydJtrgaSDPDAXNo8zYk8CTHD39wz7vg1JN7_Dqd8LpevwJo-ZozDcpRo1REhX3PaCak4A8M-Rl8MXAEMvGbMoNOSi73B27yoM",
 )
 
 # Rows to upsert. Each tuple: (key, value, is_secret, should_overwrite_when_force).
@@ -88,7 +88,7 @@ SEED_ROWS: list[tuple[str, str, bool]] = [
 
     ("article_typesetter.enabled",  "true",                            False),
     ("article_typesetter.model",    "MiniMax-M3",                      False),
-    ("article_typesetter.base_url", "https://api.minimax.chat/v1",     False),
+    ("article_typesetter.base_url", "https://api.minimaxi.com/v1",     False),
     ("article_typesetter.api_key",  USER_PROVIDED_MINIMAX_KEY,         True),
 ]
 

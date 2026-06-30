@@ -55,16 +55,16 @@ const AI_TYPESETTER_SECTION: SettingSection = {
   title: 'AI 排版 — Word 导入后的 Markdown 清洗',
   icon: <Sparkles size={16} />,
   blurb:
-    '把 .docx 导入生成的 pandoc Markdown 调一次 LLM 进行格式清理（不动语义、不修改图片路径、不修改元数据）。通常只需要填入 API Key 即可启用，其余配置已按 minimax token plan 预设好。',
+    '把 .docx 导入生成的 pandoc Markdown 调一次 LLM 进行格式清理（不动语义、不修改图片路径、不修改元数据）。通常只需要填入 API Key 即可启用，其余配置已按 MiniMax Token Plan 预设好。',
   defaults: {
     model: 'MiniMax-M3',
-    baseUrl: 'https://api.minimax.chat/v1',
+    baseUrl: 'https://api.minimaxi.com/v1',
   },
   rows: [
     { key: 'article_typesetter.enabled',       label: '启用',           kind: 'bool' },
     { key: 'article_typesetter.model',         label: '模型',           kind: 'string' },
-    { key: 'article_typesetter.base_url',      label: 'API Base URL',   kind: 'string' },
-    { key: 'article_typesetter.api_key',       label: 'API Key',        kind: 'secret', hint: '获取方式：登录 minimax 控制台 → Token Plan → 复制 sk-cp-...' },
+    { key: 'article_typesetter.base_url',      label: 'API Base URL',   kind: 'string', hint: 'Token Plan key 用于 https://api.minimaxi.com/v1（OpenAI 兼容）' },
+    { key: 'article_typesetter.api_key',       label: 'API Key',        kind: 'secret', hint: '获取方式：登录 MiniMax 控制台 → Token Plan → 复制 sk-cp-...' },
     { key: 'article_typesetter.system_prompt', label: '系统 Prompt',     kind: 'textarea' },
   ],
 }

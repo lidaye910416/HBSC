@@ -68,7 +68,7 @@ def test_list_synthesizes_defaults_when_db_empty(client):
     assert model["updated_at"] is None  # synth = not yet saved
 
     base_url = by_key["article_typesetter.base_url"]
-    assert base_url["value"] == "https://api.minimax.chat/v1"
+    assert base_url["value"] == "https://api.minimaxi.com/v1"
 
     enabled = by_key["article_typesetter.enabled"]
     assert enabled["value"] == "true"
@@ -122,13 +122,13 @@ def test_list_synthesizes_page_agent_defaults_when_db_empty(client):
 def test_list_article_typesetter_defaults_unchanged(client):
     """Regression guard: the article_typesetter namespace must NOT have been
     altered by the page-agent refactor (model still MiniMax-M3, base_url still
-    api.minimax.chat)."""
+    api.minimaxi.com — MiniMax Token Plan OpenAI-compatible endpoint)."""
     c, headers, _ = client
     r = c.get("/api/admin/settings", headers=headers)
     items = r.json()["items"]
     by_key = {it["key"]: it for it in items}
     assert by_key["article_typesetter.model"]["value"] == "MiniMax-M3"
-    assert by_key["article_typesetter.base_url"]["value"] == "https://api.minimax.chat/v1"
+    assert by_key["article_typesetter.base_url"]["value"] == "https://api.minimaxi.com/v1"
 
 
 def test_list_returns_db_value_when_present(client):
