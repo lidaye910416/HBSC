@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
-import { Calendar, User as UserIcon } from 'lucide-react'
+import { Calendar, Sparkles, User as UserIcon } from 'lucide-react'
 import { api } from '../../services/api'
 import { ImageUploader } from '../../components/admin/ImageUploader'
 import { imageCommand } from '../../components/admin/Mde/insertImagePlugin'
 import { tableCommand, csvCommand } from '../../components/admin/Mde/insertTablePlugin'
 import { ArticleBody } from '../../components/ArticleBody'
 import { PageHeader, Button, Card } from '../../components/ui'
+import { TypesetPreviewDialog } from '../../components/admin/TypesetPreviewDialog'
+import { useToast } from '../../components/admin/Toast'
 import './ArticleList.css'
 
 interface FormState {
@@ -61,6 +63,34 @@ export function ArticleEditor() {
   const [importBusy, setImportBusy] = useState(false)
   const [importError, setImportError] = useState('')
   const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit')
+  const [typesetBusy, setTypesetBusy] = useState(false)
+  const [typesetError, setTypesetError] = useState('')
+  const [typesetDialog, setTypesetDialog] = useState<{
+    before: string; after: string; warnings: string[]; model: string; promptVersion: string
+  } | null>(null)
+  const toast = useToast()
+
+  // Read article_typesetter.* settings to decide whether the AI 排版 button
+  // is enabled. We don't need the key value — just whether it's configured.
+  const typesetterConfigQ = useQuery({
+    queryKey: ['admin', 'article-typesetter', 'config'],
+    queryFn: async () => {
+      const items = (await api.admin.settings.list()).items
+      const get = (k: string) => items.find((i) => i.key === k)
+      const enabled = get('article_typesetter.enabled')?.value === 'true'
+      const hasKey = !!get('article_typesetter.api_key')?.masked
+      return { enabled, hasKey }
+    },
+    staleTime: 30_000,
+  })
+  const typesetterReady = !!typesetterConfigQ.data?.enabled && !!typesetterConfigQ.data?.hasKey
+  const typesetterBlockedReason = typesetterConfigQ.isLoading
+    ? '正在检查 AI 排版配置…'
+    : !typesetterConfigQ.data?.enabled
+      ? '请先在 设置 → AI 排版 中启用'
+      : !typesetterConfigQ.data?.hasKey
+        ? '请先在 设置 → AI 排版 中配置 API Key'
+        : ''
 
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
@@ -82,6 +112,28 @@ export function ArticleEditor() {
       setImportError(e instanceof Error ? e.message : '导入失败')
     } finally {
       setImportBusy(false)
+    }
+  }
+
+  const handleTypeset = async () => {
+    setTypesetBusy(true)
+    setTypesetError('')
+    const before = form.content
+    try {
+      const res = await api.admin.articles.typeset(before)
+      setTypesetDialog({
+        before,
+        after: res.content_markdown,
+        warnings: res.warnings || [],
+        model: res.model,
+        promptVersion: res.prompt_version,
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'AI 排版失败'
+      setTypesetError(msg)
+      toast.error(msg)
+    } finally {
+      setTypesetBusy(false)
     }
   }
 
@@ -263,6 +315,28 @@ export function ArticleEditor() {
         </div>
 
         <div className="article-editor__field">
+          <label>AI 排版（用 LLM 清洗 Markdown；不动元数据）</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <Button
+              variant="secondary"
+              icon={<Sparkles size={14} />}
+              onClick={handleTypeset}
+              disabled={typesetBusy || !typesetterReady}
+              loading={typesetBusy}
+              title={typesetterReady ? '使用配置的 LLM 清洗当前正文' : typesetterBlockedReason}
+            >
+              AI 排版
+            </Button>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+              {typesetterReady
+                ? '点击后弹窗预览对照，不满意可取消'
+                : typesetterBlockedReason}
+            </span>
+          </div>
+          {typesetError && <div style={{ fontSize: '0.8125rem', color: '#d97706', marginTop: '4px' }}>{typesetError}</div>}
+        </div>
+
+        <div className="article-editor__field">
           <label>封面图</label>
           <ImageUploader value={form.cover_image} onChange={(url) => update('cover_image', url)} />
         </div>
@@ -437,6 +511,23 @@ export function ArticleEditor() {
           </div>
         </Card>
       </div>
+
+      {typesetDialog && (
+        <TypesetPreviewDialog
+          open={true}
+          onClose={() => setTypesetDialog(null)}
+          onApply={(cleaned) => {
+            update('content', cleaned)
+            setTypesetDialog(null)
+            toast.success('已应用 AI 排版')
+          }}
+          before={typesetDialog.before}
+          after={typesetDialog.after}
+          warnings={typesetDialog.warnings}
+          model={typesetDialog.model}
+          promptVersion={typesetDialog.promptVersion}
+        />
+      )}
     </div>
   )
 }

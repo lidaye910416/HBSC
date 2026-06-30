@@ -1,0 +1,85 @@
+/* TypesetPreviewDialog — preview modal for AI markdown cleanup */
+
+.typeset-dialog__warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+.typeset-dialog__warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, #C9A84C 12%, transparent);
+  border-left: 3px solid #C9A84C;
+  border-radius: var(--radius-1);
+  color: var(--admin-text, inherit);
+  font-size: var(--type-sm, 0.875rem);
+}
+
+.typeset-dialog__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--admin-border, #e5e5e5);
+  border-bottom: 1px solid var(--admin-border, #e5e5e5);
+  margin-bottom: var(--space-3);
+  font-size: var(--type-sm, 0.875rem);
+  color: var(--admin-text-muted, #666);
+}
+.typeset-dialog__stats strong {
+  color: var(--admin-text, inherit);
+  font-weight: 600;
+}
+.typeset-dialog__delta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--admin-text-muted, #888);
+}
+.typeset-dialog__meta {
+  margin-left: auto;
+  font-size: var(--type-xs, 0.75rem);
+  color: var(--admin-text-muted, #888);
+}
+
+.typeset-dialog__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.typeset-dialog__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.typeset-dialog__col-title {
+  font-size: var(--type-xs, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--admin-text-muted, #888);
+}
+
+.typeset-dialog__pre {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--admin-surface-2, #f7f7f7);
+  border: 1px solid var(--admin-border, #e5e5e5);
+  border-radius: var(--radius-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .typeset-dialog__cols { grid-template-columns: 1fr; }
+}

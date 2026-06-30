@@ -21,6 +21,12 @@ const KNOWN_KEYS = [
   { key: 'page_agent.base_url',    label: 'API Base URL',     kind: 'string' as const },
   { key: 'page_agent.api_key',     label: 'API Key',          kind: 'secret' as const },
   { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）', kind: 'string' as const },
+  // ----- article typesetter (AI 排版) -----
+  { key: 'article_typesetter.enabled',  label: '启用 AI 排版',         kind: 'bool'   as const },
+  { key: 'article_typesetter.model',       label: '模型 (AI 排版)',     kind: 'string' as const },
+  { key: 'article_typesetter.base_url',    label: 'API Base URL',        kind: 'string' as const },
+  { key: 'article_typesetter.api_key',     label: 'API Key (AI 排版)',   kind: 'secret' as const },
+  { key: 'article_typesetter.system_prompt', label: '系统 Prompt（可覆盖）', kind: 'string' as const },
 ]
 
 export function AdminSettings() {
@@ -75,7 +81,7 @@ export function AdminSettings() {
     <div className="admin-settings">
       <PageHeader
         title="设置"
-        description="page-agent 是基于自然语言操作 admin 页面的代理。仅在 admin 路由内启用。API Key 在服务端 Fernet 加密落库，不会发送到浏览器。"
+        description="page-agent 是基于自然语言操作 admin 页面的代理；AI 排版是上传 .docx 后可选的 LLM Markdown 清洗服务。两者独立配置。预设 base_url = https://api.minimax.chat/v1、model = MiniMax-M3。仅在 admin 路由内启用。API Key 在服务端 Fernet 加密落库，不会发送到浏览器。"
       />
 
       <div className="admin-settings__list">

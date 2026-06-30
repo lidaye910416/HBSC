@@ -271,6 +271,16 @@ export const api = {
           images: Array<{ url: string; filename: string; size: number; original_name: string }>
         }>
       },
+      typeset: (content_markdown: string): Promise<{
+        content_markdown: string
+        warnings: string[]
+        model: string
+        prompt_version: string
+      }> =>
+        request('/api/admin/articles/typeset', {
+          method: 'POST',
+          body: JSON.stringify({ content_markdown }),
+        }),
     },
     journals: {
       list: (params?: { q?: string; status?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<JournalAdmin>> => {
