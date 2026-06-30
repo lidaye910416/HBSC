@@ -698,3 +698,38 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
   color: var(--admin-text);
 }
 
+/* Stat */
+.ui-stat {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--radius-2);
+  padding: var(--space-5);
+}
+.ui-stat__label {
+  font-size: var(--type-sm);
+  color: var(--admin-text-2);
+  margin-bottom: var(--space-2);
+}
+.ui-stat__value {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--admin-text);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.ui-stat__trend {
+  margin-top: var(--space-2);
+  font-size: var(--type-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.ui-stat__trend--up   { color: #1B5E20; }
+.ui-stat__trend--down { color: var(--danger); }
+.ui-stat__trend--flat { color: var(--admin-text-muted); }
+.ui-stat__help {
+  margin-top: var(--space-2);
+  font-size: var(--type-xs);
+  color: var(--admin-text-muted);
+}
+
