@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
+import { Calendar, User as UserIcon } from 'lucide-react'
 import { api } from '../../services/api'
 import { ImageUploader } from '../../components/admin/ImageUploader'
 import { MarkdownToolbar } from '../../components/admin/MarkdownToolbar'
 import { InsertImageButton } from '../../components/admin/Mde/insertImagePlugin'
 import { InsertTableButton } from '../../components/admin/Mde/insertTablePlugin'
+import { ArticleBody } from '../../components/ArticleBody'
+import { PageHeader, Button, Card } from '../../components/ui'
 import './ArticleList.css'
 
 interface FormState {
@@ -58,6 +61,34 @@ export function ArticleEditor() {
   const [slugTouched, setSlugTouched] = useState(false)
   const [importBusy, setImportBusy] = useState(false)
   const [importError, setImportError] = useState('')
+  const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit')
+
+  const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
+    setForm((f) => ({ ...f, [k]: v }))
+
+  // Insert markdown at the current selection by splitting the content
+  // around the saved textarea selection. The MDEditor `onChange` returns
+  // the full text, so we mutate that text and push it back through
+  // `update('content', ...)` — the cursor position is best-effort.
+  const insertAtCursor = (md: string) => {
+    const ta = document.querySelector<HTMLTextAreaElement>(
+      '.article-editor__md textarea',
+    )
+    if (!ta) {
+      update('content', form.content + md)
+      return
+    }
+    const start = ta.selectionStart ?? form.content.length
+    const end = ta.selectionEnd ?? form.content.length
+    const next = form.content.slice(0, start) + md + form.content.slice(end)
+    update('content', next)
+    // restore focus and place cursor after the inserted block
+    requestAnimationFrame(() => {
+      ta.focus()
+      const pos = start + md.length
+      ta.setSelectionRange(pos, pos)
+    })
+  }
 
   const handleImportDocx = async (file: File) => {
     setImportBusy(true)
@@ -118,8 +149,27 @@ export function ArticleEditor() {
     }
   }, [existing])
 
-  const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm((f) => ({ ...f, [k]: v }))
+  // True when the in-memory form differs from the last persisted record
+  // (only meaningful for edits, not creates). Drives the "(尚未保存)" badge
+  // on the preview tab.
+  const isDirty = useMemo(() => {
+    if (!existing) return false
+    const existingTags = (existing.tags || []).join(', ')
+    return (
+      form.title !== existing.title ||
+      form.slug !== existing.slug ||
+      form.summary !== (existing.summary || '') ||
+      form.content !== (existing.content || '') ||
+      form.cover_image !== (existing.cover_image || '') ||
+      form.cover_image_alt !== (existing.cover_image_alt || '') ||
+      form.category !== (existing.category || '战略与政策') ||
+      form.author_name !== (existing.author_name || '') ||
+      form.reading_time !== existing.reading_time ||
+      form.featured !== existing.featured ||
+      form.status !== ((existing.status as 'draft' | 'published') || 'draft') ||
+      form.tags !== existingTags
+    )
+  }, [form, existing])
 
   const saveMut = useMutation({
     mutationFn: async (status: 'draft' | 'published') => {
@@ -155,7 +205,21 @@ export function ArticleEditor() {
 
   return (
     <div>
-      <h2>{isNew ? '新建文章' : `编辑：${existing?.title || ''}`}</h2>
+      <PageHeader
+        title={isNew ? '新建文章' : (existing?.title || '编辑文章')}
+        description={isNew ? '上传 .docx 或直接编辑 Markdown' : `编辑文章 · /${existing?.slug || ''}`}
+        breadcrumb={[
+          { label: '文章', to: '/admin/articles' },
+          { label: isNew ? '新建' : '编辑' },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => navigate('/admin/articles')}>取消</Button>
+            <Button variant="secondary" onClick={() => saveMut.mutate('draft')} loading={saveMut.isPending}>保存草稿</Button>
+            <Button onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>保存并发布</Button>
+          </>
+        }
+      />
       <div className="article-editor">
         {error && <div className="article-editor__error">{error}</div>}
 
@@ -241,27 +305,112 @@ export function ArticleEditor() {
 
         <div className="article-editor__field">
           <label>正文（Markdown）</label>
-          <div className="article-editor__md" data-color-mode="light">
-            <MDEditor
-              value={form.content}
-              onChange={(v) => update('content', v || '')}
-              height={500}
-              preview="live"
-              components={{
-                toolbar: (props: any) => (
-                  <>
-                    {props.children}
+
+          <div className="editor-tabs" role="tablist" aria-label="正文编辑 / 预览">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={previewMode === 'edit'}
+              className={`editor-tabs__btn${previewMode === 'edit' ? ' is-active' : ''}`}
+              onClick={() => setPreviewMode('edit')}
+            >
+              源
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={previewMode === 'preview'}
+              className={`editor-tabs__btn${previewMode === 'preview' ? ' is-active' : ''}`}
+              onClick={() => setPreviewMode('preview')}
+            >
+              预览（页面效果）
+            </button>
+            {previewMode === 'preview' && !isNew && isDirty && (
+              <span className="editor-tabs__badge" aria-label="尚未保存">
+                尚未保存
+              </span>
+            )}
+            <span className="editor-tabs__count" aria-label="字符数">
+              {form.content.length} 字符
+            </span>
+          </div>
+
+          {previewMode === 'edit' ? (
+            <div className="article-editor__md" data-color-mode="light">
+              <MDEditor
+                value={form.content}
+                onChange={(v) => update('content', v || '')}
+                height={500}
+                preview="edit"
+                components={{
+                  toolbar: () => (
                     <MarkdownToolbar>
-                      <InsertImageButton onInsert={(md) => update('content', (form.content || '') + md)} />
-                      <InsertTableButton onInsert={(md) => update('content', (form.content || '') + md)} />
+                      <InsertImageButton onInsert={insertAtCursor} />
+                      <InsertTableButton onInsert={insertAtCursor} />
                     </MarkdownToolbar>
-                  </>
-                ),
-              }}
-            />
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-              提示：点击预览中的图片/表格可 inline 编辑（图片可改 URL/alt；表格暂为只读）。
+                  ),
+                }}
+              />
             </div>
+          ) : (
+            <div className="article-editor__preview" data-color-mode="light">
+              <div className="editor-preview-hero">
+                {form.cover_image ? (
+                  <img
+                    src={form.cover_image}
+                    alt={form.cover_image_alt || form.title}
+                    className="cover"
+                  />
+                ) : (
+                  <div className="editor-preview-hero__cover-empty">
+                    尚未设置封面图
+                  </div>
+                )}
+                {form.category && (
+                  <span className="editor-preview-hero__eyebrow">{form.category}</span>
+                )}
+                <h3 className="editor-preview-hero__title">
+                  {form.title || '（未填写标题）'}
+                </h3>
+                {form.summary && (
+                  <p className="editor-preview-hero__summary">{form.summary}</p>
+                )}
+                <div className="editor-preview-hero__meta">
+                  {form.author_name && (
+                    <span>
+                      <UserIcon size={13} strokeWidth={1.5} /> {form.author_name}
+                    </span>
+                  )}
+                  <span>
+                    <Calendar size={13} strokeWidth={1.5} /> 预计 {form.reading_time} 分钟阅读
+                  </span>
+                </div>
+              </div>
+
+              <ArticleBody
+                content={form.content}
+                slug={form.slug || 'draft'}
+                className="prose prose-lg"
+              />
+
+              {(() => {
+                const tagList = form.tags
+                  .split(',')
+                  .map(t => t.trim())
+                  .filter(Boolean)
+                if (tagList.length === 0) return null
+                return (
+                  <div className="editor-preview-tags">
+                    {tagList.map(tag => (
+                      <span key={tag} className="tag tag-dark">#{tag}</span>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+            提示：切换到「预览」查看详情页实际渲染效果（含图片解析、表格）。
           </div>
         </div>
 
@@ -306,28 +455,19 @@ export function ArticleEditor() {
           </label>
         </div>
 
-        <div className="article-editor__actions">
-          <button
-            className="article-editor__btn article-editor__btn--primary"
-            onClick={() => saveMut.mutate('published')}
-            disabled={saveMut.isPending}
-          >
-            {saveMut.isPending ? '保存中...' : '保存并发布'}
-          </button>
-          <button
-            className="article-editor__btn article-editor__btn--secondary"
-            onClick={() => saveMut.mutate('draft')}
-            disabled={saveMut.isPending}
-          >
-            保存草稿
-          </button>
-          <button
-            className="article-editor__btn article-editor__btn--secondary"
-            onClick={() => navigate('/admin/articles')}
-          >
-            取消
-          </button>
-        </div>
+        <Card>
+          <div className="article-editor__actions">
+            <Button onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>
+              {saveMut.isPending ? '保存中...' : '保存并发布'}
+            </Button>
+            <Button variant="secondary" onClick={() => saveMut.mutate('draft')} loading={saveMut.isPending}>
+              保存草稿
+            </Button>
+            <Button variant="secondary" onClick={() => navigate('/admin/articles')}>
+              取消
+            </Button>
+          </div>
+        </Card>
       </div>
     </div>
   )
