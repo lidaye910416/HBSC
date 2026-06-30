@@ -4,6 +4,9 @@ Reads ``article_typesetter.*`` AdminSetting keys, truncates oversized input,
 calls the OpenAI-compatible ``chat_complete`` once, and strips accidental
 markdown code fences from the response.
 
+Defaults live in ``app.services.admin_setting_defaults`` so the settings UI
+can show the same preset the service will fall back to.
+
 The router converts all ``TypesetError`` / ``LLMUnavailable`` exceptions to
 the project's standard ``{"error": {"code", "message"}}`` envelope, so the
 service intentionally raises rather than returning HTTP objects.
@@ -18,31 +21,18 @@ from .crypto import decrypt_value
 from .llm_client import chat_complete  # re-exported so tests can monkeypatch the bound name
 from .llm_client import LLMUnavailable  # noqa: F401  (re-export for downstream routers)
 from ..models.admin_setting import AdminSetting
+from .admin_setting_defaults import (
+    KNOWN_KEYS_DEFAULTS,
+    default_for,
+    DEFAULT_SYSTEM_PROMPT,
+)
 
 
-# ----- Defaults — overridable through AdminSetting ---------------------------
-DEFAULT_ENABLED = "false"
-DEFAULT_MODEL = "MiniMax-M3"
-DEFAULT_BASE_URL = "https://api.minimax.chat/v1"
+# Re-exports so existing tests/routers can still import these names.
+DEFAULT_ENABLED = KNOWN_KEYS_DEFAULTS["article_typesetter.enabled"][0]
+DEFAULT_MODEL = KNOWN_KEYS_DEFAULTS["article_typesetter.model"][0]
+DEFAULT_BASE_URL = KNOWN_KEYS_DEFAULTS["article_typesetter.base_url"][0]
 
-DEFAULT_SYSTEM_PROMPT = """你是一名中文科技期刊的资深排版编辑，专精于把 pandoc 从 Word 导出的 Markdown 清洗为可直接发布的稿件。
-
-【必须做】
-- 修正标题层级（# ## ### ……），确保只有一个 H1
-- 中英文 / 中文与数字之间补全角空格（CJK 排版习惯）
-- 全角 / 半角标点统一
-- 列表层级、表格列对齐
-- 清除 pandoc 残留（例如反斜杠续行、空格+换行）
-
-【绝对不要做】
-- 不改写、不润色、不删减任何正文句子
-- 不修改图片引用 ![](...) 路径
-- 不输出 markdown 围栏（```）、前言、解释、注释
-- 不输出元数据（title / summary / tags）建议
-
-【输出】
-直接返回清洗后的 Markdown，不要任何包裹。
-"""
 
 # Cap at 32k Python characters; trimming happens BEFORE the LLM call so we
 # never blow past the upstream context window.
@@ -70,6 +60,7 @@ class TypesetResult:
 
 # ----- Helpers ----------------------------------------------------------------
 def _get_setting(db: Session, key: str) -> str | None:
+    """Read setting from DB. Returns None if row missing or decrypt fails."""
     row = db.query(AdminSetting).filter_by(key=key).first()
     if not row:
         return None
@@ -77,6 +68,21 @@ def _get_setting(db: Session, key: str) -> str | None:
         return decrypt_value(row.value_encrypted)
     except Exception:
         return None
+
+
+def _get_or_default(db: Session, key: str) -> str | None:
+    """Read setting or fall back to the preset default in admin_setting_defaults.
+
+    Returns None ONLY when there is no preset default (i.e. unknown key) OR
+    when the preset default is the empty string (e.g. api_key pre-input).
+    """
+    val = _get_setting(db, key)
+    if val is not None and val != "":
+        return val
+    default = default_for(key)
+    if default is None or default == "":
+        return None
+    return default
 
 
 def _is_enabled(value: str | None) -> bool:
@@ -103,17 +109,20 @@ def _strip_fences(text: str) -> str:
 
 def _resolve_config(db: Session) -> tuple[str, str, str, str]:
     """Return (api_key, model, base_url, system_prompt). Raises TypesetError on missing required keys."""
-    enabled_raw = _get_setting(db, "article_typesetter.enabled") or DEFAULT_ENABLED
+    # enabled: default is "true" (article_typesetter is on by default in this
+    # project). Only the api_key is non-defaultable.
+    enabled_raw = _get_or_default(db, "article_typesetter.enabled") or DEFAULT_ENABLED
     if not _is_enabled(enabled_raw):
         raise TypesetError("not_enabled", "AI 排版未启用")
 
+    # api_key has NO usable preset default — the admin must enter one.
     api_key = _get_setting(db, "article_typesetter.api_key")
     if not api_key:
         raise TypesetError("no_api_key", "未配置 article_typesetter.api_key")
 
-    model = _get_setting(db, "article_typesetter.model") or DEFAULT_MODEL
-    base_url = _get_setting(db, "article_typesetter.base_url") or DEFAULT_BASE_URL
-    system_prompt = _get_setting(db, "article_typesetter.system_prompt") or DEFAULT_SYSTEM_PROMPT
+    model = _get_or_default(db, "article_typesetter.model") or DEFAULT_MODEL
+    base_url = _get_or_default(db, "article_typesetter.base_url") or DEFAULT_BASE_URL
+    system_prompt = _get_or_default(db, "article_typesetter.system_prompt") or DEFAULT_SYSTEM_PROMPT
     return api_key, model, base_url, system_prompt
 
 
