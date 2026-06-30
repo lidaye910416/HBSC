@@ -242,8 +242,8 @@ export function ArticleEditor() {
         actions={
           <>
             <Button variant="secondary" onClick={() => navigate('/admin/articles')}>取消</Button>
-            <Button variant="secondary" onClick={() => saveMut.mutate('draft')} loading={saveMut.isPending}>保存草稿</Button>
-            <Button onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>保存并发布</Button>
+            <Button variant="secondary" data-ai-blocked="save" onClick={() => saveMut.mutate('draft')} loading={saveMut.isPending}>保存草稿</Button>
+            <Button data-ai-blocked="publish" onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>保存并发布</Button>
           </>
         }
       />
@@ -499,10 +499,10 @@ export function ArticleEditor() {
 
         <Card>
           <div className="article-editor__actions">
-            <Button onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>
+            <Button data-ai-blocked="publish" onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>
               {saveMut.isPending ? '保存中...' : '保存并发布'}
             </Button>
-            <Button variant="secondary" onClick={() => saveMut.mutate('draft')} loading={saveMut.isPending}>
+            <Button variant="secondary" data-ai-blocked="save" onClick={() => saveMut.mutate('draft')} loading={saveMut.isPending}>
               保存草稿
             </Button>
             <Button variant="secondary" onClick={() => navigate('/admin/articles')}>

@@ -168,6 +168,7 @@ export function JournalList() {
                         variant="danger"
                         size="sm"
                         icon={<Trash2 size={14} />}
+                        data-ai-blocked="delete"
                         onClick={() => openDeleteConfirm(j.id, j.title, j.article_count)}
                       />
                     </div>
@@ -212,6 +213,7 @@ export function JournalList() {
             <Button variant="secondary" onClick={cancelDelete}>取消</Button>
             <Button
               variant="danger"
+              data-ai-blocked="delete"
               loading={deleteMut.isPending}
               disabled={confirmInput.trim() !== deleteTarget?.title || deleteMut.isPending}
               onClick={confirmDelete}

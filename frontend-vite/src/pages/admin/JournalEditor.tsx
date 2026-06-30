@@ -86,7 +86,7 @@ export function JournalEditor() {
         actions={
           <>
             <Button variant="secondary" onClick={() => navigate('/admin/journals')}>取消</Button>
-            <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
+            <Button data-ai-blocked="publish" onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
               {saveMut.isPending ? '保存中...' : '保存'}
             </Button>
           </>
@@ -159,7 +159,7 @@ export function JournalEditor() {
 
         <Card>
           <div className="article-editor__actions">
-            <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
+            <Button data-ai-blocked="publish" onClick={() => saveMut.mutate()} loading={saveMut.isPending}>
               {saveMut.isPending ? '保存中...' : '保存'}
             </Button>
             <Button variant="secondary" onClick={() => navigate('/admin/journals')}>

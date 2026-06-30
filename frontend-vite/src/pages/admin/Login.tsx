@@ -59,7 +59,7 @@ export function Login() {
             />
           </div>
           {error && <div className="admin-login__error">{error}</div>}
-          <button type="submit" className="admin-login__submit" disabled={loading}>
+          <button type="submit" className="admin-login__submit" data-ai-blocked="login" disabled={loading}>
             {loading ? '登录中...' : '登录'}
           </button>
         </form>

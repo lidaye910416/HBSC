@@ -79,6 +79,7 @@ export function MediaLibrary() {
                       variant="danger"
                       size="sm"
                       icon={<Trash2 size={14} />}
+                      data-ai-blocked="delete"
                       onClick={() => setConfirmDelete({ id: m.id, name: m.original_name })}
                     />
                   </div>
@@ -109,6 +110,7 @@ export function MediaLibrary() {
             <Button variant="secondary" onClick={() => setConfirmDelete(null)}>取消</Button>
             <Button
               variant="danger"
+              data-ai-blocked="delete"
               loading={deleteMut.isPending}
               onClick={() => {
                 if (confirmDelete) deleteMut.mutate(confirmDelete.id)
