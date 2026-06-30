@@ -292,7 +292,7 @@ async def agent_llm(
     try:
         cfg = load_chat_config(rows, mode="dom")
     except PageAgentConfigError as e:
-        _send(e.code, e.message, 409)
+        _send(e.code, str(e), 409)
 
     if not is_allowed_url(body.url, cfg.base_url):
         _send("url_not_allowed", "上游 URL 不在 base_url 白名单内", 403)
