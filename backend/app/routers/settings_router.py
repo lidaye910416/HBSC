@@ -1,4 +1,5 @@
 """Admin settings (encrypted K/V)."""
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -14,9 +15,12 @@ from ..services.admin_setting_defaults import (
     KNOWN_KEYS_DEFAULTS,
     default_for,
 )
+from ..services.llm_client import chat_complete, LLMUnavailable
 
 
 router = APIRouter(prefix="/api/admin/settings", tags=["admin-settings"])
+
+_log = logging.getLogger(__name__)
 
 
 # Keys that must be encrypted + masked. Anything ending in api_key / token / secret.
@@ -140,3 +144,85 @@ def upsert_setting(
     db.commit()
     db.refresh(row)
     return _to_out(row)
+
+
+# ---- Connectivity probe (migrated from agent_router on 2026-06-30) -------
+#
+# Page-agent admin-side chat endpoints were removed; this connectivity probe
+# stays useful for both ``page_agent.api_key`` and
+# ``article_typesetter.api_key``. It lives in ``settings_router`` because the
+# URL ``/api/admin/settings/{key}/test`` has always been administered via
+# the settings UI.
+
+
+def _get_setting(db: Session, key: str) -> Optional[str]:
+    row = db.query(AdminSetting).filter_by(key=key).first()
+    if not row:
+        return None
+    try:
+        return decrypt_value(row.value_encrypted)
+    except Exception:
+        return None
+
+
+def _get_or_default(db: Session, key: str) -> Optional[str]:
+    val = _get_setting(db, key)
+    if val is not None and val != "":
+        return val
+    d = default_for(key)
+    if d is None or d == "":
+        return None
+    return d
+
+
+# API keys that have a connectivity probe. Add new entries here rather than
+# branching the body so each new key reuses the same ping logic below.
+_TESTABLE_API_KEYS: dict[str, tuple[str, str]] = {
+    # setting key → (default_base_url, default_model)
+    "page_agent.api_key": (
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+    ),
+    "article_typesetter.api_key": (
+        "https://api.minimaxi.com/v1",
+        "MiniMax-M3",
+    ),
+}
+
+
+@router.post("/{key:path}/test")
+async def test_setting(
+    key: str,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Connectivity probe for an LLM-style api_key setting."""
+    if key not in _TESTABLE_API_KEYS:
+        raise HTTPException(status_code=400, detail="该 key 暂不支持连通性测试")
+    default_base_url, default_model = _TESTABLE_API_KEYS[key]
+    prefix = key.split(".", 1)[0]  # "page_agent" or "article_typesetter"
+
+    row = db.query(AdminSetting).filter_by(key=key).first()
+    if not row:
+        raise HTTPException(status_code=409, detail="未配置该 key")
+    try:
+        api_key = decrypt_value(row.value_encrypted)
+    except Exception:
+        raise HTTPException(status_code=409, detail="该 key 解密失败")
+    if not api_key:
+        raise HTTPException(status_code=409, detail="未配置该 key")
+
+    base_url = (_get_or_default(db, f"{prefix}.base_url")) or default_base_url
+    model = (_get_or_default(db, f"{prefix}.model")) or default_model
+
+    try:
+        sample = await chat_complete(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+        )
+    except LLMUnavailable as e:
+        _log.warning("%s connectivity test failed: %s", key, e, exc_info=True)
+        raise HTTPException(status_code=502, detail="连通性测试失败，请检查网络或 API Key")
+    return {"ok": True, "sample": sample[:200]}
