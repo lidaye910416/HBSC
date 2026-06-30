@@ -1020,3 +1020,45 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
   border-top: 1px solid var(--admin-border);
 }
 
+/* =====================================================================
+   Media library cards — added by admin-ui-redesign PR3 (Task 3.3)
+   ===================================================================== */
+.media-card {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--radius-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.media-card__thumb {
+  background: var(--admin-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+.media-card__body {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.media-card__name {
+  font-size: var(--type-sm);
+  font-weight: 500;
+  color: var(--admin-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-card__meta {
+  font-size: var(--type-xs);
+  color: var(--admin-text-muted);
+}
+.media-card__actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
