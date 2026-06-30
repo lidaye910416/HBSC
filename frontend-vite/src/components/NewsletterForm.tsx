@@ -49,7 +49,7 @@ export function NewsletterForm() {
             onChange={e => setEmail(e.target.value)}
             required
           />
-          <button type="submit" className="btn btn-primary newsletter__btn" disabled={status === 'loading'}>
+          <button data-ai-blocked="newsletter" type="submit" className="btn btn-primary newsletter__btn" disabled={status === 'loading'}>
             {status === 'loading' ? '订阅中...' : '立即订阅'}
           </button>
           {error && <p className="newsletter__error">{error}</p>}
