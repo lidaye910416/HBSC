@@ -1062,3 +1062,11 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
   margin-top: var(--space-1);
 }
 
+@keyframes page-agent-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.page-agent-spin {
+  animation: page-agent-spin 1s linear infinite;
+}
+
