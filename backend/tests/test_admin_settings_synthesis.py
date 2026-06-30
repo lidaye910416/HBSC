@@ -118,6 +118,17 @@ def test_list_synthesizes_page_agent_defaults_when_db_empty(client):
     # system_prompt has its own default (public concierge, not admin-tool flavor)
     assert "湖北数创" in by_key["page_agent.system_prompt"]["value"]
 
+    # DOM 操作护栏 (Plan Task 5): page-agent default system_prompt must include
+    # safety rails that constrain destructive DOM actions, PII exposure, and
+    # admin/login route access. These substrings are the contract; absence =
+    # the rail block has been lost during a future refactor.
+    sys_prompt = by_key["page_agent.system_prompt"]["value"]
+    assert "data-ai-blocked" in sys_prompt
+    assert "<form>" in sys_prompt or "form" in sys_prompt.lower()
+    assert "DELETE" in sys_prompt or "POST" in sys_prompt
+    assert "/admin" in sys_prompt
+    assert "11 位" in sys_prompt or "手机号" in sys_prompt
+
 
 def test_list_article_typesetter_defaults_unchanged(client):
     """Regression guard: the article_typesetter namespace must NOT have been
