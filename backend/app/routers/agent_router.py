@@ -96,20 +96,38 @@ async def execute_llm(
     return {"content": content}
 
 
+# API keys that have a connectivity probe. Add new entries here rather than
+# branching the body so each new key reuses the same ping logic below.
+_TESTABLE_API_KEYS: dict[str, tuple[str, str]] = {
+    # setting key → (default_base_url, default_model)
+    "page_agent.api_key": (
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "MiniMax-M3",
+    ),
+    "article_typesetter.api_key": (
+        "https://api.minimax.chat/v1",
+        "MiniMax-M3",
+    ),
+}
+
+
 @router.post("/settings/{key:path}/test")
 async def test_setting(
     key: str,
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
-    """Connectivity probe for a setting. Currently supports page_agent.api_key."""
-    if key != "page_agent.api_key":
+    """Connectivity probe for an LLM-style api_key setting."""
+    if key not in _TESTABLE_API_KEYS:
         raise HTTPException(status_code=400, detail="该 key 暂不支持连通性测试")
+    default_base_url, default_model = _TESTABLE_API_KEYS[key]
+    prefix = key.split(".", 1)[0]  # "page_agent" or "article_typesetter"
+
     api_key = _get_setting(db, key)
     if not api_key:
         raise HTTPException(status_code=409, detail="未配置该 key")
-    base_url = _get_setting(db, "page_agent.base_url") or _DEFAULT_BASE_URL
-    model = _get_setting(db, "page_agent.model") or _DEFAULT_MODEL
+    base_url = _get_setting(db, f"{prefix}.base_url") or default_base_url
+    model = _get_setting(db, f"{prefix}.model") or default_model
     try:
         sample = await chat_complete(
             base_url=base_url,
@@ -119,7 +137,7 @@ async def test_setting(
         )
     except LLMUnavailable as e:
         logging.getLogger(__name__).warning(
-            "page-agent connectivity test failed: %s", e, exc_info=True
+            "%s connectivity test failed: %s", key, e, exc_info=True
         )
         raise HTTPException(status_code=502, detail="连通性测试失败，请检查网络或 API Key")
     return {"ok": True, "sample": sample[:200]}
