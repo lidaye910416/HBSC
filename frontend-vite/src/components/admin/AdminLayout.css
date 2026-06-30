@@ -1,143 +1,170 @@
+/* Admin shell — Linear 风 (light sidebar, gold active accent) */
 .admin-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
-  background: #FAFAF7;
+  background: var(--admin-bg);
 }
 
-/* Sidebar container stretches to fill the grid row (full page height).
-   Inner .admin-sidebar__sticky handles the actual sticky scroll behavior. */
 .admin-sidebar {
-  background: #1A1A2E;
-  color: #FAFAF7;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  border-right: 1px solid var(--admin-border);
 }
 
 .admin-sidebar__sticky {
   position: sticky;
   top: 0;
-  padding: 24px 0;
+  padding: var(--space-5) 0;
   max-height: 100vh;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
 }
 
 .admin-sidebar__brand {
-  padding: 0 24px 24px;
-  border-bottom: 1px solid #2a2a4e;
-  margin-bottom: 24px;
+  padding: 0 var(--space-5) var(--space-5);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-3);
+  align-items: center;
+}
+.admin-sidebar__mark {
+  grid-row: 1 / span 2;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--brand-gold);
+  display: inline-block;
+}
+.admin-sidebar__title {
+  font-size: var(--type-md);
+  font-weight: 600;
+  color: var(--admin-text);
+  line-height: 1.2;
+}
+.admin-sidebar__sub {
+  font-size: var(--type-xs);
+  color: var(--admin-text-muted);
 }
 
-.admin-sidebar__brand h2 {
-  margin: 0;
-  font-size: 1.125rem;
-  color: #2563eb;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.admin-sidebar__brand p {
-  margin: 4px 0 0;
-  font-size: 0.8125rem;
-  color: #a8a8b8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.admin-sidebar nav {
+.admin-sidebar__nav {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--space-2);
 }
 
-.admin-sidebar a {
+.admin-sidebar__link {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 24px;
-  color: #c8c8d8;
+  gap: var(--space-3);
+  padding: 8px var(--space-3);
+  border-radius: var(--radius-2);
+  color: var(--admin-text-2);
   text-decoration: none;
-  font-size: 0.9375rem;
+  font-size: var(--type-base);
+  font-weight: 500;
   border-left: 3px solid transparent;
-  transition: background-color 0.15s ease, color 0.15s ease, border-left-color 0.15s ease;
+  transition: background-color 0.15s, color 0.15s, border-left-color 0.15s;
 }
-
-.admin-sidebar a:hover {
-  background: #16213E;
-  color: #FAFAF7;
+.admin-sidebar__link:hover {
+  background: var(--admin-surface-2);
+  color: var(--admin-text);
 }
+.admin-sidebar__link.is-active {
+  background: var(--brand-gold-50);
+  color: var(--brand-ink);
+  border-left-color: var(--brand-gold);
+}
+.admin-sidebar__external {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--admin-border);
+  padding-top: var(--space-3);
+  border-radius: 0;
+}
+.admin-sidebar__external:hover { background: transparent; color: var(--admin-text); }
 
-.admin-sidebar a.active {
-  background: #16213E;
-  color: #2563eb;
-  border-left-color: #2563eb;
+.admin-sidebar__foot {
+  padding: var(--space-3) var(--space-3) 0;
+  border-top: 1px solid var(--admin-border);
+  margin-top: var(--space-3);
+}
+.admin-sidebar__logout {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--type-sm);
+  color: var(--admin-text-2);
+  padding: 8px var(--space-3);
+  border-radius: var(--radius-2);
+}
+.admin-sidebar__logout:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .admin-main {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  min-width: 0; /* prevent grid overflow from long content */
+  min-width: 0;
 }
 
 .admin-header {
-  background: white;
-  padding: 16px 32px;
-  border-bottom: 1px solid #e8e8e0;
+  background: var(--admin-surface);
+  border-bottom: 1px solid var(--admin-border);
+  height: var(--header-height);
+  padding: 0 var(--space-6);
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
-
-.admin-header h1 {
-  margin: 0;
-  font-size: 1.25rem;
-  color: #1A1A2E;
-}
-
-.admin-header__user {
-  display: flex;
+.admin-header__left { display: flex; align-items: center; }
+.admin-header__right { display: flex; align-items: center; gap: var(--space-3); }
+.admin-header__search {
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
+  gap: var(--space-2);
+  border: 1px solid var(--admin-border);
+  background: var(--admin-bg);
+  border-radius: var(--radius-2);
+  padding: 6px 10px;
+  color: var(--admin-text-2);
+}
+.admin-header__search input {
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: var(--type-sm);
+  width: 220px;
+  color: var(--admin-text);
 }
 
 .admin-content {
-  padding: 32px;
   flex: 1;
-}
-
-.admin-logout {
-  background: none;
-  border: 1px solid #2563eb;
-  color: #2563eb;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.admin-logout:hover {
-  background: #2563eb;
-  color: #ffffff;
+  padding: var(--space-6);
+  max-width: var(--content-max);
+  margin: 0 auto;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
-  .admin-layout {
-    grid-template-columns: 1fr;
-  }
-  .admin-sidebar__sticky {
-    position: static;
-    max-height: none;
-    overflow: visible;
-  }
+  .admin-layout { grid-template-columns: 1fr; }
+  .admin-sidebar__sticky { position: static; max-height: none; overflow: visible; }
+  .admin-content { padding: var(--space-4); }
 }
 
-/* Respect users who prefer reduced motion (Phase 1.8) */
 @media (prefers-reduced-motion: reduce) {
-  .admin-sidebar a,
-  .admin-logout {
-    transition: none;
-  }
+  .admin-sidebar__link, .admin-sidebar__logout { transition: none; }
 }
