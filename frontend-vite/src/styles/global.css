@@ -838,3 +838,35 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
 .ui-status-badge--archived  { background: var(--status-archived-bg);  color: var(--status-archived-fg); }
 .ui-status-badge--featured  { background: var(--brand-gold-50);      color: #8C6F1F; }
 
+/* Empty */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-7) var(--space-5);
+  background: var(--admin-surface);
+  border: 1px dashed var(--admin-border-strong);
+  border-radius: var(--radius-2);
+  color: var(--admin-text-2);
+}
+.ui-empty__icon {
+  color: var(--admin-text-muted);
+  margin-bottom: var(--space-3);
+}
+.ui-empty__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--type-md);
+  font-weight: 600;
+  color: var(--admin-text);
+}
+.ui-empty__desc {
+  margin: 0 0 var(--space-4);
+  font-size: var(--type-sm);
+  color: var(--admin-text-2);
+  max-width: 40ch;
+}
+.ui-empty__action {
+  margin-top: var(--space-2);
+}
+
