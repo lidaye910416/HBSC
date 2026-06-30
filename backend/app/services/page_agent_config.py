@@ -20,7 +20,7 @@ class ChatConfig:
 
 
 class PageAgentConfigError(ValueError):
-    """Raised by ``_load_chat_config`` when the admin-visible gate fails.
+    """Raised by ``load_chat_config`` when the admin-visible gate fails.
 
     Each error carries a stable ``code`` matching the {error.code} envelope
     that the public router already returns (so the frontend toasts the
@@ -33,12 +33,12 @@ class PageAgentConfigError(ValueError):
 
 
 def _is_enabled(value: str | None) -> bool:
-    if value is None or value == "":
-        return True
+    if value is None:
+        return False
     return value.strip().lower() in ("true", "1", "yes")
 
 
-def _load_chat_config(rows: dict, *, mode: str = "chat") -> ChatConfig:
+def load_chat_config(rows: dict, *, mode: str = "chat") -> ChatConfig:
     """Lift settings rows (or a synthesised default-dict) into a ChatConfig.
 
     ``rows`` is a key→decrypted-value dict (read by the caller). This
@@ -64,7 +64,7 @@ def _load_chat_config(rows: dict, *, mode: str = "chat") -> ChatConfig:
     return ChatConfig(model=model, base_url=base_url, api_key=api_key)
 
 
-def _is_allowed_url(target: str, base_url: str) -> bool:
+def is_allowed_url(target: str, base_url: str) -> bool:
     """Strictly match ``target`` against ``base_url`` (scheme+host+port+path).
 
     Defends against DNS-rebinding suffix tricks (e.g.
@@ -87,4 +87,4 @@ def _is_allowed_url(target: str, base_url: str) -> bool:
     return (a.path or "").startswith(b.path.rstrip("/") + "/") or a.path == b.path
 
 
-__all__ = ["ChatConfig", "PageAgentConfigError", "_load_chat_config", "_is_allowed_url"]
+__all__ = ["ChatConfig", "PageAgentConfigError", "load_chat_config", "is_allowed_url"]
