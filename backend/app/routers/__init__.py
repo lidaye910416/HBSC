@@ -5,6 +5,7 @@ from ..admin_router import router as admin_router
 from .settings_router import router as settings_router
 from .agent_router import router as agent_router
 from .admin_articles_import import router as admin_articles_import_router
+from .admin_articles_typeset import router as admin_articles_typeset_router
 
 __all__ = [
     "articles_router",
@@ -14,4 +15,5 @@ __all__ = [
     "settings_router",
     "agent_router",
     "admin_articles_import_router",
+    "admin_articles_typeset_router",
 ]

@@ -17,6 +17,7 @@ from .routers import (
     settings_router,
     agent_router,
     admin_articles_import_router,
+    admin_articles_typeset_router,
 )
 from .middleware.rate_limit import rate_limit
 from .models import Journal, Article, Researcher
@@ -107,6 +108,7 @@ app.include_router(admin_router)
 app.include_router(settings_router)
 app.include_router(agent_router)
 app.include_router(admin_articles_import_router)
+app.include_router(admin_articles_typeset_router)
 
 @app.get("/")
 def root():
