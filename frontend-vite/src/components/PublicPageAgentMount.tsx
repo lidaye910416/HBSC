@@ -1,5 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import type { PageAgent } from 'page-agent'
 
 import { api } from '../services/api'
 import {
@@ -38,17 +39,36 @@ export function PublicPageAgentMount() {
   }, [configQ.data?.enabled])
 
   // Re-render when the session changes (e.g., dispose + recreate).
-  const agent = useSyncExternalStore(subscribe, getCurrent, () => null)
+  const liveAgent = useSyncExternalStore(subscribe, getCurrent, () => null)
   const [panelOpen, setPanelOpen] = useState(false)
+  // Keep the last-known live agent in a ref so the panel can keep
+  // rendering across the brief window where the session was disposed
+  // and a new one is being constructed. The panel's own sendOperate
+  // catch-block handles the "disposed" error and requests a fresh
+  // agent via acquire() if the held prop is stale.
+  const lastAgentRef = useRef<PageAgent | null>(null)
+  useEffect(() => {
+    if (liveAgent) lastAgentRef.current = liveAgent
+  }, [liveAgent])
+  const renderAgent = liveAgent ?? lastAgentRef.current
 
-  if (!configQ.data?.enabled || !agent) return null
+  // Auto-recover: if the session was disposed while the FAB/panel is
+  // still mounted (HMR reload, dev hot update, explicit reset), kick
+  // off a fresh acquire() so the user doesn't have to close+reopen the
+  // panel. The session singleton dedups via the in-flight creation
+  // promise, so concurrent calls are safe.
+  useEffect(() => {
+    if (configQ.data?.enabled && !liveAgent) void acquire()
+  }, [configQ.data?.enabled, liveAgent])
+
+  if (!configQ.data?.enabled || !renderAgent) return null
 
   return (
     <>
       {!panelOpen && <PageAgentFab onClick={() => setPanelOpen(true)} />}
       {panelOpen && (
         <PageAgentPanel
-          agent={agent}
+          agent={renderAgent}
           onClose={() => setPanelOpen(false)}
         />
       )}
