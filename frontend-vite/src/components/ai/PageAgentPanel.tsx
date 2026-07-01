@@ -3,6 +3,7 @@ import { Loader2, MessageSquare, Sparkles, X } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../services/api'
 import { PageAgent } from 'page-agent'
+import { acquire, isRecoverableDisposedError } from '../../lib/pageAgentSession'
 import styles from './PageAgentPanel.module.css'
 
 type UiMessage = { id: number; role: 'user' | 'assistant'; content: string }
@@ -35,7 +36,20 @@ export function PageAgentPanel({
   const [error, setError] = useState<string | null>(null)
   const [operating, setOperating] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const nextIdRef = useRef(1)
+  // Seed nextId from the restored history. Without this, a fresh mount
+  // (page reload / new tab) would restart the counter at 1 even when
+  // sessionStorage already contains messages with ids 1..N, causing
+  // React's "Encountered two children with the same key" warning.
+  // `null` is the "uninitialised" sentinel; the if-block runs exactly
+  // once on first render (the ref is then non-null for all subsequent
+  // renders, including React 18 strict-mode double-invoke in dev).
+  const nextIdRef = useRef<number | null>(null)
+  if (nextIdRef.current === null) {
+    nextIdRef.current =
+      history.length > 0
+        ? history.reduce((max, m) => Math.max(max, m.id), 0) + 1
+        : 1
+  }
 
   // Persist chat history.
   useEffect(() => {
@@ -93,19 +107,43 @@ export function PageAgentPanel({
     setOperating(true)
     const userId = nextIdRef.current++
     setHistory((h) => [...h, { id: userId, role: 'user', content: userText }])
+    let reply: string | null = null
     try {
-      const result = await agent.execute(userText)
-      const reply = result.success
-        ? `✅ 已完成：${result.data || '(无详细描述)'}`
-        : `⚠️ 未能完成：${result.data || '任务中断'}`
-      setHistory((h) => [...h, { id: nextIdRef.current++, role: 'assistant', content: reply }])
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '调用失败'
-      setError(msg)
-      setHistory((h) => [
-        ...h,
-        { id: nextIdRef.current++, role: 'assistant', content: '⚠️ ' + msg },
-      ])
+      let result
+      try {
+        result = await agent.execute(userText)
+      } catch (e) {
+        // Defensive recovery: if the session was disposed (HMR reload,
+        // dev hot update, explicit reset), the session singleton can
+        // give us a fresh agent on the same try. We attempt recovery
+        // exactly once — if it still fails, surface the error.
+        if (isRecoverableDisposedError(e)) {
+          const fresh = await acquire()
+          if (fresh && fresh !== agent) {
+            try {
+              result = await fresh.execute(userText)
+            } catch (e2) {
+              reply = '⚠️ ' + (e2 instanceof Error ? e2.message : '调用失败')
+            }
+          } else {
+            reply = '⚠️ 页面助手刚被刷新，请重试一次'
+          }
+        } else {
+          reply = '⚠️ ' + (e instanceof Error ? e.message : '调用失败')
+        }
+      }
+      if (reply === null && result) {
+        reply = result.success
+          ? `✅ 已完成：${result.data || '(无详细描述)'}`
+          : `⚠️ 未能完成：${result.data || '任务中断'}`
+      }
+      if (reply) {
+        setError(reply.startsWith('⚠️') ? reply.slice(2) : null)
+        setHistory((h) => [
+          ...h,
+          { id: nextIdRef.current++, role: 'assistant', content: reply! },
+        ])
+      }
     } finally {
       setOperating(false)
     }
