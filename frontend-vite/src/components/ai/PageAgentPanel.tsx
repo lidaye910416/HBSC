@@ -118,15 +118,22 @@ export function PageAgentPanel({
         // give us a fresh agent on the same try. We attempt recovery
         // exactly once — if it still fails, surface the error.
         if (isRecoverableDisposedError(e)) {
-          const fresh = await acquire()
-          if (fresh && fresh !== agent) {
-            try {
-              result = await fresh.execute(userText)
-            } catch (e2) {
-              reply = '⚠️ ' + (e2 instanceof Error ? e2.message : '调用失败')
+          let fresh: PageAgent | null = null
+          try {
+            fresh = await acquire()
+          } catch (acquireErr) {
+            reply = '⚠️ ' + (acquireErr instanceof Error ? acquireErr.message : '恢复失败')
+          }
+          if (reply === null) {
+            if (fresh && fresh !== agent) {
+              try {
+                result = await fresh.execute(userText)
+              } catch (e2) {
+                reply = '⚠️ ' + (e2 instanceof Error ? e2.message : '调用失败')
+              }
+            } else {
+              reply = '⚠️ 页面助手刚被刷新，请重试一次'
             }
-          } else {
-            reply = '⚠️ 页面助手刚被刷新，请重试一次'
           }
         } else {
           reply = '⚠️ ' + (e instanceof Error ? e.message : '调用失败')
