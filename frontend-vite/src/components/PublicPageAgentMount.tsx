@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PageAgent } from 'page-agent'
 
 import { api } from '../services/api'
-import { customFetch, maskSecrets, getPageHint } from '../lib/pageAgent'
+import {
+  acquire,
+  disposeSession,
+  getCurrent,
+  installUnloadHandler,
+  setConfig,
+  subscribe,
+} from '../lib/pageAgentSession'
 import { PageAgentFab } from './ai/PageAgentFab'
 import { PageAgentPanel } from './ai/PageAgentPanel'
 
@@ -14,33 +20,26 @@ export function PublicPageAgentMount() {
     staleTime: 60_000,
   })
 
-  const [agent, setAgent] = useState<PageAgent | null>(null)
-  const [panelOpen, setPanelOpen] = useState(false)
+  // Install the beforeunload handler exactly once at module-level on
+  // first mount (idempotent — see pageAgentSession.ts).
+  useEffect(() => installUnloadHandler(), [])
 
+  // Push config into the session whenever it changes. setConfig is a
+  // NO-OP if the config content is unchanged, so this is safe to call
+  // on every refetch.
   useEffect(() => {
-    const cfg = configQ.data
-    if (!cfg?.enabled) return
-    const a = new PageAgent({
-      baseURL: 'http://placeholder.invalid/v1',
-      apiKey: 'placeholder',
-      model: cfg.model,
-      language: 'zh-CN',
-      // Backend-supplied safety rails live here. If admin has not customized
-      // the prompt, this falls back to DEFAULT_PAGE_AGENT_SYSTEM_PROMPT which
-      // already includes all 10 protections appended in admin_setting_defaults.
-      customSystemPrompt: cfg.system_prompt,
-      getPageInstructions: getPageHint,
-      transformPageContent: maskSecrets,
-      maxSteps: 20,
-      stepDelay: 0.4,
-      experimentalScriptExecutionTool: false,
-      customFetch,
-    })
-    setAgent(a)
-    return () => {
-      a.dispose?.()
-    }
+    setConfig(configQ.data ?? null)
   }, [configQ.data])
+
+  // Drive lazy creation: as soon as the config says enabled, kick off
+  // the one-time agent construction. The session owns dedup.
+  useEffect(() => {
+    if (configQ.data?.enabled) void acquire()
+  }, [configQ.data?.enabled])
+
+  // Re-render when the session changes (e.g., dispose + recreate).
+  const agent = useSyncExternalStore(subscribe, getCurrent, () => null)
+  const [panelOpen, setPanelOpen] = useState(false)
 
   if (!configQ.data?.enabled || !agent) return null
 
@@ -56,3 +55,7 @@ export function PublicPageAgentMount() {
     </>
   )
 }
+
+// Re-export disposeSession for any future "close FAB for good" UI
+// (not currently wired; the FAB stays available until beforeunload).
+export { disposeSession }
