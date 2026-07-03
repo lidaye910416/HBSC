@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, MessageSquare, Sparkles, X } from 'lucide-react'
+import { Loader2, MessageSquare, Sparkles, Trash2, X } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../services/api'
 import { PageAgent } from 'page-agent'
-import { acquire, isRecoverableDisposedError } from '../../lib/pageAgentSession'
+import { acquire, disposeSession, isRecoverableDisposedError } from '../../lib/pageAgentSession'
+import { Modal } from '../ui/Modal'
 import styles from './PageAgentPanel.module.css'
 
 type UiMessage = { id: number; role: 'user' | 'assistant'; content: string }
@@ -65,6 +66,25 @@ export function PageAgentPanel({
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [history, operating])
 
+  // Clear-context confirmation modal.
+  const [clearOpen, setClearOpen] = useState(false)
+
+  function handleClearConfirm() {
+    setHistory([])
+    setText('')
+    setError(null)
+    setOperating(false)
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* quota / disabled */
+    }
+    disposeSession()
+    // PublicPageAgentMount's auto-recover effect re-creates a fresh agent on
+    // the next operate, so the singleton is already self-healing.
+    setClearOpen(false)
+  }
+
   // Chat-mode mutation: hits /api/public/agent/execute.
   const chatMut = useMutation({
     mutationFn: async (userText: string): Promise<string> => {
@@ -115,25 +135,31 @@ export function PageAgentPanel({
       } catch (e) {
         // Defensive recovery: if the session was disposed (HMR reload,
         // dev hot update, explicit reset), the session singleton can
-        // give us a fresh agent on the same try. We attempt recovery
-        // exactly once — if it still fails, surface the error.
+        // give us a fresh agent on the same try. We poll acquire() a
+        // few times to ride out transient races — most notably the
+        // dispose-during-create window where the in-flight IIFE is
+        // cancelled and returns null. Without the retry, the user sees
+        // a misleading "页面助手刚被刷新" toast even though the
+        // singleton self-heals a moment later.
         if (isRecoverableDisposedError(e)) {
           let fresh: PageAgent | null = null
-          try {
-            fresh = await acquire()
-          } catch (acquireErr) {
-            reply = '⚠️ ' + (acquireErr instanceof Error ? acquireErr.message : '恢复失败')
-          }
-          if (reply === null) {
-            if (fresh && fresh !== agent) {
-              try {
-                result = await fresh.execute(userText)
-              } catch (e2) {
-                reply = '⚠️ ' + (e2 instanceof Error ? e2.message : '调用失败')
-              }
-            } else {
-              reply = '⚠️ 页面助手刚被刷新，请重试一次'
+          for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+              fresh = await acquire()
+            } catch {
+              /* swallow — try again */
             }
+            if (fresh) break
+            await new Promise<void>((r) => setTimeout(r, 120))
+          }
+          if (fresh) {
+            try {
+              result = await fresh.execute(userText)
+            } catch (e2) {
+              reply = '⚠️ ' + (e2 instanceof Error ? e2.message : '调用失败')
+            }
+          } else {
+            reply = '⚠️ 页面助手刚被刷新，请重试一次'
           }
         } else {
           reply = '⚠️ ' + (e instanceof Error ? e.message : '调用失败')
@@ -255,8 +281,47 @@ export function PageAgentPanel({
             <Sparkles size={14} />
             让他操作
           </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnGhost}`}
+            onClick={() => setClearOpen(true)}
+            disabled={operating || chatMut.isPending}
+            aria-label="清空上下文"
+            data-testid="page-agent-clear-btn"
+          >
+            <Trash2 size={14} />
+            清空
+          </button>
         </div>
       </div>
+
+      <Modal
+        open={clearOpen}
+        onClose={() => setClearOpen(false)}
+        title="清空上下文"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              onClick={() => setClearOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={handleClearConfirm}
+              data-testid="page-agent-clear-confirm"
+            >
+              确认清空
+            </button>
+          </>
+        }
+      >
+        <p>确定要清空上下文吗？这将清除当前对话和 LLM 的记忆，无法撤销。</p>
+      </Modal>
     </div>
   )
 }

@@ -71,6 +71,16 @@ export async function acquire(): Promise<PageAgent | null> {
   createCancelled = false
   creatingPromise = (async () => {
     try {
+      // Yield to the microtask queue BEFORE constructing the agent.
+      // Reason: a concurrent disposeSession() that lands between this
+      // `createCancelled = false` reset and the `if (createCancelled)`
+      // check below would otherwise force us to construct an agent only
+      // to immediately dispose() it. Yielding lets disposeSession run
+      // first and re-set the flag, so we can short-circuit cleanly.
+      await Promise.resolve()
+      if (createCancelled) {
+        return null
+      }
       const a = new PageAgent({
         baseURL: sessionConfig!.base_url,
         // Placeholder only — the backend /api/public/agent/llm proxy
@@ -87,7 +97,7 @@ export async function acquire(): Promise<PageAgent | null> {
         customFetch,
       })
       if (createCancelled) {
-        // disposeSession() ran while we were creating; don't resurrect.
+        // disposeSession() ran while we were constructing; don't resurrect.
         try { a.dispose() } catch { /* swallow */ }
         return null
       }
@@ -190,4 +200,35 @@ export function installUnloadHandler(): void {
   if (typeof window === 'undefined') return
   unloadInstalled = true
   window.addEventListener('beforeunload', () => disposeSession())
+}
+
+/**
+ * Dev-only: expose the session handles on `window` so Playwright tests
+ * (and ad-hoc DevTools poking) can call dispose / acquire / getCurrent
+ * against the *same* module instance the app uses.
+ *
+ * Why not just `await import('/src/lib/pageAgentSession.ts')` from the
+ * test? In Vite dev mode, dynamic imports of a source URL can land on
+ * a fresh module instance distinct from the one the app's static
+ * imports resolved to — so a test calling `disposeSession()` on the
+ * dynamic import would dispose a phantom agent while the app's real
+ * singleton stayed untouched. Hanging the singleton off window
+ * guarantees a single shared instance.
+ *
+ * Stripped from production builds by the import.meta.env.DEV guard.
+ */
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as {
+    __hbsc_pageAgentSession: {
+      acquire: typeof acquire
+      disposeSession: typeof disposeSession
+      getCurrent: typeof getCurrent
+      isRecoverableDisposedError: typeof isRecoverableDisposedError
+    }
+  }).__hbsc_pageAgentSession = {
+    acquire,
+    disposeSession,
+    getCurrent,
+    isRecoverableDisposedError,
+  }
 }

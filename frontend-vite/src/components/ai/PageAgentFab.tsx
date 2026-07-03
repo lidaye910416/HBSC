@@ -8,11 +8,16 @@ export function PageAgentFab({ onClick }: { onClick: () => void }) {
       className={styles.fab}
       onClick={onClick}
       aria-label="打开 page-agent AI 助手"
+      title="AI 导航 · 问我或让他操作页面"
       data-testid="page-agent-fab"
     >
-      <Sparkles size={22} aria-hidden="true" />
-      <span className={styles.tooltip} role="tooltip">AI 助手 · 湖北数创</span>
-      <span className={styles.label}>打开 AI 助手</span>
+      <span className={styles.iconWrap} aria-hidden="true">
+        <Sparkles size={18} />
+      </span>
+      <span className={styles.text}>
+        <span className={styles.textMain}>AI 导航</span>
+        <span className={styles.textSub}>问我 · 让他操作</span>
+      </span>
     </button>
   )
 }

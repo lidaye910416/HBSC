@@ -1,6 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
-import { Mail } from 'lucide-react'
-import { api } from '../services/api'
 import './About.css'
 
 const timeline = [
@@ -19,8 +16,6 @@ const partners = [
 ]
 
 export function About() {
-  const { data: team } = useQuery({ queryKey: ['team'], queryFn: api.team })
-
   return (
     <main className="about-page">
       {/* Hero */}
@@ -85,45 +80,6 @@ export function About() {
           </div>
         </div>
       </section>
-
-      {/* Team */}
-      {team && team.length > 0 && (
-        <section className="section">
-          <div className="container">
-            <div className="text-center" style={{marginBottom:'48px'}}>
-              <p className="section-label">研究团队</p>
-              <h2>核心研究者</h2>
-              <div className="divider divider--center" />
-            </div>
-            <div className="grid grid-3">
-              {team.map(member => (
-                <div key={member.id} className="about-member-card">
-                  <div className="about-member-card__avatar-wrap">
-                    <img
-                      src={member.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${member.name}`}
-                      alt={member.name}
-                      className="about-member-card__avatar"
-                    />
-                  </div>
-                  <div className="about-member-card__body">
-                    <h4>{member.name}</h4>
-                    {member.name_en && <p className="about-member-card__en text-en">{member.name_en}</p>}
-                    <p className="about-member-card__title">{member.title}</p>
-                    <p className="about-member-card__bio">{member.bio}</p>
-                    <div className="about-member-card__contact">
-                      {member.email && (
-                        <a href={`mailto:${member.email}`} aria-label="邮箱">
-                          <Mail size={14} strokeWidth={1.5}/>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Partners */}
       <section className="section section--secondary">

@@ -196,6 +196,17 @@
   color: #1A1A2E;
 }
 
+.btnGhost {
+  background: transparent;
+  color: #6b6b75;
+  border-color: transparent;
+}
+.btnGhost:hover:not(:disabled) {
+  background: #fdecec;
+  color: #B04040;
+  border-color: #f4c8c8;
+}
+
 .error {
   background: #fdecec;
   color: #B04040;
