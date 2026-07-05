@@ -1,6 +1,6 @@
 export { Button, type ButtonProps } from './Button'
 export { IconButton, type IconButtonProps } from './IconButton'
-export { Card, CardSection, CardHeader, CardTitle, type CardProps } from './Card'
+export { Card, CardHeader, CardTitle, type CardProps } from './Card'
 export { Stat, type StatProps } from './Stat'
 export { PageHeader, type PageHeaderProps } from './PageHeader'
 export {
