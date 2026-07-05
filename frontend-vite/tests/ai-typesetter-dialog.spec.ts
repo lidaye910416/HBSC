@@ -82,13 +82,18 @@ test.describe('AI 排版按钮 + 弹窗', () => {
     await button.click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5_000 })
-    await expect(dialog.getByText(/清洗后/)).toBeVisible()
-    await expect(dialog.getByText(/原文/)).toBeVisible()
+    // 用 "清洗后（Markdown）" 列标题定位 —— 它在 TypesetPreviewDialog 内
+    // 是唯一元素，区别于 stub markdown 渲染出的 h1/p 节点。
+    await expect(dialog.getByText('清洗后（Markdown）')).toBeVisible()
+    await expect(dialog.getByText('原文', { exact: true })).toBeVisible()
     await expect(dialog.getByRole('button', { name: /应用到编辑器/ })).toBeEnabled()
-    await expect(dialog.getByRole('button', { name: /取消/ })).toBeVisible()
+    // 关闭按钮（commit 3b67240 之前的版本叫"取消"，现叫"关闭"）。
+    // 用 .ui-modal__footer 限定对话框底部，避开右上角 X 按钮（aria-label="关闭"）。
+    const closeBtn = dialog.locator('.ui-modal__footer').getByRole('button', { name: '关闭' })
+    await expect(closeBtn).toBeVisible()
 
-    // 6. Click 取消 — dialog closes, content should NOT change.
-    await dialog.getByRole('button', { name: /取消/ }).click()
+    // 6. Click 关闭 — dialog closes, content should NOT change.
+    await closeBtn.click()
     await expect(dialog).toBeHidden({ timeout: 5_000 })
     // Original content block should still show "# 原标题".
     await expect(page.locator('body')).toContainText('原标题')
