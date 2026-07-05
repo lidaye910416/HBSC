@@ -370,6 +370,20 @@ export function ArticleEditor() {
             />
             {importBusy && <span style={{ fontSize: '0.8125rem', color: 'var(--admin-text-2)' }}>转换中…</span>}
           </div>
+          {typesetterReady ? (
+            <label className="article-editor__autotypeset" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: 'var(--admin-text-2)' }}>
+              <input
+                type="checkbox"
+                checked={autoTypeset}
+                onChange={(e) => setAutoTypeset(e.target.checked)}
+              />
+              导入并自动跑 AI 排版
+            </label>
+          ) : (
+            <small style={{ color: 'var(--admin-text-2)', fontSize: '0.75rem' }}>
+              （如需导入后自动跑 AI 排版，请先在「设置 → AI 排版」中启用并配置 API Key）
+            </small>
+          )}
           {importError && <div style={{ fontSize: '0.8125rem', color: 'var(--status-draft-fg)', marginTop: '4px' }}>{importError}</div>}
         </div>
 
