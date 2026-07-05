@@ -55,9 +55,11 @@ async function loginAdmin(page: import('@playwright/test').Page) {
 test.describe('Docx 导入 + AI 排版一体化', () => {
   test.beforeEach(async ({ page }) => {
     // 默认清掉 localStorage，避免上一个用例的 state 干扰
-    await page.context().addInitScript(() => {
-      try { localStorage.removeItem('hbsc-article-auto-typeset') } catch {}
-    })
+    // 注意：必须在 navigation 之前一次性清除；不能放在 addInitScript 里
+    // （addInitScript 会在每次 page.goto/reload 重新执行，会把 reload 后刚刚写入
+    // 的 state 又清掉，导致"刷新后还原"用例无法观察持久化效果）。
+    await page.goto(process.env.BASE_URL ?? 'http://localhost:5174')
+    await page.evaluate(() => { try { localStorage.removeItem('hbsc-article-auto-typeset') } catch {} })
     await loginAdmin(page)
   })
 
@@ -82,8 +84,8 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
     const fileInput = page.locator('input[type="file"][accept*="openxmlformats"]')
     await fileInput.setInputFiles({ name: 'fixture.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: MIN_DOCX })
 
-    // TypesetPreviewDialog 应当自动打开（其 dialog role="dialog" 或标题可见）
-    await expect(page.getByRole('dialog', { name: /清洗后/ }).or(page.locator('text=清洗后'))).toBeVisible({ timeout: 15_000 })
+    // TypesetPreviewDialog 应当自动打开（dialog 内的 "清洗后（Markdown）" 列标题是唯一标识）
+    await expect(page.getByRole('dialog').getByText('清洗后（Markdown）')).toBeVisible({ timeout: 15_000 })
     expect(typesetCalled).toBe(true)
   })
 
@@ -136,7 +138,7 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
     // 没有 checkbox
     await expect(page.getByRole('checkbox', { name: /导入并自动跑 AI 排版/ })).toHaveCount(0)
     // 出现未配置时的提示文案
-    await expect(page.getByText(/请先在.*设置.*AI 排版.*启用/)).toBeVisible()
+    await expect(page.getByText(/请先在.*设置.*AI 排版.*启用/).first()).toBeVisible()
   })
 
   test('刷新页面后 checkbox 状态从 localStorage 还原', async ({ page }) => {
