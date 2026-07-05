@@ -121,26 +121,6 @@ export function ArticleEditor() {
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
 
-  const handleImportDocx = async (file: File) => {
-    setImportBusy(true)
-    setImportError('')
-    try {
-      const result = await api.admin.articles.importDocx(file)
-      update('title', result.title || form.title)
-      update('content', result.content_markdown || form.content)
-      if (!form.slug && result.suggested_slug) {
-        update('slug', result.suggested_slug)
-      }
-      if (result.warnings?.length) {
-        setImportError(`提示：${result.warnings.join('；')}`)
-      }
-    } catch (e) {
-      setImportError(e instanceof Error ? e.message : '导入失败')
-    } finally {
-      setImportBusy(false)
-    }
-  }
-
   const handleTypeset = async (style: TypesetStyle = 'academic') => {
     setTypesetBusy(true)
     setTypesetError('')
@@ -161,6 +141,33 @@ export function ArticleEditor() {
       toast.error(msg)
     } finally {
       setTypesetBusy(false)
+    }
+  }
+
+  const handleImportDocx = async (file: File) => {
+    setImportBusy(true)
+    setImportError('')
+    try {
+      const result = await api.admin.articles.importDocx(file)
+      update('title', result.title || form.title)
+      update('content', result.content_markdown || form.content)
+      if (!form.slug && result.suggested_slug) {
+        update('slug', result.suggested_slug)
+      }
+      if (result.warnings?.length) {
+        setImportError(`提示：${result.warnings.join('；')}`)
+      }
+      // Auto-run AI 排版 immediately after import. Skipped when:
+      //   • admin unchecks the preference, OR
+      //   • typesetter is not configured (no enabled / no api key), OR
+      //   • the import returned no content (don't call typeset on empty)
+      if (autoTypeset && typesetterReady && result.content_markdown) {
+        await handleTypeset('academic')
+      }
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : '导入失败')
+    } finally {
+      setImportBusy(false)
     }
   }
 
