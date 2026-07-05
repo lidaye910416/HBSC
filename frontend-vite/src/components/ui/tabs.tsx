@@ -21,6 +21,13 @@ interface TabsProps extends React.HTMLAttributes<HTMLDivElement> {
   onValueChange: (value: string) => void
 }
 
+interface TabItem {
+  value: string
+  label: React.ReactNode
+}
+
+export type { TabsProps, TabItem }
+
 const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
   ({ className, value, onValueChange, ...props }, ref) => (
     <TabsContext.Provider value={{ value, onValueChange }}>

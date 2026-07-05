@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Sparkles, Wand2, RefreshCw, Zap, ZapOff } from 'lucide-react'
+import {
+  Save,
+  Sparkles,
+  Wand2,
+  RefreshCw,
+  Zap,
+  Lock,
+  Eye,
+  EyeOff,
+  ZapOff,
+} from 'lucide-react'
 import { api } from '../../services/api'
-import { PageHeader, Button, Card } from '../../components/ui'
+import {
+  PageHeader,
+  Button,
+  StatusBadge,
+  Empty,
+} from '../../components/ui'
+import { useToast } from '../../components/admin/Toast'
 import './AdminSettings.css'
 
 interface Setting {
@@ -22,71 +38,190 @@ interface KnownKey {
   key: string
   label: string
   kind: SettingKind
-  hint?: string  // one-line hint shown below label
+  hint?: string
 }
 
 interface SettingSection {
-  title: string
+  id: 'page-agent' | 'ai-typesetter'
   icon: React.ReactNode
-  blurb: string  // intro paragraph
-  defaults: { model: string; baseUrl: string }  // preset chips for the preset badge
+  eyebrow: string // uppercase sans label above the card title (e.g. "PAGE AGENT")
+  title: string // serif h3 in the card header
+  blurb: string
+  defaults: { model: string; baseUrl: string }
   rows: KnownKey[]
 }
 
 const PAGE_AGENT_SECTION: SettingSection = {
-  title: 'page-agent — 公开页面 AI 助手',
+  id: 'page-agent',
   icon: <Zap size={16} />,
+  title: 'page-agent · 公开页面 AI 助手',
+  eyebrow: 'PAGE AGENT',
   blurb:
-    '用于配置首页右下角 AI 助手 FAB。支持聊天（问他）与页面操作（让他操作）两种模式。',
+    '配置首页右下角 AI 助手 FAB。支持聊天（问他）与页面操作（让他操作）两种模式。',
   defaults: { model: 'deepseek-v4-flash', baseUrl: 'https://api.deepseek.com/v1' },
   rows: [
-    { key: 'page_agent.enabled',       label: '启用',                   kind: 'bool' },
-    { key: 'page_agent.model',         label: '模型',                   kind: 'string' },
-    { key: 'page_agent.base_url',      label: 'API Base URL',           kind: 'string', hint: '聊天 / 页面操作共用。DOM 模式仅允许 https。' },
-    { key: 'page_agent.api_key',       label: 'API Key',                kind: 'secret' },
-    { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）',   kind: 'textarea' },
+    { key: 'page_agent.enabled',       label: '启用',                  kind: 'bool' },
+    { key: 'page_agent.model',         label: '模型',                  kind: 'string' },
+    { key: 'page_agent.base_url',      label: 'API Base URL',          kind: 'string', hint: '聊天 / 页面操作共用。DOM 模式仅允许 https。' },
+    { key: 'page_agent.api_key',       label: 'API Key',               kind: 'secret' },
+    { key: 'page_agent.system_prompt', label: '系统 Prompt（可覆盖）',  kind: 'textarea' },
   ],
 }
 
 const AI_TYPESETTER_SECTION: SettingSection = {
-  title: 'AI 排版 — Word 导入后的 Markdown 清洗',
+  id: 'ai-typesetter',
   icon: <Sparkles size={16} />,
+  title: 'AI 排版 · Word 导入清洗',
+  eyebrow: 'AI TYPESETTER',
   blurb:
-    '把 .docx 导入生成的 pandoc Markdown 调一次 LLM 进行格式清理（不动语义、不修改图片路径、不修改元数据）。通常只需要填入 API Key 即可启用，其余配置已按 MiniMax Token Plan 预设好。',
+    '把 .docx 导入生成的 pandoc Markdown 调一次 LLM 进行格式清理（不动语义、不修改图片路径、不修改元数据）。通常只需要填入 API Key 即可启用。',
   defaults: {
     model: 'MiniMax-M3',
     baseUrl: 'https://api.minimaxi.com/v1',
   },
   rows: [
-    { key: 'article_typesetter.enabled',       label: '启用',           kind: 'bool' },
-    { key: 'article_typesetter.model',         label: '模型',           kind: 'string' },
-    { key: 'article_typesetter.base_url',      label: 'API Base URL',   kind: 'string', hint: 'Token Plan key 用于 https://api.minimaxi.com/v1（OpenAI 兼容）' },
-    { key: 'article_typesetter.api_key',       label: 'API Key',        kind: 'secret', hint: '获取方式：登录 MiniMax 控制台 → Token Plan → 复制 sk-cp-...' },
-    { key: 'article_typesetter.system_prompt', label: '系统 Prompt',     kind: 'textarea' },
+    { key: 'article_typesetter.enabled',       label: '启用',         kind: 'bool' },
+    { key: 'article_typesetter.model',         label: '模型',         kind: 'string' },
+    { key: 'article_typesetter.base_url',      label: 'API Base URL', kind: 'string', hint: 'Token Plan key 用于 https://api.minimaxi.com/v1（OpenAI 兼容）' },
+    { key: 'article_typesetter.api_key',       label: 'API Key',      kind: 'secret', hint: '获取方式：登录 MiniMax 控制台 → Token Plan → 复制 sk-cp-...' },
+    { key: 'article_typesetter.system_prompt', label: '系统 Prompt',   kind: 'textarea' },
   ],
 }
 
 const ALL_SECTIONS = [PAGE_AGENT_SECTION, AI_TYPESETTER_SECTION]
 const ALL_KNOWN_KEYS: KnownKey[] = ALL_SECTIONS.flatMap((s) => s.rows)
 
+/* ============================================================
+   Inline primitives
+   ============================================================ */
+
+function Switch({
+  checked,
+  onChange,
+  disabled,
+  ariaLabel,
+}: {
+  checked: boolean
+  onChange: (next: boolean) => void
+  disabled?: boolean
+  ariaLabel: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={[
+        'as-switch',
+        checked ? 'as-switch--on' : 'as-switch--off',
+        disabled ? 'as-switch--disabled' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <span className="as-switch__thumb" />
+    </button>
+  )
+}
+
+function SecretInput({
+  value,
+  onChange,
+  masked,
+  hasStored,
+}: {
+  value: string
+  onChange: (v: string) => void
+  masked: string | null
+  hasStored: boolean
+}) {
+  const [revealed, setRevealed] = useState(false)
+  const showPlaceholder = !value && (hasStored || masked)
+  return (
+    <div className="as-secret">
+      <Lock size={14} className="as-secret__icon" />
+      <input
+        className="as-secret__input"
+        type={revealed ? 'text' : 'password'}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={showPlaceholder ? (masked || '尚未配置（请填入新 Key）') : ''}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {hasStored && masked && (
+        <span className="as-secret__chip" title="已配置的 Key（服务端 Fernet 加密）">
+          {masked}
+        </span>
+      )}
+      <button
+        type="button"
+        className="as-secret__reveal"
+        onClick={() => setRevealed((r) => !r)}
+        aria-label={revealed ? '隐藏' : '显示'}
+        title={revealed ? '隐藏' : '显示'}
+      >
+        {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+    </div>
+  )
+}
+
+function PrimaryButton({
+  onClick,
+  disabled,
+  loading,
+  children,
+  size = 'md',
+  className = '',
+}: {
+  onClick: () => void
+  disabled?: boolean
+  loading?: boolean
+  children: React.ReactNode
+  size?: 'sm' | 'md'
+  className?: string
+}) {
+  // Render with the gold-primary styling (matches .ui-btn--primary) because
+  // the shared <Button> only exposes shadcn-style variants.
+  const cls = [
+    'ui-btn',
+    size === 'sm' ? 'ui-btn--sm' : 'ui-btn--md',
+    'ui-btn--primary',
+    'as-btn-primary',
+    loading ? 'is-loading' : '',
+    className,
+  ].filter(Boolean).join(' ')
+  return (
+    <button type="button" className={cls} disabled={disabled || loading} onClick={onClick}>
+      <Save size={size === 'sm' ? 12 : 14} />
+      <span>{children}</span>
+    </button>
+  )
+}
+
+/* ============================================================
+   Page
+   ============================================================ */
+
 export function AdminSettings() {
   const qc = useQueryClient()
+  const toast = useToast()
   const [draft, setDraft] = useState<Record<string, string>>({})
-  const [feedback, setFeedback] = useState<Record<string, string>>({})
 
   const listQ = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: () => api.admin.settings.list(),
   })
 
-  // Pre-fill draft from the row's stored `value`; if absent, fall back to
-  // the synthesized `default_value` so the form opens with the minimax
-  // preset already visible (and NOT making the admin retype it).
+  // Pre-fill draft from the row's stored value; fall back to default_value for
+  // non-secret rows so the form opens with the preset already visible.
   useEffect(() => {
     const items = listQ.data?.items ?? []
     const next: Record<string, string> = {}
     for (const it of items) {
-      if (it.is_secret) continue  // secrets are NEVER auto-filled
+      if (it.is_secret) continue
       if (it.value != null && it.value !== '') {
         next[it.key] = it.value
         continue
@@ -95,30 +230,34 @@ export function AdminSettings() {
         next[it.key] = it.default_value
       }
     }
-    setDraft((d) => ({ ...next, ...d }))  // preserve user-typed secrets
+    setDraft((d) => ({ ...next, ...d })) // preserve user-typed secrets
   }, [listQ.data])
 
   const upsertMut = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) =>
       api.admin.settings.upsert(key, value),
     onSuccess: (_data, vars) => {
-      setFeedback((f) => ({ ...f, [vars.key]: '已保存' }))
+      toast.success(`已保存 · ${vars.key}`)
       qc.invalidateQueries({ queryKey: ['admin', 'settings'] })
       qc.invalidateQueries({ queryKey: ['admin', 'agent', 'config'] })
     },
     onError: (err, vars) => {
-      setFeedback((f) => ({ ...f, [vars.key]: err instanceof Error ? err.message : '保存失败' }))
+      toast.error(`${vars.key}: ${err instanceof Error ? err.message : '保存失败'}`)
     },
   })
 
   const testMut = useMutation({
     mutationFn: (key: string) => api.admin.settings.test(key),
-    onSuccess: (_d, key) => setFeedback((f) => ({ ...f, [key]: '✓ 连通' })),
-    onError: (err, key) => setFeedback((f) => ({ ...f, [key]: `× ${err instanceof Error ? err.message : '失败'}` })),
+    onSuccess: (_d, key) => toast.success(`连通成功 · ${key}`),
+    onError: (err, key) =>
+      toast.error(`连通失败 · ${key}: ${err instanceof Error ? err.message : '失败'}`),
   })
 
   const items: Setting[] = listQ.data?.items ?? []
-  const lookup = useMemo(() => Object.fromEntries(items.map((i) => [i.key, i])), [items])
+  const lookup = useMemo(
+    () => Object.fromEntries(items.map((i) => [i.key, i])),
+    [items],
+  )
   const otherItems = useMemo(
     () => items.filter((i) => !ALL_KNOWN_KEYS.some((k) => k.key === i.key)),
     [items],
@@ -127,147 +266,295 @@ export function AdminSettings() {
   const setDraftFor = (k: string, v: string) =>
     setDraft((d) => ({ ...d, [k]: v }))
 
-  const isPreset = (s: Setting, k: KnownKey) =>
-    !k.key.endsWith('api_key') &&
-    (s.value == null || s.value === '') &&
-    !!s.default_value
+  const persistedValue = (k: string): string => {
+    const row = lookup[k]
+    if (!row) return ''
+    if (row.is_secret) return row.masked ?? ''
+    if (row.value != null && row.value !== '') return row.value
+    return row.default_value ?? ''
+  }
+
+  const isDirty = (key: string): boolean => {
+    const row = lookup[key]
+    const current = draft[key] ?? ''
+    if (!row) return current !== ''
+    if (row.is_secret) return current !== ''
+    return current !== persistedValue(key)
+  }
+
+  const dirtyCountFor = (section: SettingSection) =>
+    section.rows.filter((r) => isDirty(r.key)).length
+
+  const sectionIsEnabled = (section: SettingSection): boolean => {
+    const row = lookup[section.rows[0].key] // .enabled is first row
+    if (!row) return false
+    const v =
+      draft[section.rows[0].key] ??
+      (row.value ?? row.default_value ?? 'false')
+    return v === 'true'
+  }
+
+  const toggleSection = (section: SettingSection, next: boolean) => {
+    const key = section.rows[0].key
+    setDraftFor(key, next ? 'true' : 'false')
+    upsertMut.mutate({ key, value: next ? 'true' : 'false' })
+  }
+
+  const saveSection = async (section: SettingSection) => {
+    for (const row of section.rows) {
+      if (!isDirty(row.key)) continue
+      const v = draft[row.key] ?? ''
+      await upsertMut.mutateAsync({ key: row.key, value: v })
+    }
+  }
+
+  /* ----- Render helpers ----- */
+
+  const renderSkeleton = () => (
+    <div className="as-grid">
+      {[0, 1].map((i) => (
+        <div key={i} className="ui-card ui-card--elevated as-card as-card--skeleton" aria-hidden>
+          <div className="as-card__head">
+            <div className="as-skel as-skel--eyebrow" />
+            <div className="as-skel as-skel--title" />
+            <div className="as-skel as-skel--badge" />
+          </div>
+          <div className="as-card__body">
+            {[0, 1, 2, 3].map((j) => (
+              <div key={j} className="as-skel-row">
+                <div className="as-skel as-skel--label" />
+                <div className="as-skel as-skel--input" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+
+  const renderCard = (section: SettingSection) => {
+    const dirty = dirtyCountFor(section)
+    const enabled = sectionIsEnabled(section)
+    const preset = section.defaults.model
+    const enabledKey = section.rows[0].key
+
+    return (
+      <div
+        key={section.id}
+        className="ui-card ui-card--elevated as-card"
+        data-section={section.id}
+      >
+        <header className="as-card__head">
+          <div className="as-card__head-text">
+            <span className="as-card__eyebrow">
+              {section.icon} {section.eyebrow}
+            </span>
+            <h3 className="as-card__title">{section.title}</h3>
+            <p className="as-card__blurb">{section.blurb}</p>
+          </div>
+          <div className="as-card__head-status">
+            <StatusBadge status="featured">{`预设：${preset}`}</StatusBadge>
+            <StatusBadge status={enabled ? 'published' : 'archived'}>
+              {enabled ? '已启用' : '已停用'}
+            </StatusBadge>
+          </div>
+        </header>
+
+        {dirty > 0 && (
+          <div className="as-dirty" role="status">
+            <span className="as-dirty__count">{dirty} 处未保存</span>
+            <PrimaryButton
+              size="sm"
+              onClick={() => saveSection(section)}
+              loading={upsertMut.isPending}
+            >
+              保存本页
+            </PrimaryButton>
+          </div>
+        )}
+
+        <div className="as-card__body">
+          {section.rows.map((k, idx) => {
+            const row = lookup[k.key]
+            const value = draft[k.key] ?? ''
+            const showBelow = idx !== 0
+
+            if (!showBelow) {
+              // Master toggle row (the .enabled key)
+              return (
+                <div key={k.key} className="as-row as-row--toggle as-row--first">
+                  <div className="as-row__head">
+                    <span className="as-row__label">{k.label}</span>
+                    <span className="as-row__hint">
+                      {row?.description || '整体开关'}
+                    </span>
+                  </div>
+                  <div className="as-row__field">
+                    <Switch
+                      checked={enabled}
+                      onChange={(n) => toggleSection(section, n)}
+                      disabled={upsertMut.isPending}
+                      ariaLabel={`${section.title} ${k.label}`}
+                    />
+                    <span className="as-row__tech">{enabledKey}</span>
+                  </div>
+                </div>
+              )
+            }
+
+            const isSecret = k.kind === 'secret'
+
+            return (
+              <div
+                key={k.key}
+                className={[
+                  'as-row',
+                  isSecret ? 'as-row--secret' : '',
+                  isDirty(k.key) ? 'as-row--dirty' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                <div className="as-row__head">
+                  <span className="as-row__label">{k.label}</span>
+                  <span className="as-row__hint">
+                    {k.hint || row?.description || ''}
+                  </span>
+                </div>
+                <div className="as-row__field">
+                  {k.kind === 'secret' ? (
+                    <SecretInput
+                      value={value}
+                      onChange={(v) => setDraftFor(k.key, v)}
+                      masked={row?.masked ?? null}
+                      hasStored={Boolean(row?.masked)}
+                    />
+                  ) : k.kind === 'textarea' ? (
+                    <textarea
+                      className="as-input as-textarea"
+                      rows={Math.min(6, Math.max(3, value.split('\n').length))}
+                      value={value}
+                      onChange={(e) => setDraftFor(k.key, e.target.value)}
+                      placeholder={row?.description || undefined}
+                    />
+                  ) : (
+                    <input
+                      className="as-input"
+                      type="text"
+                      value={value}
+                      onChange={(e) => setDraftFor(k.key, e.target.value)}
+                      placeholder={row?.default_value ?? ''}
+                    />
+                  )}
+                  {k.kind === 'secret' && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => testMut.mutate(k.key)}
+                      disabled={testMut.isPending || !row?.masked}
+                    >
+                      <span className="as-inline-icon-text">
+                        <Zap size={14} /> 测试连通
+                      </span>
+                    </Button>
+                  )}
+                </div>
+                <span className="as-row__tech">{k.key}</span>
+                {row?.updated_at && row.value != null && row.value !== '' && (
+                  <div className="as-row__meta">
+                    上次更新：{new Date(row.updated_at).toLocaleString('zh-CN')}
+                    {row.updated_by && ` · ${row.updated_by}`}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <footer className="as-card__foot">
+          <PrimaryButton
+            onClick={() => saveSection(section)}
+            loading={upsertMut.isPending}
+          >
+            保存本页
+          </PrimaryButton>
+          <span className="as-card__foot-hint">
+            <Wand2 size={12} /> 任一字段修改后可逐项保存
+          </span>
+        </footer>
+      </div>
+    )
+  }
+
+  const totalDirty = ALL_SECTIONS.reduce((n, s) => n + dirtyCountFor(s), 0)
 
   return (
     <div className="admin-settings">
       <PageHeader
         title="设置"
         description="两个独立的功能模块各自配置一组 LLM 设置；API Key 在服务端 Fernet 加密落库，不会发送到浏览器。"
+        actions={
+          <PrimaryButton
+            onClick={() => ALL_SECTIONS.forEach(saveSection)}
+            loading={upsertMut.isPending}
+            disabled={totalDirty === 0}
+          >
+            {totalDirty === 0 ? '保存全部' : `保存全部 · ${totalDirty}`}
+          </PrimaryButton>
+        }
       />
 
-      {ALL_SECTIONS.map((section) => (
-        <section key={section.title} className="admin-settings__section">
-          <header className="admin-settings__section-head">
-            <h2 className="admin-settings__section-title">
-              {section.icon} {section.title}
-            </h2>
-            <p className="admin-settings__section-blurb">{section.blurb}</p>
-            <div className="admin-settings__preset">
-              <Wand2 size={12} />
-              <span>预设模型</span>
-              <code>{section.defaults.model}</code>
-              <span className="admin-settings__preset-sep">·</span>
-              <code>{section.defaults.baseUrl}</code>
-            </div>
-          </header>
+      {listQ.isLoading && renderSkeleton()}
 
-          <div className="admin-settings__list">
-            {section.rows.map((k) => {
-              const row = lookup[k.key]
-              const persisted = row?.value != null && row.value !== ''
-              const value = draft[k.key] ?? ''
-              return (
-                <Card key={k.key} variant="outlined">
-                  <div className="admin-settings__row">
-                    <label className="admin-settings__label">
-                      <span className="admin-settings__label-text">{k.label}</span>
-                      <span className="admin-settings__key">{k.key}</span>
-                      {row && isPreset(row, k) && (
-                        <span className="admin-settings__preset-chip">预设</span>
-                      )}
-                      {row?.description && (
-                        <span className="admin-settings__desc">{row.description}</span>
-                      )}
-                      {k.hint && (
-                        <span className="admin-settings__hint-inline">{k.hint}</span>
-                      )}
-                    </label>
-                    <div className="admin-settings__field">
-                      {k.kind === 'bool' ? (
-                        <select
-                          value={value || 'false'}
-                          onChange={(e) => setDraftFor(k.key, e.target.value)}
-                        >
-                          <option value="true">启用</option>
-                          <option value="false">关闭</option>
-                        </select>
-                      ) : k.kind === 'secret' ? (
-                        <input
-                          type="password"
-                          placeholder={row?.masked || '尚未配置（请填入新 Key）'}
-                          value={value}
-                          onChange={(e) => setDraftFor(k.key, e.target.value)}
-                        />
-                      ) : k.kind === 'textarea' ? (
-                        <textarea
-                          rows={Math.min(6, Math.max(3, value.split('\n').length))}
-                          value={value}
-                          onChange={(e) => setDraftFor(k.key, e.target.value)}
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          placeholder={row?.default_value ?? undefined}
-                          value={value}
-                          onChange={(e) => setDraftFor(k.key, e.target.value)}
-                        />
-                      )}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        icon={<Save size={14} />}
-                        onClick={() => upsertMut.mutate({ key: k.key, value })}
-                        loading={upsertMut.isPending}
-                      >
-                        保存
-                      </Button>
-                      {k.kind === 'secret' && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon={<Zap size={14} />}
-                          onClick={() => testMut.mutate(k.key)}
-                          disabled={testMut.isPending || !row?.masked}
-                        >
-                          测试连通
-                        </Button>
-                      )}
-                    </div>
-                    {row?.updated_at && persisted && (
-                      <div className="admin-settings__meta">
-                        上次更新：{new Date(row.updated_at).toLocaleString('zh-CN')}
-                        {row.updated_by && ` · ${row.updated_by}`}
-                      </div>
-                    )}
-                    {feedback[k.key] && (
-                      <div className={`admin-settings__feedback ${feedback[k.key].startsWith('×') ? 'admin-settings__feedback--err' : ''}`}>
-                        {feedback[k.key]}
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-        </section>
-      ))}
+      {listQ.isError && (
+        <Empty
+          icon={<ZapOff size={36} strokeWidth={1.25} />}
+          title="无法加载设置"
+          description="请检查后端连接或稍后重试。"
+          action={
+            <Button variant="secondary" onClick={() => listQ.refetch()}>
+              <span className="as-inline-icon-text">
+                <RefreshCw size={14} /> 重试
+              </span>
+            </Button>
+          }
+        />
+      )}
+
+      {!listQ.isLoading && !listQ.isError && (
+        <div className="as-grid">{ALL_SECTIONS.map(renderCard)}</div>
+      )}
 
       {otherItems.length > 0 && (
-        <Card variant="outlined" style={{ marginTop: 'var(--space-5)' }}>
-          <h3 style={{ margin: '0 0 var(--space-3) 0', fontSize: 'var(--type-base)' }}>
-            其他设置（只读）
-          </h3>
-          <table className="admin-table" style={{ margin: 0 }}>
-            <thead>
-              <tr><th>Key</th><th>值</th><th>默认值</th><th>更新时间</th><th>更新人</th></tr>
-            </thead>
-            <tbody>
-              {otherItems.map((i) => (
-                <tr key={i.key}>
-                  <td>{i.key}</td>
-                  <td>{i.is_secret ? i.masked : i.value ?? '—'}</td>
-                  <td style={{ color: 'var(--admin-text-muted)' }}>{i.default_value ?? '—'}</td>
-                  <td>{i.updated_at ? new Date(i.updated_at).toLocaleString('zh-CN') : '—'}</td>
-                  <td>{i.updated_by ?? '—'}</td>
+        <section className="ui-card ui-card--outlined as-other-card">
+          <header className="as-other-card__head">
+            <h3 className="as-other-card__title">其他设置（只读）</h3>
+          </header>
+          <div className="as-other-card__body">
+            <table className="admin-table" style={{ margin: 0 }}>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>值</th>
+                  <th>默认值</th>
+                  <th>更新时间</th>
+                  <th>更新人</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+              </thead>
+              <tbody>
+                {otherItems.map((i) => (
+                  <tr key={i.key}>
+                    <td>{i.key}</td>
+                    <td>{i.is_secret ? i.masked : i.value ?? '—'}</td>
+                    <td style={{ color: 'var(--admin-text-muted)' }}>{i.default_value ?? '—'}</td>
+                    <td>{i.updated_at ? new Date(i.updated_at).toLocaleString('zh-CN') : '—'}</td>
+                    <td>{i.updated_by ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       <div className="admin-settings__hint">

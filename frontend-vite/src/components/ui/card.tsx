@@ -1,12 +1,21 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+export type CardProps = React.HTMLAttributes<HTMLDivElement> & {
+  /** Visual treatment: outlined (default), elevated (with shadow), flat (no border). */
+  variant?: 'outlined' | 'elevated' | 'flat'
+  /** Padding preset; maps to the existing `.ui-card--p-*` classes in global.css. */
+  padding?: 'none' | 'sm' | 'md' | 'lg'
+}
+
+const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, variant, padding, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        "rounded-xl border border-gray-200 bg-white text-gray-900 shadow-sm transition-shadow",
+        "ui-card",
+        variant ? `ui-card--${variant}` : 'ui-card--outlined',
+        padding ? `ui-card--p-${padding}` : undefined,
         className
       )}
       {...props}
@@ -17,14 +26,14 @@ Card.displayName = "Card"
 
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
+    <div ref={ref} className={cn("ui-card__header", className)} {...props} />
   )
 )
 CardHeader.displayName = "CardHeader"
 
-const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
+const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn("text-xl font-semibold leading-none tracking-tight font-serif", className)} {...props} />
+    <h3 ref={ref} className={cn("ui-card__title", className)} {...props} />
   )
 )
 CardTitle.displayName = "CardTitle"
