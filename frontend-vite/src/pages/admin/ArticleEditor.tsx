@@ -78,6 +78,24 @@ export function ArticleEditor() {
   } | null>(null)
   const toast = useToast()
 
+  // Whether to auto-run the AI 排版 flow after a successful .docx import.
+  // Persisted in localStorage so admins opt in/out once across sessions.
+  const [autoTypeset, setAutoTypeset] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('hbsc-article-auto-typeset') !== 'false'
+    } catch {
+      return true
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hbsc-article-auto-typeset', autoTypeset ? 'true' : 'false')
+    } catch {
+      // localStorage 不可用（隐私模式 / SSR）时静默回退，仅本次会话有效
+    }
+  }, [autoTypeset])
+
   // Read article_typesetter.* settings to decide whether the AI 排版 button
   // is enabled. We don't need the key value — just whether it's configured.
   const typesetterConfigQ = useQuery({
