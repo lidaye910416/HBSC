@@ -116,12 +116,24 @@ def _article_to_dict(a: Article, include_content: bool = True) -> dict:
 
 # ============== ARTICLES ==============
 
+# Whitelists for sort params — accept only known columns/directions so we
+# never feed user input straight into order_by().
+_SORT_COLUMNS = {
+    "updated_at": Article.updated_at,
+    "published_at": Article.published_at,
+    "title": Article.title,
+}
+_SORT_DIRS = {"asc", "desc"}
+
+
 @router.get("/articles")
 def list_articles(
     status_: Optional[str] = None,
     category: Optional[str] = None,
     q: Optional[str] = None,
     featured: Optional[bool] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: Optional[str] = None,
     page: int = 1,
     per_page: int = 20,
     db: Session = Depends(get_db),
@@ -137,8 +149,17 @@ def list_articles(
     safe_q = _validate_search_q(q)
     if safe_q:
         query = query.filter(Article.title.ilike(f"%{safe_q}%", escape="\\"))
+
+    # Sort: default = updated_at desc. Bad values fall back to the default
+    # rather than 422-ing — keeps the admin UI forgiving when fields rename.
+    col = _SORT_COLUMNS.get(sort_by or "", _SORT_COLUMNS["updated_at"])
+    direction = (sort_dir or "desc").lower()
+    if direction not in _SORT_DIRS:
+        direction = "desc"
+    order_fn = col.desc if direction == "desc" else col.asc
+
     total = query.count()
-    items = query.order_by(Article.published_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    items = query.order_by(order_fn()).offset((page - 1) * per_page).limit(per_page).all()
     return {
         "items": [_article_to_dict(a) for a in items],
         "total": total,

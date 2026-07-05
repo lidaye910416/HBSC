@@ -234,7 +234,7 @@ export const api = {
       }> =>
         request('/api/public/agent/config'),
       execute: (messages: Array<{ role: string; content: string }>) =>
-        request('/api/public/agent/execute', {
+        request<{ content: string }>('/api/public/agent/execute', {
           method: 'POST',
           body: JSON.stringify({ messages }),
         }),
@@ -248,12 +248,19 @@ export const api = {
 
   admin: {
     articles: {
-      list: (params?: { status?: string; category?: string; q?: string; featured?: boolean; page?: number; per_page?: number }) => {
+      list: (params?: {
+        status?: string; category?: string; q?: string; featured?: boolean;
+        sort_by?: 'updated_at' | 'published_at' | 'title';
+        sort_dir?: 'asc' | 'desc';
+        page?: number; per_page?: number;
+      }) => {
         const sp = new URLSearchParams()
         if (params?.status) sp.set('status', params.status)
         if (params?.category) sp.set('category', params.category)
         if (params?.q) sp.set('q', params.q)
         if (params?.featured !== undefined) sp.set('featured', String(params.featured))
+        if (params?.sort_by) sp.set('sort_by', params.sort_by)
+        if (params?.sort_dir) sp.set('sort_dir', params.sort_dir)
         if (params?.page) sp.set('page', String(params.page))
         if (params?.per_page) sp.set('per_page', String(params.per_page))
         return request<PaginatedResponse<ArticleList & { status: string; featured: boolean; updated_at?: string }>>('/api/admin/articles?' + sp.toString())
@@ -299,7 +306,10 @@ export const api = {
           images: Array<{ url: string; filename: string; size: number; original_name: string }>
         }>
       },
-      typeset: (content_markdown: string): Promise<{
+      typeset: (
+        content_markdown: string,
+        options?: { style?: 'academic' | 'business' | 'concise'; variant?: number },
+      ): Promise<{
         content_markdown: string
         warnings: string[]
         model: string
@@ -307,7 +317,11 @@ export const api = {
       }> =>
         request('/api/admin/articles/typeset', {
           method: 'POST',
-          body: JSON.stringify({ content_markdown }),
+          body: JSON.stringify({
+            content_markdown,
+            style: options?.style,
+            variant: options?.variant,
+          }),
         }),
     },
     journals: {

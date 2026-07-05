@@ -7,6 +7,7 @@ cleaned markdown.
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -31,6 +32,17 @@ MAX_TYPESET_BYTES = 1 * 1024 * 1024  # 1 MB (matches page-agent convention)
 
 class TypesetRequest(BaseModel):
     content_markdown: str = Field(..., min_length=0, max_length=1_000_000)
+    style: Optional[str] = Field(
+        default=None,
+        description="Optional voice: academic | business | concise.",
+        max_length=32,
+    )
+    variant: Optional[int] = Field(
+        default=None,
+        description="Bump to force a fresh generation that bypasses any cache.",
+        ge=0,
+        le=1_000_000,
+    )
 
 
 class TypesetResponse(BaseModel):
@@ -57,7 +69,11 @@ async def typeset_article(
         _send("payload_too_large", "请求体超过 1MB 限制", 413)
 
     try:
-        result = await _typeset(body.content_markdown, db=db)
+        # variant is a cache-busting knob the admin UI bumps to force a
+        # fresh generation. The service intentionally ignores it; we accept
+        # it here so the request schema stays forward-compatible with any
+        # future server-side dedupe.
+        result = await _typeset(body.content_markdown, db=db, style=body.style)
     except TypesetError as e:
         _send(e.code, e.message, 409)
     except LLMUnavailable:

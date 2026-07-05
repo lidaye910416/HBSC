@@ -9,7 +9,10 @@ import { imageCommand } from '../../components/admin/Mde/insertImagePlugin'
 import { tableCommand, csvCommand } from '../../components/admin/Mde/insertTablePlugin'
 import { ArticleBody } from '../../components/ArticleBody'
 import { PageHeader, Button, Card } from '../../components/ui'
-import { TypesetPreviewDialog } from '../../components/admin/TypesetPreviewDialog'
+import {
+  TypesetPreviewDialog,
+  type TypesetStyle,
+} from '../../components/admin/TypesetPreviewDialog'
 import { useToast } from '../../components/admin/Toast'
 import './ArticleList.css'
 
@@ -66,7 +69,12 @@ export function ArticleEditor() {
   const [typesetBusy, setTypesetBusy] = useState(false)
   const [typesetError, setTypesetError] = useState('')
   const [typesetDialog, setTypesetDialog] = useState<{
-    before: string; after: string; warnings: string[]; model: string; promptVersion: string
+    before: string;
+    after: string;
+    warnings: string[];
+    model: string;
+    promptVersion: string;
+    style: TypesetStyle;
   } | null>(null)
   const toast = useToast()
 
@@ -115,19 +123,44 @@ export function ArticleEditor() {
     }
   }
 
-  const handleTypeset = async () => {
+  const handleTypeset = async (style: TypesetStyle = 'academic') => {
     setTypesetBusy(true)
     setTypesetError('')
     const before = form.content
     try {
-      const res = await api.admin.articles.typeset(before)
+      const res = await api.admin.articles.typeset(before, { style })
       setTypesetDialog({
         before,
         after: res.content_markdown,
         warnings: res.warnings || [],
         model: res.model,
         promptVersion: res.prompt_version,
+        style,
       })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'AI 排版失败'
+      setTypesetError(msg)
+      toast.error(msg)
+    } finally {
+      setTypesetBusy(false)
+    }
+  }
+
+  const handleTypesetRegenerate = async ({ style, variant }: { style: TypesetStyle; variant: number }) => {
+    setTypesetBusy(true)
+    setTypesetError('')
+    try {
+      const res = await api.admin.articles.typeset(form.content, { style, variant })
+      setTypesetDialog((d) =>
+        d ? {
+          ...d,
+          after: res.content_markdown,
+          warnings: res.warnings || [],
+          model: res.model,
+          promptVersion: res.prompt_version,
+          style,
+        } : d,
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'AI 排版失败'
       setTypesetError(msg)
@@ -143,13 +176,6 @@ export function ArticleEditor() {
   const presetCategory = searchParams.get('category')
   const presetJournalIdNum = presetJournalId ? parseInt(presetJournalId, 10) : null
 
-  useEffect(() => {
-    if (isNew && presetCategory && CATEGORIES.includes(presetCategory)) {
-      setForm((f) => ({ ...f, category: presetCategory }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const { data: existing, isLoading } = useQuery({
     queryKey: ['admin', 'articles', id],
     queryFn: () => api.admin.articles.get(parseInt(id!, 10)),
@@ -157,6 +183,7 @@ export function ArticleEditor() {
   })
 
   useEffect(() => {
+    // Editing an existing article: hydrate form from server payload.
     if (existing) {
       setForm({
         title: existing.title,
@@ -173,8 +200,15 @@ export function ArticleEditor() {
         tags: (existing.tags || []).join(', '),
       })
       setSlugTouched(true)
+      return
     }
-  }, [existing])
+    // Creating a new article: apply ?category=… prefill (from JournalDetail
+    // "新建" button). Only runs when we are in "new" mode AND no server
+    // record has loaded.
+    if (isNew && presetCategory && CATEGORIES.includes(presetCategory)) {
+      setForm((f) => (f.category === presetCategory ? f : { ...f, category: presetCategory }))
+    }
+  }, [existing, presetCategory, isNew])
 
   // True when the in-memory form differs from the last persisted record
   // (only meaningful for edits, not creates). Drives the "(尚未保存)" badge
@@ -320,7 +354,7 @@ export function ArticleEditor() {
             <Button
               variant="secondary"
               icon={<Sparkles size={14} />}
-              onClick={handleTypeset}
+              onClick={() => { void handleTypeset() }}
               disabled={typesetBusy || !typesetterReady}
               loading={typesetBusy}
               title={typesetterReady ? '使用配置的 LLM 清洗当前正文' : typesetterBlockedReason}
@@ -518,14 +552,19 @@ export function ArticleEditor() {
           onClose={() => setTypesetDialog(null)}
           onApply={(cleaned) => {
             update('content', cleaned)
-            setTypesetDialog(null)
+            // Don't close the dialog on Apply — admin may want to compare
+            // the applied content vs the dialog snapshot, or hit Revert.
             toast.success('已应用 AI 排版')
           }}
+          slug={form.slug || 'draft'}
           before={typesetDialog.before}
           after={typesetDialog.after}
           warnings={typesetDialog.warnings}
           model={typesetDialog.model}
           promptVersion={typesetDialog.promptVersion}
+          initialStyle={typesetDialog.style}
+          onRegenerate={handleTypesetRegenerate}
+          regenerating={typesetBusy}
         />
       )}
     </div>

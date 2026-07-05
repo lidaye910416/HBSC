@@ -156,10 +156,56 @@ def _resolve_config(db: Session) -> tuple[str, str, str, str]:
     return api_key, model, base_url, system_prompt
 
 
+# ----- Style overlay ---------------------------------------------------------
+# Optional style hint from the admin UI. Each value appends a short block to
+# the configured system_prompt so the LLM adjusts voice without us maintaining
+# three full prompt presets.
+STYLE_OVERLAYS: dict[str, str] = {
+    "academic": (
+        "\n\n[Style: academic]\n"
+        "- 保持学术严谨语气，使用第三人称叙述\n"
+        "- 保留所有术语、引用与脚注，不简化专业概念\n"
+        "- 段落结构清晰，必要时使用编号或项目符号组织论证\n"
+    ),
+    "business": (
+        "\n\n[Style: business]\n"
+        "- 面向管理与决策层读者，语气专业且务实\n"
+        "- 突出关键结论、行动建议与可量化指标\n"
+        "- 减少抽象论述，必要时使用表格或要点列表\n"
+    ),
+    "concise": (
+        "\n\n[Style: concise]\n"
+        "- 大幅压缩篇幅，保留核心观点与必要数据\n"
+        "- 删除冗余修饰、重复论述与离题段落\n"
+        "- 每段不超过 3 句，全文尽量控制在原文 60% 以内\n"
+    ),
+}
+
+
+def _apply_style(system_prompt: str, style: str | None) -> str:
+    """Append a style-specific block to ``system_prompt``.
+
+    Unknown / missing values leave the prompt unchanged so old callers stay
+    stable (no behavioural drift) and stray UI values never 500.
+    """
+    if not style:
+        return system_prompt
+    overlay = STYLE_OVERLAYS.get(style.strip().lower())
+    if not overlay:
+        return system_prompt
+    return system_prompt + overlay
+
+
 # ----- Entry point ------------------------------------------------------------
-async def typeset_markdown(content: str, *, db: Session) -> TypesetResult:
-    """Clean ``content`` via the configured typesetter LLM."""
+async def typeset_markdown(content: str, *, db: Session, style: str | None = None) -> TypesetResult:
+    """Clean ``content`` via the configured typesetter LLM.
+
+    ``style`` (optional): one of "academic" / "business" / "concise". Appends a
+    short instruction block to the configured system_prompt so the LLM adjusts
+    voice without us maintaining three full presets.
+    """
     api_key, model, base_url, system_prompt = _resolve_config(db)
+    effective_prompt = _apply_style(system_prompt, style)
 
     warnings: list[str] = []
     user_content = content or ""
@@ -168,7 +214,7 @@ async def typeset_markdown(content: str, *, db: Session) -> TypesetResult:
         warnings.append(f"原文超过 {MAX_INPUT_CHARS} 字符，已截断")
 
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": effective_prompt},
         {"role": "user", "content": user_content},
     ]
 
@@ -192,5 +238,5 @@ async def typeset_markdown(content: str, *, db: Session) -> TypesetResult:
         content_markdown=cleaned,
         warnings=warnings,
         model=model,
-        prompt_version=str(len(system_prompt.encode("utf-8"))),
+        prompt_version=str(len(effective_prompt.encode("utf-8"))),
     )

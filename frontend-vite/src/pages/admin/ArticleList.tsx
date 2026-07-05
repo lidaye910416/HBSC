@@ -11,23 +11,53 @@ import {
 } from '../../components/ui'
 import './ArticleList.css'
 
+const CATEGORIES = ['战略与政策', '技术与产业', '方案与思考', '动态与文化']
+
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'updated_at_desc', label: '更新时间 ↓' },
+  { value: 'updated_at_asc', label: '更新时间 ↑' },
+  { value: 'published_at_desc', label: '发布时间 ↓' },
+  { value: 'published_at_asc', label: '发布时间 ↑' },
+  { value: 'title_asc', label: '标题 A→Z' },
+]
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), delay)
+    return () => window.clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
 export function ArticleList() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const toast = useToast()
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
+  const [category, setCategory] = useState('')
+  const [sortBy, setSortBy] = useState<'updated_at' | 'published_at' | 'title'>('updated_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [featuredFilter, setFeaturedFilter] = useState<'' | 'true' | 'false'>('')
   const [page, setPage] = useState(1)
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null)
   const tableRef = useRef<HTMLTableElement>(null)
 
+  // Debounce search input: keep typing visually instant by binding to `q`,
+  // but only fire the backend query with `debouncedQ` so we don't slam the
+  // server on every keystroke.
+  const debouncedQ = useDebouncedValue(q, 250)
+
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'articles', { status, q, featuredFilter, page }],
+    queryKey: ['admin', 'articles', { status, q: debouncedQ, category, featuredFilter, sortBy, sortDir, page }],
     queryFn: () => api.admin.articles.list({
       status: status || undefined,
-      q: q || undefined,
+      q: debouncedQ || undefined,
+      category: category || undefined,
       featured: featuredFilter === '' ? undefined : featuredFilter === 'true',
+      sort_by: sortBy,
+      sort_dir: sortDir,
       page,
       per_page: 20,
     }),
@@ -99,6 +129,14 @@ export function ArticleList() {
           />
           <select
             className="ui-toolbar__select"
+            value={category}
+            onChange={(e) => { setCategory(e.target.value); setPage(1) }}
+          >
+            <option value="">全部分类</option>
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            className="ui-toolbar__select"
             value={status}
             onChange={(e) => { setStatus(e.target.value); setPage(1) }}
           >
@@ -114,6 +152,19 @@ export function ArticleList() {
             <option value="">全部精选</option>
             <option value="true">仅精选</option>
             <option value="false">非精选</option>
+          </select>
+          <select
+            className="ui-toolbar__select"
+            value={`${sortBy}_${sortDir}`}
+            onChange={(e) => {
+              const [b, d] = e.target.value.split('_') as ['updated_at' | 'published_at' | 'title', 'asc' | 'desc']
+              setSortBy(b)
+              setSortDir(d)
+              setPage(1)
+            }}
+            aria-label="排序方式"
+          >
+            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </ToolbarGroup>
       </Toolbar>
@@ -159,7 +210,9 @@ export function ArticleList() {
                   <td>{a.category || '—'}</td>
                   <td><StatusBadge status={(a.status === 'published' ? 'published' : 'draft')} /></td>
                   <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>
-                    {a.published_at ? new Date(a.published_at).toLocaleDateString('zh-CN') : '—'}
+                    {a.updated_at || a.published_at
+                      ? new Date(a.updated_at || a.published_at!).toLocaleDateString('zh-CN')
+                      : '—'}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
