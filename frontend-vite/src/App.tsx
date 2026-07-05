@@ -22,7 +22,6 @@ import { JournalDetail } from './pages/admin/JournalDetail'
 import { FeaturedArticles } from './pages/admin/FeaturedArticles'
 import { MediaLibrary } from './pages/admin/MediaLibrary'
 import { AdminSettings } from './pages/admin/AdminSettings'
-import { AdminTypeset } from './pages/admin/AdminTypeset'
 import NotFound from './pages/NotFound'
 import { ToastProvider } from './components/admin/Toast'
 import './styles/global.css'
@@ -107,7 +106,6 @@ export default function App() {
             <Route path="journals/:id" element={<JournalDetail />} />
             <Route path="journals/:id/edit" element={<JournalEditor />} />
             <Route path="media" element={<MediaLibrary />} />
-            <Route path="typeset" element={<AdminTypeset />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>
