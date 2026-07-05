@@ -1,6 +1,7 @@
 """简单的内存 token-bucket 限流中间件。
 
-仅使用标准库实现，按客户端 IP 限流。线程安全。
+仅使用标准库实现，按 (客户端 IP, 端点 key) 限流——每个装饰的端点拥有
+独立的 bucket，因此 /execute 和 /llm 不会互相消耗配额。线程安全。
 仅支持 IPv4（按 "." 分割）。
 """
 import threading
@@ -10,8 +11,10 @@ from typing import Callable, Dict, Tuple
 
 from fastapi import HTTPException, Request, status
 
-# 客户端 IP -> (剩余 tokens, 上次补充时间)
-_buckets: Dict[str, Tuple[float, float]] = {}
+# (客户端 IP, 端点 key) -> (剩余 tokens, 上次补充时间)
+# 端点 key 默认用被装饰函数的 __qualname__，也可以通过 key= 参数显式覆盖
+# 以保证同一物理端点共享 bucket 即便被多个装饰器函数包装。
+_buckets: Dict[Tuple[str, str], Tuple[float, float]] = {}
 _lock = threading.Lock()
 
 
@@ -39,14 +42,26 @@ def _refill(bucket: Tuple[float, float], max_calls: int, window_seconds: float, 
     return tokens, now
 
 
-def rate_limit(max_calls: int, window_seconds: int):
-    """装饰器：基于 IP 的 token bucket 限流。
+def reset_buckets() -> None:
+    """清空所有 token-bucket。供测试 conftest / 调试使用。"""
+    with _lock:
+        _buckets.clear()
+
+
+def rate_limit(max_calls: int, window_seconds: int, *, key: str | None = None):
+    """装饰器：基于 (IP, 端点 key) 的 token bucket 限流。
 
     超过限制抛出 HTTPException(429, "Rate limit exceeded")。
+
+    关键改动（v2）：bucket 按 (client_ip, key) 隔离——
+    /execute 和 /llm 装饰器即便挂在同一个 IP 上也互不影响，
+    避免一次 operate 的多步 /llm 调用把 /execute 的配额耗光。
     """
     window = float(window_seconds)
 
     def decorator(func: Callable):
+        endpoint_key = key or func.__qualname__
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             # 在 kwargs 中查找 Request 对象
@@ -62,17 +77,18 @@ def rate_limit(max_calls: int, window_seconds: int):
                 return func(*args, **kwargs)
 
             client_ip = _get_client_ip(request)
+            bucket_id = (client_ip, endpoint_key)
             now = time.monotonic()
 
             with _lock:
-                bucket = _buckets.get(client_ip)
+                bucket = _buckets.get(bucket_id)
                 if bucket is None:
                     # 首次请求，初始 tokens 为 max_calls
-                    _buckets[client_ip] = (float(max_calls), now)
+                    _buckets[bucket_id] = (float(max_calls), now)
                     tokens = float(max_calls)
                 else:
                     tokens, last_refill = _refill(bucket, max_calls, window, now)
-                    _buckets[client_ip] = (tokens, now)
+                    _buckets[bucket_id] = (tokens, now)
 
                 if tokens < 1:
                     raise HTTPException(
@@ -81,7 +97,7 @@ def rate_limit(max_calls: int, window_seconds: int):
                     )
 
                 # 消耗一个 token
-                _buckets[client_ip] = (tokens - 1, now)
+                _buckets[bucket_id] = (tokens - 1, now)
 
             return func(*args, **kwargs)
 

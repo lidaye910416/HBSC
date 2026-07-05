@@ -42,6 +42,7 @@ from ..services.page_agent_config import (
     load_chat_config,
     is_allowed_url,
 )
+from ..config import settings
 
 
 router = APIRouter(prefix="/api/public/agent", tags=["public-agent"])
@@ -162,7 +163,7 @@ def _send(code: str, message: str, status: int) -> None:
 
 
 @router.post("/execute")
-@rate_limit(max_calls=10, window_seconds=60)
+@rate_limit(max_calls=30, window_seconds=60, key="public_agent_execute")
 async def execute_public_llm(
     request: Request,
     body: ExecuteRequest,
@@ -241,18 +242,54 @@ class AgentLLMRequest(BaseModel):
     init: dict
 
 
-def _is_same_origin_referer(referer: str | None, expected_host: str) -> bool:
-    """Accept empty Referer (curl, native fetch); reject cross-origin Referer."""
+def _is_same_origin_referer(referer: str | None, allowed_hosts: set[str]) -> bool:
+    """Accept empty Referer (curl, native fetch); reject cross-origin Referer.
+
+    The "same origin" we care about is the public SPA origin — not the
+    upstream LLM provider's host. A browser will send the page's own origin
+    in the Referer header, never the upstream host, so we compare against
+    `allowed_hosts` derived from `settings.ALLOWED_ORIGINS` (the same list
+    already used by CORS).
+
+    Empty / missing Referer is accepted for the same reason CORS allows
+    `no-cors` requests: privacy-mode browsers, native fetch, and `curl` all
+    omit the header. The URL whitelist + rate-limit + payload cap are the
+    real defenses; this check is a cheap belt-and-braces on top.
+    """
     if not referer:
         return True
     try:
-        return urlparse(referer).hostname == expected_host
+        host = urlparse(referer).hostname
     except ValueError:
         return False
+    if not host:
+        return True  # malformed-but-not-malicious; allow (mirrors empty)
+    return host.lower() in allowed_hosts
+
+
+def _allowed_referer_hosts() -> set[str]:
+    """Derive the allowed Referer host set from settings.ALLOWED_ORIGINS.
+
+    Entries that fail to parse (empty, no host) are silently dropped so a
+    misconfigured .env cannot accidentally block all legitimate traffic.
+    """
+    hosts: set[str] = set()
+    for origin in settings.ALLOWED_ORIGINS:
+        try:
+            host = urlparse(origin).hostname
+        except ValueError:
+            continue
+        if host:
+            hosts.add(host.lower())
+    return hosts
 
 
 @router.post("/llm")
-@rate_limit(max_calls=5, window_seconds=60)
+# page-agent's execute() can chain many steps (max_steps=20 default); each
+# step makes one /llm call. 60 calls / minute leaves room for two back-to-
+# back multi-step operates per IP without throttling, while still blocking
+# runaway scrapers.
+@rate_limit(max_calls=60, window_seconds=60, key="public_agent_llm")
 async def agent_llm(
     request: Request,
     body: AgentLLMRequest,
@@ -297,9 +334,8 @@ async def agent_llm(
     if not is_allowed_url(body.url, cfg.base_url):
         _send("url_not_allowed", "上游 URL 不在 base_url 白名单内", 403)
 
-    base_host = urlparse(cfg.base_url).hostname or ""
     referer = request.headers.get("referer")
-    if not _is_same_origin_referer(referer, base_host):
+    if not _is_same_origin_referer(referer, _allowed_referer_hosts()):
         _send("referer_not_allowed", "Referer 不匹配同源", 403)
 
     # ALSO bound the upstream body so a small wrapper around a huge body can't bypass.

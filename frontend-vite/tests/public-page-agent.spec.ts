@@ -1,6 +1,60 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('public page-agent FAB', () => {
+  test('FAB uses page-coordinated light glassy style', async ({ page }) => {
+    // Regression: the FAB used to be a heavy dark-ink gradient that broke
+    // visual continuity with the warm-white content pages. After the style
+    // refresh it must:
+    //  - have a translucent (alpha < 1) background — glassy, not solid
+    //  - sit on top of `backdrop-filter: blur(...)` — verified by reading
+    //    the computed style on the FAB element itself
+    //  - show the gold-accent border with high enough alpha to be visible
+    //    on the warm-white page background
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+        }),
+      }),
+    )
+    await page.goto('/')
+    const fab = page.getByTestId('page-agent-fab')
+    await expect(fab).toBeVisible({ timeout: 5_000 })
+
+    const styles = await fab.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return {
+        backgroundColor: cs.backgroundColor,
+        backdropFilter: cs.backdropFilter || (cs as unknown as { webkitBackdropFilter?: string }).webkitBackdropFilter || '',
+        borderColor: cs.borderColor,
+        color: cs.color,
+      }
+    })
+
+    // Translucent background: alpha channel < 1
+    const bg = styles.backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1]?.split(',').map((s) => s.trim()) ?? []
+    const alpha = bg.length === 4 ? parseFloat(bg[3]) : 1
+    expect(alpha, 'FAB background must be translucent').toBeLessThan(1)
+
+    // Backdrop blur must be present (24px in the spec)
+    expect(styles.backdropFilter, 'FAB must use backdrop-filter blur').toMatch(/blur\(/)
+
+    // Gold border (#C9A84C) must be present — RGB ≈ 201, 168, 76
+    const border = styles.borderColor.match(/rgba?\(([^)]+)\)/)?.[1]?.split(',').map((s) => s.trim()) ?? []
+    expect(border[0]).toBe('201')
+    expect(border[1]).toBe('168')
+
+    // Text colour must be deep ink (#1A1A2E = 26, 26, 46), not warm-white
+    const text = styles.color.match(/rgba?\(([^)]+)\)/)?.[1]?.split(',').map((s) => s.trim()) ?? []
+    expect(text[0]).toBe('26')
+    expect(text[1]).toBe('26')
+    expect(text[2]).toBe('46')
+  })
+
   test('FAB appears on homepage after admin enables + key is set', async ({ page }) => {
     // Intercept /api/public/agent/config to simulate enabled=true.
     await page.route('**/api/public/agent/config', (route) =>
@@ -396,18 +450,26 @@ test.describe('public page-agent FAB', () => {
     await page.getByTestId('page-agent-operate-btn').click()
     await expect(page.getByText(/已完成/).first()).toBeVisible({ timeout: 8_000 })
 
-    // Force the dispose — this is what HMR / component remount would do
-    await page.evaluate(async () => {
-      const mod = (await import('/src/lib/pageAgentSession.ts')) as {
-        disposeSession: () => void
+    // Force the dispose — this is what HMR / component remount would do.
+    // Use the dev-only window handle (NOT a dynamic import) so we
+    // definitely hit the *same* module instance the app uses. A dynamic
+    // import can land on a fresh instance in Vite, which would dispose
+    // a phantom agent and leave the app's singleton untouched — masking
+    // the bug the test is meant to catch.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __hbsc_pageAgentSession?: { disposeSession: () => void }
       }
-      mod.disposeSession()
+      if (!w.__hbsc_pageAgentSession) {
+        throw new Error('__hbsc_pageAgentSession not exposed; dev hook missing')
+      }
+      w.__hbsc_pageAgentSession.disposeSession()
     })
 
     // Second operate: with the bug, this throws "PageAgent has been
     // disposed" and shows up as an error in the chat. With the fix,
-    // sendOperate catches the disposed error, calls acquire() to get a
-    // fresh agent, and retries — so it succeeds.
+    // sendOperate catches the disposed error, polls acquire() a few
+    // times to ride out transient races, and retries — so it succeeds.
     await page.getByTestId('page-agent-input').fill('第二轮')
     await page.getByTestId('page-agent-operate-btn').click()
     await expect(page.getByText(/已完成/).first()).toBeVisible({ timeout: 8_000 })
@@ -415,6 +477,88 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByText(/已完成/)).toHaveCount(2, { timeout: 5_000 })
 
     // The disposed error string must NEVER appear
+    await expect(page.getByText(/PageAgent has been disposed/)).toHaveCount(0)
+    // The misleading "页面助手刚被刷新" toast must NEVER appear in a
+    // recoverable race — that's the user-facing bug this whole fix is
+    // about. (It's still an acceptable fallback for truly unrecoverable
+    // scenarios, but the between-actions dispose here IS recoverable.)
+    await expect(page.getByText(/页面助手刚被刷新/)).toHaveCount(0)
+  })
+
+  test('operate-mode: clicking the empty-prompt "最新一期的文章列表" never shows "页面助手刚被刷新"', async ({ page }) => {
+    // Regression for the user-reported bug: opening the AI assistant,
+    // clicking the empty-prompt chip "帮我跳到最新一期的文章列表" and
+    // then "让他操作" produced a misleading "页面助手刚被刷新，请重试一次"
+    // toast — even though no explicit 清空 or HMR had happened.
+    //
+    // Root cause: the recovery in sendOperate() only tried acquire()
+    // once, so any transient race (e.g. disposeSession racing an
+    // in-flight IIFE) surfaced the "刷新" toast. The fix polls acquire()
+    // up to 5 times with 120ms spacing before giving up.
+    //
+    // This test doesn't try to reproduce the race exactly (it's
+    // microsecond-level timing); instead it asserts the
+    // success-path invariant: the empty prompt + 让他操作 click must
+    // NEVER produce the misleading "页面助手刚被刷新" toast, even when
+    // the LLM returns a successful response.
+
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+          system_prompt: '',
+        }),
+      }),
+    )
+    await page.route('**/api/public/agent/llm', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        // Shape matches the "done" tool call page-agent's autoFixer
+        // accepts (the action key is "done" inside an "action" envelope).
+        body: JSON.stringify({
+          choices: [{
+            message: {
+              tool_calls: [{
+                function: {
+                  name: 'AgentOutput',
+                  arguments: JSON.stringify({
+                    evaluation_previous_goal: 'noop',
+                    memory: 'noop',
+                    next_goal: 'noop',
+                    action: { done: { text: '已跳转到最新一期的文章列表。', success: true } },
+                  }),
+                },
+              }],
+            },
+            finish_reason: 'tool_calls',
+          }],
+        }),
+      }),
+    )
+
+    await page.goto('/')
+    // Wait for the FAB to be visible before clicking — `force: true`
+    // bypasses actionability but the element must still exist. The
+    // singleton's lazy agent creation can take a beat on cold start.
+    await expect(page.getByTestId('page-agent-fab')).toBeVisible({ timeout: 30_000 })
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    // Wait for the panel to render before interacting with it
+    await expect(page.getByTestId('page-agent-panel')).toBeVisible({ timeout: 10_000 })
+
+    // Click the empty-prompt chip — this is the exact path the user
+    // took when they reported the bug.
+    await page.getByRole('button', { name: '帮我跳到最新一期的文章列表' }).click()
+    await page.getByTestId('page-agent-operate-btn').click()
+
+    // The panel must show a success bubble, not a misleading refresh
+    // toast. (Page-agent may take a few seconds for the LLM round-trip.)
+    await expect(page.getByText(/已完成/).first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByText(/页面助手刚被刷新/)).toHaveCount(0)
     await expect(page.getByText(/PageAgent has been disposed/)).toHaveCount(0)
   })
 })

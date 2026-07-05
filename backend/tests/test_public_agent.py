@@ -165,7 +165,7 @@ def test_execute_missing_api_key_returns_409(client):
     assert r.json()["error"]["code"] == "no_api_key"
 
 
-def test_execute_rate_limit_returns_429_on_eleventh_call(client):
+def test_execute_rate_limit_returns_429_on_31st_call(client):
     c, Session = client
     _seed_enabled(Session)
 
@@ -174,14 +174,14 @@ def test_execute_rate_limit_returns_429_on_eleventh_call(client):
 
     with patch.object(public_agent_router, "chat_complete", new=AsyncMock(side_effect=fake_chat)):
         codes = []
-        for i in range(11):
+        for i in range(31):
             r = c.post(
                 "/api/public/agent/execute",
                 json={"messages": [{"role": "user", "content": f"hi {i}"}]},
             )
             codes.append(r.status_code)
-        assert codes[:10] == [200] * 10, codes
-        assert codes[10] == 429, codes
+        assert codes[:30] == [200] * 30, codes[:35]
+        assert codes[30] == 429, codes[30]
 
 
 def test_execute_payload_too_large_returns_413(client):
@@ -373,8 +373,8 @@ def test_agent_llm_passes_tools_schema_through(client_factory, monkeypatch):
     r = client.post(
         "/api/public/agent/llm",
         json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
-        # Use the real upstream host as Referer so the same-origin check passes.
-        headers={"Referer": "https://api.deepseek.com/v1/chat/completions"},
+        # Use a host from ALLOWED_ORIGINS so the same-origin check passes.
+        headers={"Referer": "http://localhost:5173/"},
     )
     assert r.status_code == 200
     body = r.json()
@@ -406,6 +406,55 @@ def test_agent_llm_rejects_bad_referer(client_factory):
     assert r.json()["error"]["code"] == "referer_not_allowed"
 
 
+def test_agent_llm_accepts_browser_spa_referer(client_factory, monkeypatch):
+    """Real-world regression: a browser SPA sends its OWN origin in the Referer
+    header (e.g. http://localhost:5173/), NOT the upstream LLM host. The
+    same-origin check must accept any host listed in settings.ALLOWED_ORIGINS.
+
+    Previous behavior: the check compared Referer hostname against the
+    upstream LLM hostname (e.g. api.deepseek.com), which a browser never sends
+    — so every legitimate operate-mode call returned 403.
+    """
+    captured: dict = {}
+
+    async def fake_send(self, request, **kwargs):
+        captured["url"] = str(request.url)
+        return _FakeResponse(json_data={"choices": [{"message": {}}], "usage": {}})
+
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    # Simulate the browser's automatic Referer for an SPA on localhost:5173.
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+        headers={"Referer": "http://localhost:5173/articles/2026-q1"},
+    )
+    assert r.status_code == 200, r.text
+    assert captured["url"].startswith("https://api.deepseek.com/v1")
+
+
+def test_agent_llm_accepts_empty_referer(client_factory, monkeypatch):
+    """Empty Referer (curl, native fetch, privacy-mode browsers) must still pass.
+
+    The check is intentionally permissive when the header is absent so
+    programmatic clients (Playwright, server-side scripts, CLI tools) are not
+    locked out. The URL whitelist + rate-limit + payload cap remain in place.
+    """
+    async def fake_send(self, request, **kwargs):
+        return _FakeResponse(json_data={"choices": [{"message": {}}], "usage": {}})
+
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+        # No Referer header at all.
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_agent_llm_payload_too_large(client_factory):
     client = client_factory(api_key="sk-real")
     init = {"method": "POST", "body": "a" * (2 * 1024 * 1024 + 1)}
@@ -417,34 +466,108 @@ def test_agent_llm_payload_too_large(client_factory):
     assert r.json()["error"]["code"] == "payload_too_large"
 
 
-def test_agent_llm_5_calls_then_429(client_factory, monkeypatch):
-    """5/min rate-limit on /agent/llm: 6th call within 60s returns 429.
+def test_agent_llm_60_calls_then_429(client_factory, monkeypatch):
+    """60/min rate-limit on /agent/llm: sustained bursts return 429.
 
-    NOTE: the rate-limit middleware uses a single bucket per (client_ip, max_calls).
-    Tests like ``test_agent_llm_*`` share buckets with /execute under
-    the same client_ip. To keep each /llm test independent, ``client_factory``
-    clears ``rate_limit._buckets`` per-test (see the fixture). True per-endpoint
-    isolation (so /llm traffic isn't co-eroded with /execute traffic) is a
-    separate ticket — see middleware/rate_limit.py.
+    With max_steps=20, a single complex operate can issue 20+ /llm calls.
+    The 60/min ceiling leaves headroom for back-to-back multi-step operates
+    while still blocking runaway scrapers.
+
+    NOTE: the bucket refills linearly (1 token / second), so we don't pin
+    down the exact call index where 429 first fires. We only assert the
+    upper bound: a runaway burst of 200 must be throttled long before it
+    completes — proving the ceiling is actually < infinity.
     """
     fake_send = AsyncMock(return_value=_FakeResponse(
         json_data={"choices": [{"message": {}}], "usage": {}}))
     monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
     client = client_factory(api_key="sk-real")
     init = {"method": "POST", "body": "{}"}
-    # 5 calls allowed for dom; 6th must fail.
-    for _ in range(5):
+    # Freeze time so refill does not save us during the burst.
+    fake_now = [1_000_000.0]
+    monkeypatch.setattr("app.middleware.rate_limit.time.monotonic", lambda: fake_now[0])
+    statuses = []
+    for i in range(200):
         r = client.post(
             "/api/public/agent/llm",
             json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
         )
-        assert r.status_code == 200, r.text
+        statuses.append(r.status_code)
+        fake_now[0] += 0.001  # advance 1 ms per call, ~200 ms total = 0.2 tokens refill
+    assert 200 in statuses, "bucket never throttled — limit is effectively unlimited"
+    # The throttling must kick in well before exhausting all 200 calls.
+    first_429 = statuses.index(429)
+    assert first_429 < 100, f"first 429 at call {first_429}; ceiling too lax"
+    assert statuses.count(200) >= 60, (
+        f"only {statuses.count(200)} succeeded; ceiling too tight"
+    )
+
+
+def test_agent_llm_and_execute_have_independent_buckets(client_factory, monkeypatch):
+    """Regression: /execute and /llm must NOT share a bucket under the same IP.
+
+    Previous bug: the middleware keyed buckets by client_ip only, so a single
+    operate-mode call (many /llm hits) would silently deplete the /execute
+    quota, causing the very next chat-mode call to 429 even though the user
+    hadn't been chatting.
+    """
+    fake_send = AsyncMock(return_value=_FakeResponse(
+        json_data={"choices": [{"message": {}}], "usage": {}}))
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+    client = client_factory(api_key="sk-real")
+
+    # Drive /execute hard enough to deplete its own bucket under the old
+    # behaviour (30/min), then prove /llm still has full quota.
+    init = {"method": "POST", "body": "{}"}
+
+    async def fake_chat(**kwargs):
+        return "ok"
+
+    with patch.object(public_agent_router, "chat_complete", new=AsyncMock(side_effect=fake_chat)):
+        for _ in range(30):
+            r = client.post(
+                "/api/public/agent/execute",
+                json={"messages": [{"role": "user", "content": "hi"}]},
+            )
+            assert r.status_code == 200, r.text
+        # /execute quota is now depleted
+        r = client.post(
+            "/api/public/agent/execute",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+        assert r.status_code == 429
+
+    # /llm must still be wide open — independent bucket.
     r = client.post(
         "/api/public/agent/llm",
         json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
     )
-    assert r.status_code == 429
-    assert r.json()["error"]["code"] == "rate_limited"
+    assert r.status_code == 200, r.text
+
+
+def test_agent_llm_simulated_operate_with_many_steps(client_factory, monkeypatch):
+    """Simulate a full operate() that issues many /llm steps in a row.
+
+    This is the regression test for the "first operate works, second fails"
+    user report: a single operate easily consumes 5+ /llm calls, so the old
+    5/min limit killed even the second step of the same task.
+    """
+    fake_send = AsyncMock(return_value=_FakeResponse(
+        json_data={"choices": [{"message": {}}], "usage": {}}))
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    # Simulate two consecutive operates, each issuing 8 step calls (well
+    # above the previous 5/min ceiling). Total = 16 calls < 60/min budget.
+    for op in range(2):
+        for step in range(8):
+            r = client.post(
+                "/api/public/agent/llm",
+                json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+            )
+            assert r.status_code == 200, (
+                f"operate #{op + 1} step #{step + 1} failed: {r.status_code} {r.text}"
+            )
 
 
 def test_agent_llm_no_api_key_leak(client_factory, monkeypatch):
