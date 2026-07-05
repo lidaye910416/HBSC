@@ -1,5 +1,4 @@
 import type { ICommand } from '@uiw/react-md-editor'
-import { api } from '../../../services/api'
 
 /**
  * Insert a GFM pipe grid table — asks for rows/cols up front via `window.prompt`.

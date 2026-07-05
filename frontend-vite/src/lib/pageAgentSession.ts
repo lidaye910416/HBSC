@@ -89,7 +89,9 @@ export async function acquire(): Promise<PageAgent | null> {
         model: sessionConfig!.model,
         language: 'zh-CN',
         customSystemPrompt: sessionConfig!.system_prompt,
-        getPageInstructions: getPageHint,
+        instructions: {
+          getPageInstructions: getPageHint,
+        },
         transformPageContent: maskSecrets,
         maxSteps: 20,
         stepDelay: 0.4,

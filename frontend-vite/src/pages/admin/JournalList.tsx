@@ -5,7 +5,7 @@ import { Plus, Edit, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
 import { api, type JournalCompleteness } from '../../services/api'
 import { useToast } from '../../components/admin/Toast'
 import {
-  PageHeader, Button, Toolbar, ToolbarGroup, SearchInput, StatusBadge, Empty, IconButton, Modal,
+  PageHeader, Button, Toolbar, ToolbarGroup, SearchInput, Empty, IconButton, Modal,
 } from '../../components/ui'
 
 interface DeleteTarget {

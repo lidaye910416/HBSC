@@ -41,16 +41,13 @@ export function PageAgentPanel({
   // (page reload / new tab) would restart the counter at 1 even when
   // sessionStorage already contains messages with ids 1..N, causing
   // React's "Encountered two children with the same key" warning.
-  // `null` is the "uninitialised" sentinel; the if-block runs exactly
-  // once on first render (the ref is then non-null for all subsequent
-  // renders, including React 18 strict-mode double-invoke in dev).
-  const nextIdRef = useRef<number | null>(null)
-  if (nextIdRef.current === null) {
-    nextIdRef.current =
-      history.length > 0
-        ? history.reduce((max, m) => Math.max(max, m.id), 0) + 1
-        : 1
-  }
+  // `useRef` only consumes the initial value on the first render, so this
+  // expression runs exactly once per mount.
+  const nextIdRef = useRef<number>(
+    history.length > 0
+      ? history.reduce((max, m) => Math.max(max, m.id), 0) + 1
+      : 1
+  )
 
   // Persist chat history.
   useEffect(() => {
@@ -88,9 +85,7 @@ export function PageAgentPanel({
   // Chat-mode mutation: hits /api/public/agent/execute.
   const chatMut = useMutation({
     mutationFn: async (userText: string): Promise<string> => {
-      const priorMessages = history
-        .filter((m) => m.role !== 'system')
-        .map((m) => ({ role: m.role, content: m.content }))
+      const priorMessages = history.map((m) => ({ role: m.role, content: m.content }))
       const r = await api.public.agent.execute([
         ...priorMessages,
         { role: 'user', content: userText },
