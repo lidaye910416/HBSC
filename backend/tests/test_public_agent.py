@@ -434,6 +434,28 @@ def test_agent_llm_accepts_browser_spa_referer(client_factory, monkeypatch):
     assert captured["url"].startswith("https://api.deepseek.com/v1")
 
 
+def test_agent_llm_accepts_127_loopback_referer(client_factory, monkeypatch):
+    """Vite's default dev URL is http://127.0.0.1:5173/ — the browser sends
+    Referer with hostname '127.0.0.1', NOT 'localhost'. The Referer check
+    must accept every loopback spelling without forcing the operator to
+    enumerate each one in ALLOWED_ORIGINS.
+    """
+    async def fake_send(self, request, **kwargs):
+        return _FakeResponse(json_data={"choices": [{"message": {}}], "usage": {}})
+
+    monkeypatch.setattr("httpx.AsyncClient.send", fake_send)
+    client = client_factory(api_key="sk-real")
+    init = {"method": "POST", "body": "{}"}
+    # The exact Referer value captured from a real headless Chrome session
+    # against Vite's default 127.0.0.1:5173 dev URL.
+    r = client.post(
+        "/api/public/agent/llm",
+        json={"url": "https://api.deepseek.com/v1/chat/completions", "init": init},
+        headers={"Referer": "http://127.0.0.1:5173/"},
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_agent_llm_accepts_empty_referer(client_factory, monkeypatch):
     """Empty Referer (curl, native fetch, privacy-mode browsers) must still pass.
 

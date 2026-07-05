@@ -270,10 +270,16 @@ def _is_same_origin_referer(referer: str | None, allowed_hosts: set[str]) -> boo
 def _allowed_referer_hosts() -> set[str]:
     """Derive the allowed Referer host set from settings.ALLOWED_ORIGINS.
 
+    Always includes the loopback aliases (`localhost`, `127.0.0.1`, `::1`)
+    even when the configured ALLOWED_ORIGINS uses a different loopback
+    spelling — Vite's default dev URL is ``http://127.0.0.1:5173/`` but
+    most users navigate to ``http://localhost:5173/``; both must work
+    without forcing the operator to enumerate every spelling in .env.
+
     Entries that fail to parse (empty, no host) are silently dropped so a
     misconfigured .env cannot accidentally block all legitimate traffic.
     """
-    hosts: set[str] = set()
+    hosts: set[str] = {"localhost", "127.0.0.1", "::1"}
     for origin in settings.ALLOWED_ORIGINS:
         try:
             host = urlparse(origin).hostname
