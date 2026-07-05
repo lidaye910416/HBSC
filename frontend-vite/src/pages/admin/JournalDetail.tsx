@@ -147,7 +147,7 @@ export function JournalDetail() {
             <tbody>
               {articles.map((a) => (
                 <tr key={a.id}>
-                  <td style={{ fontWeight: 500 }}>{a.title}</td>
+                  <td style={{ fontWeight: 600, color: 'var(--text-1)' }}>{a.title}</td>
                   <td><StatusBadge status={a.status === 'published' ? 'published' : 'draft'} /></td>
                   <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>{a.updated_at ? new Date(a.updated_at).toLocaleString('zh-CN') : '—'}</td>
                   <td>

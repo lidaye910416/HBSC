@@ -114,7 +114,7 @@ export function JournalList() {
               {data?.items.map((j) => (
                 <tr key={j.id}>
                   <td>
-                    <div style={{ fontWeight: 500 }}>{j.title}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{j.title}</div>
                     <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{j.slug}</div>
                   </td>
                   <td>{j.issue_number || '—'}</td>

@@ -120,7 +120,7 @@ export function FeaturedArticles() {
                   <tr key={a.id}>
                     <td style={{ color: 'var(--admin-text-2)' }}>{i + 1}</td>
                     <td>
-                      <div style={{ fontWeight: 500 }}>{a.title}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{a.title}</div>
                       <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{a.slug}</div>
                     </td>
                     <td>
@@ -177,7 +177,7 @@ export function FeaturedArticles() {
                 {otherItems.map((a) => (
                   <tr key={a.id}>
                     <td>
-                      <div style={{ fontWeight: 500 }}>{a.title}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{a.title}</div>
                       <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{a.slug}</div>
                     </td>
                     <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>{a.category || '—'}</td>

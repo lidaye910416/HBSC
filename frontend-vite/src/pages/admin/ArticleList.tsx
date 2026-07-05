@@ -204,7 +204,7 @@ export function ArticleList() {
                     />
                   </td>
                   <td>
-                    <div style={{ fontWeight: 500 }}>{a.title}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{a.title}</div>
                     <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{a.slug}</div>
                   </td>
                   <td>{a.category || '—'}</td>
