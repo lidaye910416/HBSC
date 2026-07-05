@@ -4,6 +4,9 @@
   grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
   background: var(--admin-bg);
+  /* Inter 在深底 400 偏瘦；admin 范围内默认 500 让正文更扎实。
+   * 显式声明更重字重的标题、按钮等不受影响。 */
+  font-weight: 500;
 }
 
 .admin-sidebar {

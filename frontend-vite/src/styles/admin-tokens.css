@@ -25,9 +25,9 @@
   --surface-2:    #2D2F45;
   --border:       #2D2F45;
   --border-strong: #4A4D6A;
-  --text-1:       #FAFAF7;
-  --text-2:       #C8C8D0;
-  --text-muted:   #8C8C9A;
+  --text-1:       #FFFFFF;
+  --text-2:       #DEDEE8;
+  --text-muted:   #B0B0BE;
   --text-disabled: #6B6B82;
   --text-inverse: #FAFAF7;
   --accent:       var(--brand-gold);
