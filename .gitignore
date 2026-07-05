@@ -59,3 +59,13 @@ coverage/
 .nyc_output/
 *.lcov
 skills-lock.json
+
+# ── Dev runtime / tooling caches ─────────────
+# dev-supervisor / uvicorn / vite PID files
+.dev-pids/
+# superpowers brainstorm/spec caches
+.superpowers/
+# Playwright test artifacts (root + per-package)
+test-results/
+frontend-vite/test-results/
+frontend-vite/playwright-report/
