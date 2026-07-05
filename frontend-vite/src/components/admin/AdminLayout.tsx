@@ -74,6 +74,24 @@ export function AdminLayout() {
   }, [location.pathname])
 
   useEffect(() => {
+    // Sync data-theme attribute from localStorage. main.tsx already does this
+    // pre-mount, but we re-sync here for two reasons:
+    //   1. The user may have navigated to /admin in a way that bypassed
+    //      main.tsx's pre-mount pass (e.g. SPA-internal navigation from a
+    //      route that doesn't load main.tsx's script).
+    //   2. Cross-tab sync: if the user toggles the theme in another admin tab,
+    //      the `storage` event fires here so this tab updates too.
+    const sync = () => {
+      let saved: string | null = null
+      try { saved = localStorage.getItem('hbsc-theme') } catch { /* noop */ }
+      document.documentElement.dataset.theme = saved === 'light' ? 'light' : ''
+    }
+    sync()
+    window.addEventListener('storage', sync)
+    return () => window.removeEventListener('storage', sync)
+  }, [])
+
+  useEffect(() => {
     return sidebarAnimations(sidebarRef.current)
   }, [])
 
@@ -92,9 +110,16 @@ export function AdminLayout() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) =>
-                  `admin-sidebar__link${isActive ? ' is-active' : ''}`
-                }
+                className={({ isActive }) => {
+                  // "文章" 在 /admin/articles/featured 时要让位给"精选管理"。
+                  // NavLink 默认 starts-with 匹配，会让父级和子级同时高亮。
+                  const suppressedByChild =
+                    item.to === '/admin/articles' &&
+                    location.pathname.startsWith('/admin/articles/featured')
+                  return `admin-sidebar__link${
+                    isActive && !suppressedByChild ? ' is-active' : ''
+                  }`
+                }}
               >
                 {item.icon}
                 <span>{item.label}</span>

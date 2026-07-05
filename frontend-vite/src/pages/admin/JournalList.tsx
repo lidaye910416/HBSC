@@ -134,8 +134,12 @@ export function JournalList() {
                             fontSize: 'var(--type-xs)',
                             padding: '1px 8px',
                             borderRadius: 999,
-                            background: completeness[j.id].complete ? '#E8F4EA' : '#F4F1E8',
-                            color: completeness[j.id].complete ? '#1B5E20' : '#8C7A3E',
+                            background: completeness[j.id].complete
+                              ? 'var(--status-published-bg)'
+                              : 'var(--status-draft-bg)',
+                            color: completeness[j.id].complete
+                              ? 'var(--status-published-fg)'
+                              : 'var(--status-draft-fg)',
                             fontWeight: 500,
                           }}
                         >

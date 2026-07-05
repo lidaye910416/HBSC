@@ -76,7 +76,7 @@
   position: absolute;
   bottom: 0; left: 0; right: 0;
   padding: 4px 6px;
-  background: rgba(26, 26, 46, 0.6);
+  background: color-mix(in srgb, var(--brand-ink) 60%, transparent);
   color: white;
   font-size: var(--type-xs);
   white-space: nowrap;

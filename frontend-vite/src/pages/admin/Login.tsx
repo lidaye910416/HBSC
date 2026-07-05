@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../../services/api'
+import '../../styles/admin-tokens.css'
 import './Login.css'
 
 export function Login() {

@@ -54,7 +54,7 @@ function ClickableImg({ src, alt }: { src: string; alt?: string }) {
         alt={altText}
         style={{ maxWidth: '100%', cursor: 'pointer', outline: '1px dashed transparent' }}
         onClick={() => setEditing(true)}
-        onMouseEnter={(e) => (e.currentTarget.style.outline = '1px dashed #C9A84C')}
+        onMouseEnter={(e) => (e.currentTarget.style.outline = '1px dashed var(--brand-gold)')}
         onMouseLeave={(e) => (e.currentTarget.style.outline = '1px dashed transparent')}
       />
     )
@@ -66,7 +66,7 @@ function ClickableImg({ src, alt }: { src: string; alt?: string }) {
         display: 'inline-block',
         padding: '8px',
         background: 'var(--brand-paper-warm, #F5F0E8)',
-        border: '1px solid #C9A84C',
+        border: '1px solid var(--brand-gold)',
         borderRadius: '6px',
         margin: '4px 0',
       }}

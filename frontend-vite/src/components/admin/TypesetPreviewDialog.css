@@ -17,8 +17,8 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: color-mix(in srgb, #C9A84C 12%, transparent);
-  border-left: 3px solid #C9A84C;
+  background: color-mix(in srgb, var(--brand-gold) 12%, transparent);
+  border-left: 3px solid var(--brand-gold);
   border-radius: var(--radius-1);
   color: var(--admin-text, inherit);
   font-size: var(--type-sm, 0.875rem);
@@ -65,7 +65,7 @@
 }
 .typeset-dialog__radio:has(input:checked) {
   border-color: var(--brand-gold, #C9A84C);
-  background: color-mix(in srgb, #C9A84C 8%, transparent);
+  background: color-mix(in srgb, var(--brand-gold) 8%, transparent);
 }
 .typeset-dialog__radio input[type="radio"] {
   margin-top: 4px;

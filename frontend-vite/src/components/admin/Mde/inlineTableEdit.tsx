@@ -46,7 +46,7 @@ function ClickableTable({ children }: { children: React.ReactNode }) {
       <div
         style={{ display: 'inline-block', cursor: 'pointer', outline: '1px dashed transparent' }}
         onClick={() => setEditing(true)}
-        onMouseEnter={(e) => (e.currentTarget.style.outline = '1px dashed #C9A84C')}
+        onMouseEnter={(e) => (e.currentTarget.style.outline = '1px dashed var(--brand-gold)')}
         onMouseLeave={(e) => (e.currentTarget.style.outline = '1px dashed transparent')}
       >
         {children}

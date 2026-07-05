@@ -1,6 +1,14 @@
-/* Admin Design Tokens — 仅在 admin scope 用，不污染公开站 */
+/* Admin Design Tokens — 仅在 admin scope 用，不污染公开站。
+ * 三层结构：
+ *   L1 品牌原子  ── 两主题共用，不变
+ *   L2 语义角色  ── 按主题切换，定义 :root（暗色默认）和 :root[data-theme="light"]（浅色）
+ *   L3 状态/风险 ── 按主题提供双值
+ *
+ * 同时保留旧名（--admin-* / --brand-*）作为别名，向后兼容已有代码。
+ */
+
 :root {
-  /* Brand */
+  /* ===== L1 · 品牌原子（双主题共用） ===== */
   --brand-ink: #1A1A2E;
   --brand-ink-2: #16213E;
   --brand-gold: #C9A84C;
@@ -9,35 +17,44 @@
   --brand-gold-dark: #a07f2c;
   --brand-gold-deep: #6e5b29;
   --brand-paper-warm: #F5F0E8;
+  --brand-cream: #FAFAF7;
 
-  /* Surface */
-  --admin-bg: #FAFAF7;
-  --admin-surface: #FFFFFF;
-  --admin-surface-2: #F5F4EE;
-  --admin-border: #E8E5DC;
-  --admin-border-strong: #D4D0C4;
+  /* ===== L2 · 语义角色 · DARK（默认） ===== */
+  --surface-base: #1A1A2E;
+  --surface-1:    #232536;
+  --surface-2:    #2D2F45;
+  --border:       #2D2F45;
+  --border-strong: #4A4D6A;
+  --text-1:       #FAFAF7;
+  --text-2:       #C8C8D0;
+  --text-muted:   #8C8C9A;
+  --text-disabled: #6B6B82;
+  --text-inverse: #FAFAF7;
+  --accent:       var(--brand-gold);
+  --accent-soft:  rgba(201, 168, 76, 0.18);
 
-  /* Text */
-  --admin-text: #1A1A2E;
-  --admin-text-2: #5C5C68;
-  --admin-text-muted: #8C8C9A;
-  --admin-text-disabled: #4b4b62;
-  --admin-text-inverse: #FAFAF7;
+  /* ===== L3 · 状态/风险 · DARK ===== */
+  --status-published-bg: rgba(232, 244, 234, 0.12);
+  --status-published-fg: #A8D5AC;
+  --status-draft-bg:     rgba(244, 241, 232, 0.12);
+  --status-draft-fg:     #D4C896;
+  --status-archived-bg:  rgba(240, 239, 234, 0.10);
+  --status-archived-fg:  #C8C8D0;
+  --status-featured-fg:  #C9A84C;
+  --danger:              #E07B7B;
+  --danger-bg:           rgba(224, 123, 123, 0.15);
+  --danger-border:       rgba(224, 123, 123, 0.4);
 
-  /* Status */
-  --status-published-bg: #E8F4EA;
-  --status-published-fg: #1B5E20;
-  --status-draft-bg: #F4F1E8;
-  --status-draft-fg: #8C7A3E;
-  --status-archived-bg: #F0EFEA;
-  --status-archived-fg: #5C5C68;
-  --status-featured-fg: #8C6F1F;
+  /* ===== 别名 · 向后兼容 ===== */
+  --admin-bg:        var(--surface-base);
+  --admin-surface:   var(--surface-1);
+  --admin-surface-2: var(--surface-2);
+  --admin-border:    var(--border);
+  --admin-text:      var(--text-1);
+  --admin-text-2:    var(--text-2);
+  --admin-text-muted: var(--text-muted);
 
-  /* Risk */
-  --danger: #B04040;
-  --danger-bg: #F8E6E6;
-
-  /* Spacing — 8px scale */
+  /* ===== 排版与间距（不变） ===== */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -47,17 +64,18 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  /* Radius */
   --radius-1: 4px;
   --radius-2: 6px;
   --radius-3: 10px;
 
-  /* Shadow */
-  --shadow-1: 0 1px 2px rgba(26, 26, 46, 0.04);
-  --shadow-2: 0 4px 16px rgba(26, 26, 46, 0.06);
-  --shadow-focus: 0 0 0 3px rgba(201, 168, 76, 0.25);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.40);
+  --shadow-focus: 0 0 0 3px rgba(201, 168, 76, 0.35);
 
-  /* Type */
+  /* Shimmer gradient stops (used by skeleton loading states) */
+  --shimmer-stop-light:  rgba(0, 0, 0, 0.06);
+  --shimmer-stop-strong: rgba(0, 0, 0, 0.10);
+
   --type-xs: 12px;
   --type-sm: 13px;
   --type-base: 14px;
@@ -66,8 +84,44 @@
   --type-xl: 28px;
   --type-display: 36px;
 
-  /* Layout */
   --sidebar-width: 240px;
   --header-height: 64px;
   --content-max: 1280px;
+}
+
+:root[data-theme="light"] {
+  /* ===== L2 · 语义角色 · LIGHT ===== */
+  --surface-base: #FAFAF7;
+  --surface-1:    #FFFFFF;
+  --surface-2:    #F5F4EE;
+  --border:       #E8E5DC;
+  --border-strong: #D4D0C4;
+  --text-1:       #1A1A2E;
+  --text-2:       #5C5C68;
+  --text-muted:   #8C8C9A;
+  --text-disabled: #4b4b62;
+  --text-inverse: #FAFAF7;
+  --accent:       var(--brand-gold);
+  --accent-soft:  #F5EEDC;
+
+  /* ===== L3 · 状态/风险 · LIGHT ===== */
+  --status-published-bg: #E8F4EA;
+  --status-published-fg: #1B5E20;
+  --status-draft-bg:     #F4F1E8;
+  --status-draft-fg:     #8C7A3E;
+  --status-archived-bg:  #F0EFEA;
+  --status-archived-fg:  #5C5C68;
+  --status-featured-fg:  #8C6F1F;
+  --danger:              #B04040;
+  --danger-bg:           #F8E6E6;
+  --danger-border:       rgba(176, 64, 64, 0.4);
+
+  /* ===== LIGHT 主题专属阴影（与 dark 区分） ===== */
+  --shadow-1: 0 1px 2px rgba(26, 26, 46, 0.04);
+  --shadow-2: 0 4px 16px rgba(26, 26, 46, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(201, 168, 76, 0.25);
+
+  /* Shimmer gradient stops (same alpha in both themes — shimmer should look identical) */
+  --shimmer-stop-light:  rgba(0, 0, 0, 0.06);
+  --shimmer-stop-strong: rgba(0, 0, 0, 0.10);
 }

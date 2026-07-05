@@ -19,7 +19,7 @@
   border-left: 4px solid var(--brand-gold);
   border-radius: 6px;
   padding: 12px 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-2);
   font-size: 0.875rem;
   max-width: 360px;
   pointer-events: auto;

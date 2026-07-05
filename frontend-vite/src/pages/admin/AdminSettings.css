@@ -409,15 +409,15 @@
   left: 2px;
   width: var(--thumb);
   height: var(--thumb);
-  background: #fff;
+  background: var(--surface-1);
   border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-2);
   transition: transform 0.2s ease;
 }
 
 .as-switch--on .as-switch__thumb {
   transform: translateX(calc(var(--track) - var(--thumb) - 6px));
-  background: #fff;
+  background: var(--surface-1);
 }
 
 .as-switch--disabled {
@@ -513,9 +513,9 @@
 .as-skel {
   background: linear-gradient(
     90deg,
-    rgba(0, 0, 0, 0.06) 0%,
-    rgba(0, 0, 0, 0.10) 50%,
-    rgba(0, 0, 0, 0.06) 100%
+    var(--shimmer-stop-light) 0%,
+    var(--shimmer-stop-strong) 50%,
+    var(--shimmer-stop-light) 100%
   );
   background-size: 200% 100%;
   animation: as-shimmer 1.4s ease-in-out infinite;
@@ -540,6 +540,62 @@
 
 .as-skel--label { width: 60px;  height: 12px; }
 .as-skel--input { flex: 1;      height: 32px; }
+
+/* ============================================================
+   Appearance card
+   ============================================================ */
+.as-appearance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.as-appearance__option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-1);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.as-appearance__option:hover {
+  border-color: var(--border-strong);
+}
+
+.as-appearance__option.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.as-appearance__option input[type="radio"] {
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.as-appearance__option-title {
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.as-appearance__option-desc {
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+
+.as-appearance__footer {
+  margin-top: var(--space-3);
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
 
 /* ============================================================
    Responsive: input + buttons stack vertically

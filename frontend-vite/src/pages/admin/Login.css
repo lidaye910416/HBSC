@@ -7,10 +7,10 @@
 }
 
 .admin-login__card {
-  background: white;
+  background: var(--surface-1);
   padding: 48px;
   border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-2);
   width: 100%;
   max-width: 420px;
 }

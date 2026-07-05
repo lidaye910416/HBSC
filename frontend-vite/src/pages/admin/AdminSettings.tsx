@@ -201,6 +201,72 @@ function PrimaryButton({
   )
 }
 
+function AppearanceCard() {
+  const toast = useToast()
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      return localStorage.getItem('hbsc-theme') === 'light' ? 'light' : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
+
+  const handleChange = (next: 'dark' | 'light') => {
+    if (next === theme) return
+    setTheme(next)
+    try { localStorage.setItem('hbsc-theme', next) } catch { /* noop */ }
+    document.documentElement.dataset.theme = next === 'light' ? 'light' : ''
+    toast.success(`已切换到${next === 'dark' ? '深色' : '浅色'}主题`)
+  }
+
+  return (
+    <div className="ui-card ui-card--elevated as-card" data-section="appearance">
+      <header className="as-card__head">
+        <div className="as-card__head-text">
+          <span className="as-card__eyebrow">
+            <Eye size={16} /> APPEARANCE
+          </span>
+          <h3 className="as-card__title">外观</h3>
+          <p className="as-card__blurb">选择后台界面的色彩风格</p>
+        </div>
+      </header>
+      <div className="as-card__body">
+        <div className="as-appearance">
+          <label className={`as-appearance__option${theme === 'dark' ? ' is-selected' : ''}`}>
+            <input
+              type="radio"
+              name="theme"
+              value="dark"
+              checked={theme === 'dark'}
+              onChange={() => handleChange('dark')}
+            />
+            <span className="as-appearance__option-title">深色</span>
+            <span className="as-appearance__option-desc">
+              深墨底 + 暖白字 · 默认 · 长时间编辑更护眼
+            </span>
+          </label>
+          <label className={`as-appearance__option${theme === 'light' ? ' is-selected' : ''}`}>
+            <input
+              type="radio"
+              name="theme"
+              value="light"
+              checked={theme === 'light'}
+              onChange={() => handleChange('light')}
+            />
+            <span className="as-appearance__option-title">浅色</span>
+            <span className="as-appearance__option-desc">
+              暖白底 + 深墨字 · 与公开站视觉一致
+            </span>
+          </label>
+        </div>
+        <p className="as-appearance__footer">
+          选择保存在浏览器本地，可在任何时候切换
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /* ============================================================
    Page
    ============================================================ */
@@ -520,6 +586,8 @@ export function AdminSettings() {
           }
         />
       )}
+
+      <AppearanceCard />
 
       {!listQ.isLoading && !listQ.isError && (
         <div className="as-grid">{ALL_SECTIONS.map(renderCard)}</div>

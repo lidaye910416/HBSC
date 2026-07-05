@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "lint:admin-tokens": "bash scripts/scan-admin-literals.sh",
+    "preview": "vite preview",
+    "test:tokens": "bash scripts/test-admin-tokens.sh"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
