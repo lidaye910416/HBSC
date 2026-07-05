@@ -48,6 +48,70 @@ def reset_buckets() -> None:
         _buckets.clear()
 
 
+def consume_token_or_lock(
+    request: Request,
+    *,
+    key: str,
+    max_calls: int,
+    window_seconds: int,
+) -> bool:
+    """原子地从 (client_ip, key) bucket 扣 1 个 token。
+
+    返回 True 表示扣到了（bucket 还有余量），返回 False 表示 bucket 已空
+    （被锁住）——调用方应当返回 429。
+
+    用于"失败操作计数、成功操作不计"的场景：失败的密码校验调用一次扣
+    一个 token，成功路径完全不扣。配合 is_bucket_locked() 使用可以让
+    成功路径在 bucket 被锁时仍然返回 429。
+    """
+    window = float(window_seconds)
+    client_ip = _get_client_ip(request)
+    bucket_id = (client_ip, key)
+    now = time.monotonic()
+
+    with _lock:
+        bucket = _buckets.get(bucket_id)
+        if bucket is None:
+            # 新 bucket：满 token，扣 1 个
+            _buckets[bucket_id] = (float(max_calls) - 1, now)
+            return True
+
+        tokens, last_refill = _refill(bucket, max_calls, window, now)
+        if tokens < 1:
+            # 已锁住：保留 bucket 状态，不扣
+            _buckets[bucket_id] = (tokens, now)
+            return False
+
+        _buckets[bucket_id] = (tokens - 1, now)
+        return True
+
+
+def is_bucket_locked(
+    request: Request,
+    *,
+    key: str,
+    max_calls: int,
+    window_seconds: int,
+) -> bool:
+    """检查 (client_ip, key) bucket 当前是否为空（被锁）。
+
+    不扣 token，仅刷新 last_refill 时间以维持正确的补充节奏。
+    调用方应当在此返回 True 时返回 429。
+    """
+    window = float(window_seconds)
+    client_ip = _get_client_ip(request)
+    bucket_id = (client_ip, key)
+    now = time.monotonic()
+
+    with _lock:
+        bucket = _buckets.get(bucket_id)
+        if bucket is None:
+            return False
+        tokens, last_refill = _refill(bucket, max_calls, window, now)
+        _buckets[bucket_id] = (tokens, now)
+        return tokens < 1
+
+
 def rate_limit(max_calls: int, window_seconds: int, *, key: str | None = None):
     """装饰器：基于 (IP, 端点 key) 的 token bucket 限流。
 
