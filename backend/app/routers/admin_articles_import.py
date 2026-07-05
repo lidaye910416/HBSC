@@ -27,7 +27,7 @@ async def import_docx(
     admin: str = Depends(get_current_admin),
 ):
     try:
-        content = await read_upload_with_limit(file)
+        content = await read_upload_with_limit(file, kind="docx")
     except UploadTooLarge as e:
         raise HTTPException(status_code=413, detail=str(e))
 

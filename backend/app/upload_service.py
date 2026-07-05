@@ -24,23 +24,36 @@ EXT_TO_MIME = {
 CHUNK_SIZE = 1024 * 1024
 
 
-def _max_bytes() -> int:
-    return settings.UPLOAD_MAX_SIZE_MB * 1024 * 1024
+def _max_bytes(kind: str = "image") -> int:
+    """Per-class size cap in bytes.
+
+    ``kind`` is one of ``"image"`` (Pillow-validated, default 5 MB) or
+    ``"docx"`` (zip-with-media, default 50 MB). Keeping these split prevents
+    a single shared cap from being either too tight for one class or too
+    loose for the other.
+    """
+    if kind == "image":
+        return settings.IMAGE_MAX_SIZE_MB * 1024 * 1024
+    if kind == "docx":
+        return settings.DOCX_MAX_SIZE_MB * 1024 * 1024
+    raise ValueError(f"unknown upload kind: {kind!r}")
 
 
 class UploadTooLarge(Exception):
     """上传文件超过最大限制。"""
-    def __init__(self, max_mb: int):
+    def __init__(self, kind: str, max_mb: int):
+        self.kind = kind
         self.max_mb = max_mb
-        super().__init__(f"文件超过 {max_mb} MB 限制")
+        super().__init__(f"{kind} 文件超过 {max_mb} MB 限制")
 
 
-async def read_upload_with_limit(file) -> bytes:
+async def read_upload_with_limit(file, kind: str = "image") -> bytes:
     """分块读取上传流，累计大小，超过限制时立即抛 UploadTooLarge。
 
     避免 await file.read() 把整个文件一次性读入内存导致 OOM。
+    ``kind`` selects which size cap to apply (see ``_max_bytes``).
     """
-    max_bytes = _max_bytes()
+    max_bytes = _max_bytes(kind)
     size = 0
     chunks: list[bytes] = []
     while True:
@@ -49,9 +62,17 @@ async def read_upload_with_limit(file) -> bytes:
             break
         size += len(chunk)
         if size > max_bytes:
-            raise UploadTooLarge(settings.UPLOAD_MAX_SIZE_MB)
+            raise UploadTooLarge(kind, _max_mb_for(kind))
         chunks.append(chunk)
     return b"".join(chunks)
+
+
+def _max_mb_for(kind: str) -> int:
+    if kind == "image":
+        return settings.IMAGE_MAX_SIZE_MB
+    if kind == "docx":
+        return settings.DOCX_MAX_SIZE_MB
+    raise ValueError(f"unknown upload kind: {kind!r}")
 
 
 def _detect_mime(content: bytes, fallback_filename: str) -> str:
@@ -75,8 +96,8 @@ def _detect_mime(content: bytes, fallback_filename: str) -> str:
 
 def save_upload(filename: str, content: bytes, uploaded_by: Optional[str], db: Optional[Session] = None) -> dict:
     """保存上传文件，返回 {url, filename, mime, size, original_name}。"""
-    if len(content) > _max_bytes():
-        raise ValueError(f"文件超过 {settings.UPLOAD_MAX_SIZE_MB} MB 限制")
+    if len(content) > _max_bytes("image"):
+        raise ValueError(f"文件超过 {settings.IMAGE_MAX_SIZE_MB} MB 限制")
 
     mime = _detect_mime(content, filename)
     if mime not in ALLOWED_MIMES:

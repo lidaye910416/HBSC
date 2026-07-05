@@ -24,7 +24,12 @@ class Settings(BaseSettings):
 
     # 上传
     UPLOAD_DIR: str = "./uploads"
-    UPLOAD_MAX_SIZE_MB: int = 5
+    # Per-class size caps. A single shared cap was too coarse: images are
+    # Pillow-validated and 5 MB is reasonable, but .docx is a zip with
+    # embedded media that commonly runs 10-50 MB. Splitting them lets each
+    # class pick the cap that fits its payload profile.
+    IMAGE_MAX_SIZE_MB: int = 5
+    DOCX_MAX_SIZE_MB: int = 50
     UPLOAD_ALLOWED_MIMES: str = "image/png,image/jpeg,image/webp,image/gif"
 
     # 加密 AdminSetting 行用的 Fernet key。生产环境必须设置；dev 未设置时
