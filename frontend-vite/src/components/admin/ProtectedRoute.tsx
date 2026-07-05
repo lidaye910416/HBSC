@@ -44,7 +44,7 @@ export function ProtectedRoute({ children }: Props) {
   })
 
   if (isLoading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>正在验证登录状态…</div>
+    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--admin-text-2)' }}>正在验证登录状态…</div>
   }
 
   if (isError) {

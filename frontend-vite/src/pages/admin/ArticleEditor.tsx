@@ -301,7 +301,7 @@ export function ArticleEditor() {
         <div className="article-editor__grid-2">
           <div className="article-editor__field">
             <label>
-              Slug * <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>（小写字母、数字、连字符，发布后不可改）</span>
+              Slug * <span style={{ fontSize: '0.75rem', color: 'var(--admin-text-2)' }}>（小写字母、数字、连字符，发布后不可改）</span>
             </label>
             <input
               value={form.slug}
@@ -343,9 +343,9 @@ export function ArticleEditor() {
                 e.target.value = ''
               }}
             />
-            {importBusy && <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>转换中…</span>}
+            {importBusy && <span style={{ fontSize: '0.8125rem', color: 'var(--admin-text-2)' }}>转换中…</span>}
           </div>
-          {importError && <div style={{ fontSize: '0.8125rem', color: '#d97706', marginTop: '4px' }}>{importError}</div>}
+          {importError && <div style={{ fontSize: '0.8125rem', color: 'var(--status-draft-fg)', marginTop: '4px' }}>{importError}</div>}
         </div>
 
         <div className="article-editor__field">
@@ -361,13 +361,13 @@ export function ArticleEditor() {
             >
               AI 排版
             </Button>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--admin-text-2)' }}>
               {typesetterReady
                 ? '点击后弹窗预览对照，不满意可取消'
                 : typesetterBlockedReason}
             </span>
           </div>
-          {typesetError && <div style={{ fontSize: '0.8125rem', color: '#d97706', marginTop: '4px' }}>{typesetError}</div>}
+          {typesetError && <div style={{ fontSize: '0.8125rem', color: 'var(--status-draft-fg)', marginTop: '4px' }}>{typesetError}</div>}
         </div>
 
         <div className="article-editor__field">
@@ -485,7 +485,7 @@ export function ArticleEditor() {
               })()}
             </div>
           )}
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--admin-text-2)', marginTop: '4px' }}>
             提示：切换到「预览」查看详情页实际渲染效果（含图片解析、表格）。
           </div>
         </div>

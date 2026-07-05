@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1A1A2E 0%, #16213E 100%);
+  background: linear-gradient(135deg, var(--brand-ink) 0%, var(--brand-ink-2) 100%);
 }
 
 .admin-login__card {
@@ -30,18 +30,18 @@
   border-radius: 10px;
   background: var(--brand-gold);
   display: inline-block;
-  box-shadow: 0 2px 8px rgba(201, 168, 76, 0.35);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-gold) 35%, transparent);
 }
 
 .admin-login__brand h1 {
   margin: 0;
   font-size: 1.5rem;
-  color: #1A1A2E;
+  color: var(--brand-ink);
 }
 
 .admin-login__brand p {
   margin: 0;
-  color: var(--color-text-secondary);
+  color: var(--admin-text-2);
   font-size: 0.875rem;
 }
 
@@ -59,13 +59,13 @@
 
 .admin-login__field label {
   font-size: 0.875rem;
-  color: var(--color-text-secondary);
+  color: var(--admin-text-2);
   font-weight: 500;
 }
 
 .admin-login__field input {
   padding: 10px 14px;
-  border: 1px solid #d4d4d4;
+  border: 1px solid var(--admin-border);
   border-radius: 4px;
   font-size: 0.9375rem;
 }
@@ -77,7 +77,7 @@
 }
 
 .admin-login__error {
-  color: #c44;
+  color: var(--danger);
   font-size: 0.875rem;
   text-align: center;
 }
@@ -97,8 +97,8 @@
 }
 
 .admin-login__submit:hover:not(:disabled) {
-  background: #B89740;
-  border-color: #B89740;
+  background: var(--brand-gold-hover);
+  border-color: var(--brand-gold-hover);
 }
 
 .admin-login__submit:focus-visible {

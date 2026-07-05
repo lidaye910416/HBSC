@@ -60,7 +60,7 @@ export function Dashboard() {
             <Link
               to="/admin/articles"
               className="ui-status-badge"
-              style={{ background: 'var(--brand-gold-50)', color: '#8C6F1F' }}
+              style={{ background: 'var(--brand-gold-50)', color: 'var(--status-featured-fg)' }}
             >
               查看全部 <ArrowRight size={12} />
             </Link>
@@ -88,7 +88,7 @@ export function Dashboard() {
             <Link
               to="/admin/articles"
               className="ui-status-badge"
-              style={{ background: 'var(--brand-gold-50)', color: '#8C6F1F' }}
+              style={{ background: 'var(--brand-gold-50)', color: 'var(--status-featured-fg)' }}
             >
               管理 <ArrowRight size={12} />
             </Link>
@@ -117,7 +117,7 @@ export function Dashboard() {
           <Link
             to="/admin/media"
             className="ui-status-badge"
-            style={{ background: 'var(--brand-gold-50)', color: '#8C6F1F' }}
+            style={{ background: 'var(--brand-gold-50)', color: 'var(--status-featured-fg)' }}
           >
             打开媒体库 <ArrowRight size={12} />
           </Link>

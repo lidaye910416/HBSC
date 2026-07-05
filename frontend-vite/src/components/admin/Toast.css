@@ -14,9 +14,9 @@
   align-items: center;
   gap: 10px;
   background: white;
-  color: #1A1A2E;
-  border: 1px solid #e8e8e0;
-  border-left: 4px solid #2563eb;
+  color: var(--admin-text);
+  border: 1px solid var(--admin-border);
+  border-left: 4px solid var(--brand-gold);
   border-radius: 6px;
   padding: 12px 16px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -33,29 +33,29 @@
 }
 
 .admin-toast--success {
-  border-left-color: #2a6e2a;
+  border-left-color: var(--status-published-fg);
 }
 
 .admin-toast--success svg {
-  color: #2a6e2a;
+  color: var(--status-published-fg);
   flex-shrink: 0;
 }
 
 .admin-toast--error {
-  border-left-color: #c44;
+  border-left-color: var(--danger);
 }
 
 .admin-toast--error svg {
-  color: #c44;
+  color: var(--danger);
   flex-shrink: 0;
 }
 
 .admin-toast--info {
-  border-left-color: #2563eb;
+  border-left-color: var(--brand-gold);
 }
 
 .admin-toast--info svg {
-  color: #2563eb;
+  color: var(--brand-gold);
   flex-shrink: 0;
 }
 

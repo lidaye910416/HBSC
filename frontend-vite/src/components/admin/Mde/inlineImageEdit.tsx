@@ -65,7 +65,7 @@ function ClickableImg({ src, alt }: { src: string; alt?: string }) {
       style={{
         display: 'inline-block',
         padding: '8px',
-        background: 'var(--color-bg-muted, #f5f0e8)',
+        background: 'var(--brand-paper-warm, #F5F0E8)',
         border: '1px solid #C9A84C',
         borderRadius: '6px',
         margin: '4px 0',

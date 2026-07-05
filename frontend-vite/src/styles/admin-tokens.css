@@ -5,6 +5,10 @@
   --brand-ink-2: #16213E;
   --brand-gold: #C9A84C;
   --brand-gold-50: #F5EEDC;
+  --brand-gold-hover: #B89740;
+  --brand-gold-dark: #a07f2c;
+  --brand-gold-deep: #6e5b29;
+  --brand-paper-warm: #F5F0E8;
 
   /* Surface */
   --admin-bg: #FAFAF7;
@@ -17,6 +21,7 @@
   --admin-text: #1A1A2E;
   --admin-text-2: #5C5C68;
   --admin-text-muted: #8C8C9A;
+  --admin-text-disabled: #4b4b62;
   --admin-text-inverse: #FAFAF7;
 
   /* Status */
@@ -26,6 +31,7 @@
   --status-draft-fg: #8C7A3E;
   --status-archived-bg: #F0EFEA;
   --status-archived-fg: #5C5C68;
+  --status-featured-fg: #8C6F1F;
 
   /* Risk */
   --danger: #B04040;

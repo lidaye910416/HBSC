@@ -54,7 +54,7 @@ function ClickableTable({ children }: { children: React.ReactNode }) {
     )
   }
   return (
-    <div style={{ border: '1px solid #C9A84C', padding: '8px', background: '#FFFBEF' }}>
+    <div style={{ border: '1px solid var(--brand-gold, #C9A84C)', padding: '8px', background: 'var(--brand-paper-warm, #F5F0E8)' }}>
       <div style={{ fontSize: '0.75rem', marginBottom: '6px' }}>
         表格编辑（Phase 2 范围内：只读预览 + "完成"退出，不写回 Markdown）
       </div>

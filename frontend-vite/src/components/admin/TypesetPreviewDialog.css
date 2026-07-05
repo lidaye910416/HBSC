@@ -37,7 +37,7 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--admin-text-muted, #888);
+  color: var(--admin-text-muted);
   margin-bottom: var(--space-2);
   padding: 0;
 }
@@ -56,10 +56,10 @@
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--admin-border, #e5e5e5);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-2);
   cursor: pointer;
-  background: var(--admin-surface-1, #fff);
+  background: var(--admin-surface);
   min-width: 160px;
   transition: border-color 0.15s ease;
 }
@@ -77,7 +77,7 @@
   font-size: var(--type-sm, 0.875rem);
 }
 .typeset-dialog__radio-label small {
-  color: var(--admin-text-muted, #888);
+  color: var(--admin-text-muted);
   font-size: var(--type-xs, 0.75rem);
 }
 
@@ -92,10 +92,10 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) 0;
-  border-top: 1px solid var(--admin-border, #e5e5e5);
-  border-bottom: 1px solid var(--admin-border, #e5e5e5);
+  border-top: 1px solid var(--admin-border);
+  border-bottom: 1px solid var(--admin-border);
   font-size: var(--type-sm, 0.875rem);
-  color: var(--admin-text-muted, #666);
+  color: var(--admin-text-muted);
 }
 .typeset-dialog__stats strong {
   color: var(--admin-text, inherit);
@@ -103,12 +103,12 @@
 }
 .typeset-dialog__delta {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--admin-text-muted, #888);
+  color: var(--admin-text-muted);
 }
 .typeset-dialog__meta {
   margin-left: auto;
   font-size: var(--type-xs, 0.75rem);
-  color: var(--admin-text-muted, #888);
+  color: var(--admin-text-muted);
 }
 
 .typeset-dialog__cols {
@@ -131,14 +131,14 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--admin-text-muted, #888);
+  color: var(--admin-text-muted);
 }
 
 .typeset-dialog__pre {
   margin: 0;
   padding: var(--space-3);
-  background: var(--admin-surface-2, #f7f7f7);
-  border: 1px solid var(--admin-border, #e5e5e5);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-2);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8125rem;
@@ -151,8 +151,8 @@
 
 .typeset-dialog__render {
   padding: var(--space-3);
-  background: var(--admin-surface-2, #f7f7f7);
-  border: 1px solid var(--admin-border, #e5e5e5);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-2);
   max-height: 360px;
   overflow-y: auto;

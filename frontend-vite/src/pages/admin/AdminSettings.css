@@ -193,7 +193,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-3);
-  background: var(--admin-surface-2, #f7f7f7);
+  background: var(--admin-surface-2);
 }
 
 .as-card__foot-hint {
@@ -223,7 +223,7 @@
 
 .as-dirty__count {
   font-weight: 600;
-  color: #6e5b29;
+  color: var(--brand-gold-deep, #6e5b29);
 }
 
 /* ============================================================
@@ -366,7 +366,7 @@
 .as-input:focus {
   outline: none;
   border-color: var(--brand-gold);
-  box-shadow: var(--shadow-focus, 0 0 0 3px rgba(201, 168, 76, 0.18));
+  box-shadow: var(--shadow-focus, 0 0 0 3px color-mix(in srgb, var(--brand-gold) 18%, transparent));
 }
 
 .as-input::placeholder {
@@ -386,7 +386,7 @@
   height: 24px;
   border-radius: 999px;
   border: 1px solid var(--admin-border-strong);
-  background: var(--admin-surface-2, #e9e9e9);
+  background: var(--admin-surface-2);
   cursor: pointer;
   padding: 0;
   transition: background 0.18s, border-color 0.18s;
@@ -399,8 +399,8 @@
 }
 
 .as-switch--off {
-  background: #d4d4d4;
-  border-color: #c8c8c8;
+  background: var(--admin-border-strong);
+  border-color: var(--admin-border-strong);
 }
 
 .as-switch__thumb {
@@ -427,7 +427,7 @@
 
 .as-switch:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.35);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-gold) 35%, transparent);
 }
 
 /* ============================================================
@@ -448,7 +448,7 @@
 
 .as-secret:focus-within {
   border-color: var(--brand-gold);
-  box-shadow: var(--shadow-focus, 0 0 0 3px rgba(201, 168, 76, 0.18));
+  box-shadow: var(--shadow-focus, 0 0 0 3px color-mix(in srgb, var(--brand-gold) 18%, transparent));
 }
 
 .as-secret__icon {
@@ -478,7 +478,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   background: color-mix(in srgb, var(--brand-gold, #C9A84C) 14%, transparent);
-  color: #6e5b29;
+  color: var(--brand-gold-deep, #6e5b29);
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand-gold, #C9A84C) 30%, transparent);
   white-space: nowrap;

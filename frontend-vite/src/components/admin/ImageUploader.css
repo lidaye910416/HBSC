@@ -1,22 +1,22 @@
 .image-uploader {
-  border: 2px dashed #d4d4d4;
+  border: 2px dashed var(--admin-border);
   border-radius: 6px;
   padding: 20px;
   text-align: center;
-  background: #fafafa;
+  background: var(--admin-surface-2);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .image-uploader:hover,
 .image-uploader.is-dragging {
-  border-color: #2563eb;
-  background: #fefcf5;
+  border-color: var(--brand-gold);
+  background: var(--brand-gold-50);
 }
 
 .image-uploader__hint {
   font-size: 0.875rem;
-  color: var(--color-text-secondary);
+  color: var(--admin-text-2);
   margin-top: 8px;
 }
 
@@ -36,7 +36,7 @@
   margin-top: 8px;
   font-family: monospace;
   font-size: 0.8125rem;
-  background: #f0f0e8;
+  background: var(--admin-surface-2);
   padding: 4px 8px;
   border-radius: 3px;
   display: inline-block;
@@ -44,13 +44,13 @@
 }
 
 .image-uploader__error {
-  color: #c44;
+  color: var(--danger);
   font-size: 0.875rem;
   margin-top: 8px;
 }
 
 .image-uploader__progress {
   font-size: 0.875rem;
-  color: var(--color-text-secondary);
+  color: var(--admin-text-2);
   margin-top: 8px;
 }

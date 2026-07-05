@@ -8,6 +8,7 @@ import { api } from '../../services/api'
 import { pageEnterAnimation, sidebarAnimations } from './animations'
 import { IconButton } from '../ui/IconButton'
 import { Breadcrumb, type BreadcrumbItem } from '../ui'
+import '../../styles/admin-tokens.css'
 import './AdminLayout.css'
 
 type NavItem = {
