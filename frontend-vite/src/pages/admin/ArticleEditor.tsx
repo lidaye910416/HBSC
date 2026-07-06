@@ -377,7 +377,7 @@ export function ArticleEditor() {
                 checked={autoTypeset}
                 onChange={(e) => setAutoTypeset(e.target.checked)}
               />
-              导入并自动跑 AI 排版
+              导入 .docx 后自动跑 AI 排版
             </label>
           ) : (
             <small style={{ color: 'var(--admin-text-2)', fontSize: '0.75rem' }}>
@@ -385,28 +385,6 @@ export function ArticleEditor() {
             </small>
           )}
           {importError && <div style={{ fontSize: '0.8125rem', color: 'var(--status-draft-fg)', marginTop: '4px' }}>{importError}</div>}
-        </div>
-
-        <div className="article-editor__field">
-          <label>AI 排版（用 LLM 清洗 Markdown；不动元数据）</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <Button
-              variant="secondary"
-              icon={<Sparkles size={14} />}
-              onClick={() => { void handleTypeset() }}
-              disabled={typesetBusy || !typesetterReady}
-              loading={typesetBusy}
-              title={typesetterReady ? '使用配置的 LLM 清洗当前正文' : typesetterBlockedReason}
-            >
-              AI 排版
-            </Button>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--admin-text-2)' }}>
-              {typesetterReady
-                ? '点击后弹窗预览对照，不满意可取消'
-                : typesetterBlockedReason}
-            </span>
-          </div>
-          {typesetError && <div style={{ fontSize: '0.8125rem', color: 'var(--status-draft-fg)', marginTop: '4px' }}>{typesetError}</div>}
         </div>
 
         <div className="article-editor__field">
@@ -447,6 +425,23 @@ export function ArticleEditor() {
             >
               预览（页面效果）
             </button>
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Button
+                variant="default"
+                icon={<Sparkles size={14} />}
+                onClick={() => { void handleTypeset() }}
+                disabled={typesetBusy || !typesetterReady}
+                loading={typesetBusy}
+                title={typesetterReady ? '使用配置的 LLM 清洗当前正文' : typesetterBlockedReason}
+              >
+                AI 排版
+              </Button>
+              {!typesetterReady && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--admin-text-2)' }}>
+                  {typesetterBlockedReason}
+                </span>
+              )}
+            </div>
             {previewMode === 'preview' && !isNew && isDirty && (
               <span className="editor-tabs__badge" aria-label="尚未保存">
                 尚未保存
@@ -456,6 +451,15 @@ export function ArticleEditor() {
               {form.content.length} 字符
             </span>
           </div>
+
+          <small style={{ display: 'block', marginBottom: '8px', fontSize: '0.8125rem', color: 'var(--admin-text-2)' }}>
+            对当前正文 Markdown 跑一次 LLM 清洗，元数据不动
+          </small>
+          {typesetError && (
+            <div style={{ fontSize: '0.8125rem', color: 'var(--status-draft-fg)', marginBottom: '8px' }}>
+              {typesetError}
+            </div>
+          )}
 
           {previewMode === 'edit' ? (
             <div className="article-editor__md" data-color-mode="dark" data-md-editor-dark="true">
