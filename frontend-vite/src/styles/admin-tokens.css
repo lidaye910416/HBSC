@@ -125,3 +125,17 @@
   --shimmer-stop-light:  rgba(0, 0, 0, 0.06);
   --shimmer-stop-strong: rgba(0, 0, 0, 0.10);
 }
+
+/* ---- md-editor 别名 token（不带新色值，仅供 MDEditor 钩 selector 用） ---- */
+:root {
+  --md-editor-bg: var(--admin-surface-2);
+  --md-editor-toolbar-bg: var(--admin-surface);
+  --md-editor-fg: var(--admin-text);
+  --md-editor-border: var(--admin-border);
+}
+:root[data-theme="light"] {
+  --md-editor-bg: var(--admin-surface-2);
+  --md-editor-toolbar-bg: var(--admin-surface);
+  --md-editor-fg: var(--admin-text);
+  --md-editor-border: var(--admin-border);
+}
