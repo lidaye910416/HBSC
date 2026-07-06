@@ -425,7 +425,7 @@ export function ArticleEditor() {
             >
               预览（页面效果）
             </button>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Button
                 variant="default"
                 icon={<Sparkles size={14} />}
