@@ -51,7 +51,7 @@
    ----------------------------------------------------------------------- */
 
 .article-editor {
-  background: white;
+  background: var(--admin-surface);
   padding: 32px;
   border-radius: 8px;
   border: 1px solid var(--admin-border);
@@ -82,6 +82,8 @@
   border-radius: 4px;
   font-size: 0.9375rem;
   font-family: inherit;
+  background: var(--admin-surface-2);
+  color: var(--admin-text);
 }
 
 .article-editor__field textarea {
@@ -123,13 +125,13 @@
 }
 
 .article-editor__btn--secondary {
-  background: white;
-  color: var(--admin-text-2);
+  background: var(--admin-surface-2);
+  color: var(--admin-text);
   border-color: var(--admin-border);
 }
 
 .article-editor__btn--danger {
-  background: white;
+  background: var(--admin-surface-2);
   color: var(--danger);
   border-color: var(--danger);
   margin-left: auto;
@@ -232,13 +234,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: repeating-linear-gradient(
-    45deg,
-    var(--brand-paper-warm, #F5F0E8),
-    var(--brand-paper-warm, #F5F0E8) 12px,
-    var(--admin-surface-2) 12px,
-    var(--admin-surface-2) 24px
-  );
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--admin-surface-2) 0px,
+      var(--admin-surface-2) 24px,
+      var(--admin-bg) 24px,
+      var(--admin-bg) 48px
+    );
   color: var(--admin-text-muted);
   font-size: 0.875rem;
   border-radius: 4px;

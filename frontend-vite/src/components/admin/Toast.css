@@ -13,7 +13,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: white;
+  background: var(--admin-surface);
   color: var(--admin-text);
   border: 1px solid var(--admin-border);
   border-left: 4px solid var(--brand-gold);

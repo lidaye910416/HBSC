@@ -77,9 +77,9 @@
   color: var(--admin-text);
 }
 .admin-sidebar__link.is-active {
-  background: var(--brand-gold-50);
-  color: var(--brand-ink);
-  border-left-color: var(--brand-gold);
+  background: var(--admin-surface-2);
+  border-left: 2px solid var(--brand-gold);
+  color: var(--admin-text);
 }
 .admin-sidebar__external {
   margin-top: var(--space-3);

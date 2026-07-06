@@ -11,7 +11,7 @@
 .image-uploader:hover,
 .image-uploader.is-dragging {
   border-color: var(--brand-gold);
-  background: var(--brand-gold-50);
+  background: var(--accent-soft);
 }
 
 .image-uploader__hint {
