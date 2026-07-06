@@ -157,7 +157,7 @@ export function Navigation() {
             to="/articles"
             className={`nav__link ${isArticlesActive ? 'nav__link--active' : ''}`}
           >
-            文章
+            所有文章
           </Link>
         </div>
 
@@ -202,7 +202,7 @@ export function Navigation() {
             to="/articles"
             className={`nav__mobile-link ${isArticlesActive ? 'active' : ''}`}
           >
-            文章
+            所有文章
           </Link>
         </div>
       )}
