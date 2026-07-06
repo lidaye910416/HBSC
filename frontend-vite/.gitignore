@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Design exploration mockups (kept locally for reference, not tracked)
+design-mockups/

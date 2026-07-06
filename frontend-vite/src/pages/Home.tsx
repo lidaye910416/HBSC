@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { CoverImage } from '../components/CoverImage'
+import { EditorialCommittee } from '../components/EditorialCommittee'
 import './Home.css'
 
 const formatIssueDate = (d?: string) =>
@@ -17,7 +18,7 @@ const STATS = [
   { icon: <BookOpen size={22} strokeWidth={1.5} />, value: '9', label: '期刊文章' },
   { icon: <FileText size={22} strokeWidth={1.5} />, value: '4', label: '内容板块' },
   { icon: <TrendingUp size={22} strokeWidth={1.5} />, value: '6', label: '研究领域' },
-  { icon: <Users size={22} strokeWidth={1.5} />, value: '6', label: '核心研究员' },
+  { icon: <Users size={22} strokeWidth={1.5} />, value: '37', label: '编委成员' },
 ]
 
 const CATEGORIES = [
@@ -30,7 +31,6 @@ const CATEGORIES = [
 export function Home() {
   const { data: issues } = useQuery({ queryKey: ['issues'], queryFn: api.issues.list })
   const { data: featured } = useQuery({ queryKey: ['featured'], queryFn: api.articles.featured })
-  const { data: team } = useQuery({ queryKey: ['team'], queryFn: api.team })
 
   const sorted = (issues ?? []).slice().sort((a, b) => {
     const ad = a.published_at ? new Date(a.published_at).getTime() : 0
@@ -49,7 +49,7 @@ export function Home() {
     attach()
     const id = window.setTimeout(attach, 50)
     return () => { window.clearTimeout(id); observer.disconnect() }
-  }, [featured, team, issues])
+  }, [featured, issues])
 
   return (
     <main className="home">
@@ -207,34 +207,8 @@ export function Home() {
         </div>
       </section>
 
-      {/* Team */}
-      {team && team.length > 0 && (
-        <section className="section section--secondary">
-          <div className="container">
-            <div className="section-header observe">
-              <p className="section-label">TEAM</p>
-              <h2 className="section-title">核心团队</h2>
-              <div className="divider" />
-              <p className="section-subtitle">来自一线的产业研究者与实践者</p>
-            </div>
-            <div className="grid grid-3 team-grid">
-              {team.slice(0, 6).map((member, i) => (
-                <div key={member.id} className={`researcher-card card observe animate-fade-up animate-delay-${(i % 3) + 1}`}>
-                  <div className="card__cover researcher-card__avatar-wrap">
-                    <img src={member.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.name)}`}
-                      alt={member.name} className="researcher-card__avatar" loading="lazy" />
-                  </div>
-                  <div className="card__body researcher-card__body">
-                    <h4 className="card__title researcher-card__name">{member.name}</h4>
-                    <p className="researcher-card__title-text">{member.title}</p>
-                    <p className="researcher-card__area">{member.research_area}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Editorial Committee — 湖北数创 · 2026 年第 1 期 */}
+      <EditorialCommittee />
     </main>
   )
 }
