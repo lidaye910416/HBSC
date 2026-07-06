@@ -55,6 +55,13 @@ test.describe('ArticleEditor 深色主题 + AI 排版按钮位置', () => {
     await expect(card).toBeVisible({ timeout: 15_000 })
     const bg = await card.evaluate((el) => getComputedStyle(el).backgroundColor)
     expect(bg).not.toBe('rgb(255, 255, 255)')
+    const rgb = await card.evaluate((el) => {
+      const m = getComputedStyle(el).backgroundColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+    })
+    expect(rgb).not.toBeNull()
+    const luminance = (rgb![0] * 0.299 + rgb![1] * 0.587 + rgb![2] * 0.114) / 255
+    expect(luminance).toBeLessThan(0.5)
   })
 
   test('2. dark theme 下 input/textarea 计算 background ≠ white', async ({ page }) => {
@@ -65,6 +72,13 @@ test.describe('ArticleEditor 深色主题 + AI 排版按钮位置', () => {
     await expect(textareas.first()).toBeVisible({ timeout: 15_000 })
     const bg = await textareas.first().evaluate((el) => getComputedStyle(el).backgroundColor)
     expect(bg).not.toBe('rgb(255, 255, 255)')
+    const rgb = await textareas.first().evaluate((el) => {
+      const m = getComputedStyle(el).backgroundColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+    })
+    expect(rgb).not.toBeNull()
+    const luminance = (rgb![0] * 0.299 + rgb![1] * 0.587 + rgb![2] * 0.114) / 255
+    expect(luminance).toBeLessThan(0.5)
   })
 
   test('3. AI 排版按钮位于 editor toolbar 同一行，不在独立 field 块', async ({ page }) => {
@@ -74,30 +88,26 @@ test.describe('ArticleEditor 深色主题 + AI 排版按钮位置', () => {
     await expect(btn).toBeVisible({ timeout: 15_000 })
 
     // 不再位于 label 为 "AI 排版（用 LLM 清洗 Markdown；不动元数据）" 的 field 块
-    await expect(page.getByText(/AI 排版（用 LLM 清洗 Markdown；不动元数据）/)).toHaveCount(0)
+    await expect(page.getByText(/^AI 排版（用 LLM 清洗 Markdown；不动元数据）$/)).toHaveCount(0)
 
     // 按钮和 MDEditor 容器在同一个父 DOM 子树
     const tabsContainer = page.locator('.editor-tabs').first()
     await expect(tabsContainer).toBeVisible()
     const mdContainer = page.locator('.article-editor__md').first()
     await expect(mdContainer).toBeVisible()
-    const btnInsideTabsOrSibling = await btn.evaluate((el) => {
-      let p = el.parentElement
-      while (p) {
-        if (p.classList?.contains('editor-tabs')) return 'tabs'
-        if (p.querySelector?.('.w-md-editor')) return 'md'
-        p = p.parentElement
-      }
-      return null
+    // 必须落在 .editor-tabs 行内或紧邻 .article-editor__md 容器内
+    const ancestorKind = await btn.evaluate((el) => {
+      const m = el.closest('.editor-tabs, .article-editor__md')
+      return m ? (m.classList.contains('editor-tabs') ? 'tabs' : 'md') : null
     })
-    expect(['tabs', 'md']).toContain(btnInsideTabsOrSibling)
+    expect(['tabs', 'md']).toContain(ancestorKind)
   })
 
   test('4. .docx 自动排版 checkbox 措辞改为「导入 .docx 后自动跑 AI 排版」', async ({ page }) => {
     await page.route('**/api/admin/settings', (r) => mockSettings(r, SETTINGS_CONFIGURED))
     await page.goto(`${baseURL}/admin/articles/1`)
-    const cbLabel = page.getByText(/导入 \.docx 后自动跑 AI 排版/)
-    await expect(cbLabel).toBeVisible({ timeout: 15_000 })
+    const cb = page.getByRole('checkbox', { name: /导入 \.docx 后自动跑 AI 排版/ })
+    await expect(cb).toBeVisible({ timeout: 15_000 })
     // 旧措辞不再出现
     await expect(page.getByText(/^导入并自动跑 AI 排版$/)).toHaveCount(0)
   })
