@@ -458,7 +458,7 @@ export function ArticleEditor() {
           </div>
 
           {previewMode === 'edit' ? (
-            <div className="article-editor__md" data-color-mode="light">
+            <div className="article-editor__md" data-color-mode="dark" data-md-editor-dark="true">
               <MDEditor
                 value={form.content}
                 onChange={(v) => update('content', v || '')}
@@ -468,7 +468,7 @@ export function ArticleEditor() {
               />
             </div>
           ) : (
-            <div className="article-editor__preview" data-color-mode="light">
+            <div className="article-editor__preview" data-color-mode="dark">
               <div className="editor-preview-hero">
                 {form.cover_image ? (
                   <img

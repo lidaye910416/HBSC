@@ -301,3 +301,25 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- MDEditor 编辑面板暗化（仅在 ArticleEditor 用了 data-md-editor-dark 时生效） ---- */
+.article-editor__md[data-md-editor-dark] .w-md-editor-toolbar {
+  background: var(--md-editor-toolbar-bg);
+  border-bottom: 1px solid var(--md-editor-border);
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor,
+.article-editor__md[data-md-editor-dark] .w-md-editor-text-pre > code,
+.article-editor__md[data-md-editor-dark] .w-md-editor-text-input,
+.article-editor__md[data-md-editor-dark] .w-md-editor-text {
+  background: var(--md-editor-bg);
+  color: var(--md-editor-fg);
+  --md-editor-background-color: var(--md-editor-bg);
+  --md-editor-box-shadow-color: var(--md-editor-border);
+  border-color: var(--md-editor-border);
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor-bar {
+  background: var(--md-editor-border);
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor-btn:hover {
+  background: var(--accent-soft);
+}
