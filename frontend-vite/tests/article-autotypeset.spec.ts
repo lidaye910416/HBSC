@@ -76,7 +76,7 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
 
     await page.goto(`${baseURL}/admin/articles/new`)
     // 等待 ArticleEditor 渲染出 checkbox（默认勾选 → 可见）
-    const checkbox = page.getByRole('checkbox', { name: /导入并自动跑 AI 排版/ })
+    const checkbox = page.getByRole('checkbox', { name: /导入 \.docx 后自动跑 AI 排版/ })
     await expect(checkbox).toBeVisible({ timeout: 10_000 })
     await expect(checkbox).toBeChecked()
 
@@ -101,7 +101,7 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
     })
 
     await page.goto(`${baseURL}/admin/articles/new`)
-    const checkbox = page.getByRole('checkbox', { name: /导入并自动跑 AI 排版/ })
+    const checkbox = page.getByRole('checkbox', { name: /导入 \.docx 后自动跑 AI 排版/ })
     await expect(checkbox).toBeVisible({ timeout: 10_000 })
     await checkbox.uncheck()
     await expect(checkbox).not.toBeChecked()
@@ -136,7 +136,7 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
     await page.waitForTimeout(2000)
     expect(typesetCalled).toBe(false)
     // 没有 checkbox
-    await expect(page.getByRole('checkbox', { name: /导入并自动跑 AI 排版/ })).toHaveCount(0)
+    await expect(page.getByRole('checkbox', { name: /导入 \.docx 后自动跑 AI 排版/ })).toHaveCount(0)
     // 出现未配置时的提示文案
     await expect(page.getByText(/请先在.*设置.*AI 排版.*启用/).first()).toBeVisible()
   })
@@ -145,7 +145,7 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
     await page.route('**/api/admin/settings', (r) => mockSettings(r, SETTINGS_CONFIGURED))
 
     await page.goto(`${baseURL}/admin/articles/new`)
-    const checkbox = page.getByRole('checkbox', { name: /导入并自动跑 AI 排版/ })
+    const checkbox = page.getByRole('checkbox', { name: /导入 \.docx 后自动跑 AI 排版/ })
     await expect(checkbox).toBeVisible({ timeout: 10_000 })
     await checkbox.uncheck()
 
@@ -154,6 +154,6 @@ test.describe('Docx 导入 + AI 排版一体化', () => {
     expect(ls).toBe('false')
 
     await page.reload()
-    await expect(page.getByRole('checkbox', { name: /导入并自动跑 AI 排版/ })).not.toBeChecked()
+    await expect(page.getByRole('checkbox', { name: /导入 \.docx 后自动跑 AI 排版/ })).not.toBeChecked()
   })
 })
