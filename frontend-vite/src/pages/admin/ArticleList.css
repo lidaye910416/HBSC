@@ -204,8 +204,8 @@
 
 /* ---------- Preview tab: hero card + body wrapper ---------- */
 .article-editor__preview {
-  background: var(--surface-1);
-  border: 1px solid var(--admin-border);
+  background: var(--admin-bg, #FAFAF7);
+  border: 1px solid var(--admin-border-soft, #E5E2D8);
   border-radius: 4px;
   padding: 24px;
   min-height: 500px;
@@ -322,4 +322,119 @@
 }
 .article-editor__md[data-md-editor-dark] .w-md-editor-btn:hover {
   background: var(--accent-soft);
+}
+
+/* ---- 浅色 → 深色：prettylights 语法 token 覆盖 ----
+ * MDEditor 的 <pre class="w-md-editor-text-pre"> 文字颜色全部来自
+ * --color-prettylights-syntax-* 变量。库内置默认值是浅色主题的深色文字，
+ * 落在我们的深色背景上几乎不可见。这里覆写为 GitHub Primer 暗色调色板。
+ */
+.article-editor__md[data-md-editor-dark] {
+  --color-prettylights-syntax-comment: #8B949E;
+  --color-prettylights-syntax-constant: #79C0FF;
+  --color-prettylights-syntax-entity: #D2A8FF;
+  --color-prettylights-syntax-entity-tag: #7EE787;
+  --color-prettylights-syntax-keyword: #FF7B72;
+  --color-prettylights-syntax-string: #A5D6FF;
+  --color-prettylights-syntax-variable: #FFA657;
+  --color-prettylights-syntax-markup-bold: #D2A8FF;
+  --color-prettylights-syntax-markup-heading: #79C0FF;
+  --color-prettylights-syntax-markup-italic: #D2A8FF;
+  --color-prettylights-syntax-markup-list: #DEDEE8;
+  --color-prettylights-syntax-markup-deleted-text: #FFDCD7;
+  --color-prettylights-syntax-markup-deleted-bg: #67060C;
+  --color-prettylights-syntax-markup-inserted-text: #AFF5B4;
+  --color-prettylights-syntax-markup-inserted-bg: #033A16;
+}
+
+/* 兜底：<pre> 自身文字 + textarea 光标颜色 */
+.article-editor__md[data-md-editor-dark] .w-md-editor-text-pre {
+  color: var(--md-editor-fg);
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor-text-input {
+  caret-color: var(--md-editor-fg);
+}
+
+/* ---- 终局：让 textarea 直接显示文字 ----
+ * 库的 pre 高亮层 + textarea 透明层机制在 admin 强制深色场景下不可靠。
+ * （--color-prettylights-syntax-* 变量与 @media prefers-color-scheme
+ *  互相干扰，HMR 重载后变量重置时机也容易错位。）
+ * 这里把 pre 关掉，让 textarea 自己露字 — 用户能看见、能编辑就行。
+ * 代价是没有语法高亮，但 admin 编辑场景下可读性优先。
+ */
+.article-editor__md[data-md-editor-dark] .w-md-editor-text-pre {
+  display: none !important;
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor-text-input {
+  -webkit-text-fill-color: var(--md-editor-fg) !important;
+  color: var(--md-editor-fg) !important;
+  background: transparent !important;
+  caret-color: var(--md-editor-fg);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  padding: 16px !important;
+  /* 让 textarea 撑满 wrapper，避开 MDEditor pre-textarea 高度联动失灵。
+   * 上面的 .w-md-editor-text-pre { display:none } 把高亮层关掉后，
+   * MDEditor 测 scrollHeight 拿不到正确值，textarea 一直停在 220px，
+   * wrapper 下方留出 (500 - 220)px 空白。这里强制 100% 让 textarea 自己撑高。
+   *
+   * chain 修复：
+   *   .w-md-editor (height: 500px from JSX)
+   *     └─ .w-md-editor-content (height: 100% — MDEditor 自带)
+   *          └─ .w-md-editor-input (height: 100% — MDEditor 自带)
+   *               └─ .w-md-editor-text (inline min-height: 100px — 没 height)
+   *                    └─ .w-md-editor-text-input ← 这里要 100%
+   * 必须给 .w-md-editor-text 也补 height:100%，否则 100% 会退化成 auto。 */
+  height: 100% !important;
+  resize: none !important;
+  overflow: auto !important;
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor-text {
+  /* 补齐 chain：让 .w-md-editor-text 也撑满父容器，否则 textarea 100% 拿不到高度。 */
+  height: 100% !important;
+  min-height: 0 !important;
+}
+.article-editor__md[data-md-editor-dark] .w-md-editor-input {
+  /* MDEditor 自带 height:100%，但被 toolbar 抢走空间时容易失效，再保一次。 */
+  min-height: 0 !important;
+}
+
+/* ===== Journal cover editor (used by JournalEditor.tsx) ===== */
+.journal-cover-editor {
+  border: 1px dashed var(--admin-border);
+  border-radius: var(--radius-2);
+  padding: 16px;
+  background: var(--admin-surface-2);
+}
+.journal-cover-editor--empty {
+  cursor: pointer;
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--admin-text-2);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.journal-cover-editor--empty:hover {
+  border-color: var(--admin-accent, #C9A84C);
+  background: var(--admin-surface);
+}
+.journal-cover-editor__hint {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: var(--admin-text-2);
+}
+.journal-cover-editor__preview {
+  margin-bottom: 12px;
+}
+.journal-cover-editor__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.journal-cover-editor__url {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.75rem;
+  color: var(--admin-text-muted);
+  word-break: break-all;
 }

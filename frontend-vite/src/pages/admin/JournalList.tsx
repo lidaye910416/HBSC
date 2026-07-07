@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
+import { Plus, Edit, Trash2, ExternalLink, AlertTriangle, ImageOff, ImagePlus } from 'lucide-react'
 import { api, type JournalCompleteness } from '../../services/api'
 import { useToast } from '../../components/admin/Toast'
 import {
@@ -27,6 +27,15 @@ export function JournalList() {
     queryKey: ['admin', 'journals', { q, page }],
     queryFn: () => api.admin.journals.list({ q: q || undefined, page, per_page: 20 }),
   })
+
+  // 封面健康检查：标识 DB 里有 cover_image 但磁盘文件缺失的期刊，
+  // 让管理员在列表里就能看到哪些期刊封面是"坏的"、需要重传。
+  const { data: coversStatus } = useQuery({
+    queryKey: ['admin', 'covers', 'status'],
+    queryFn: () => api.admin.covers.status(),
+  })
+  const coverByJournalId = new Map<number, { status: string; reason?: string | null }>()
+  for (const j of coversStatus?.journals ?? []) coverByJournalId.set(j.id, j)
 
   const { data: completeness } = useQuery({
     queryKey: ['admin', 'journals', 'completeness', data?.items.map((j) => j.id).join(',')],
@@ -103,6 +112,7 @@ export function JournalList() {
           <table className="admin-table">
             <thead>
               <tr>
+                <th style={{ width: 80 }}>封面</th>
                 <th>标题</th>
                 <th>期号</th>
                 <th>文章数</th>
@@ -111,8 +121,43 @@ export function JournalList() {
               </tr>
             </thead>
             <tbody>
-              {data?.items.map((j) => (
+              {data?.items.map((j) => {
+                const cs = coverByJournalId.get(j.id)
+                return (
                 <tr key={j.id}>
+                  <td>
+                    {j.cover_image && cs?.status === 'ok' ? (
+                      <img
+                        src={j.cover_image}
+                        alt={j.title}
+                        style={{ width: 56, height: 32, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                      />
+                    ) : j.cover_image && cs?.status === 'missing_file' ? (
+                      <div
+                        title={`DB 引用 ${j.cover_image} 但文件已丢失`}
+                        style={{
+                          width: 56, height: 32, borderRadius: 4,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: 'var(--danger-bg)', color: 'var(--danger)',
+                          border: '1px dashed var(--danger)',
+                        }}
+                      >
+                        <ImageOff size={14} />
+                      </div>
+                    ) : (
+                      <div
+                        title="尚未设置封面"
+                        style={{
+                          width: 56, height: 32, borderRadius: 4,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: 'var(--admin-surface-2)', color: 'var(--admin-text-muted)',
+                          border: '1px dashed var(--admin-border)',
+                        }}
+                      >
+                        <ImagePlus size={14} />
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{j.title}</div>
                     <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{j.slug}</div>
@@ -178,10 +223,11 @@ export function JournalList() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
               {data?.items.length === 0 && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <Empty title="暂无期刊" description="点击右上角『新建期刊』开始。" />
                   </td>
                 </tr>

@@ -11,6 +11,46 @@
 .journal-detail__btn--primary:disabled { background: var(--admin-text-disabled); }
 .journal-detail__error { background: var(--danger-bg); color: var(--danger); padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 0.875rem; }
 
+/* 期刊封面文件丢失时的红色横幅 */
+.journal-detail__cover-warn {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--danger-bg, #FEE2E2);
+  color: var(--danger, #B91C1C);
+  border: 1px solid var(--danger, #B91C1C);
+  border-radius: var(--radius-2, 6px);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.journal-detail__cover-warn code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.8125rem;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+/* 文章行内的"补封面 / 上传"小按钮 */
+.journal-detail__cover-fix-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--admin-surface-2);
+  border: 1px solid var(--danger, #B91C1C);
+  color: var(--danger, #B91C1C);
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: var(--type-xs, 0.75rem);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.journal-detail__cover-fix-btn:hover:not(:disabled) {
+  background: var(--danger-bg, #FEE2E2);
+}
+.journal-detail__cover-fix-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .journal-detail__completeness { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .journal-detail__pill { padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; }
 .journal-detail__pill--ok { background: var(--status-published-bg); color: var(--status-published-fg); }

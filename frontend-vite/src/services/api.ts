@@ -273,6 +273,34 @@ export const api = {
         request(`/api/admin/articles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
       delete: (id: number) =>
         request(`/api/admin/articles/${id}`, { method: 'DELETE' }),
+      // Multipart upload — must NOT set Content-Type: application/json
+      uploadCover: async (id: number, file: File) => {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch(API_BASE + `/api/admin/articles/${id}/cover`, {
+          method: 'POST',
+          credentials: 'include',
+          body: fd,
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            window.location.href = '/admin/login'
+            throw new ApiError('Session expired', 'unauthorized', 401, null)
+          }
+          let body: unknown = null
+          try { body = await res.json() } catch {}
+          const errBody = (body as { error?: { code?: string; message?: string } } | null)?.error
+          const message =
+            errBody?.message ||
+            (body as { detail?: string } | null)?.detail ||
+            res.statusText ||
+            'Upload failed'
+          throw new ApiError(message, errBody?.code || codeForStatus(res.status), res.status, body)
+        }
+        return res.json()
+      },
+      clearCover: (id: number) =>
+        request(`/api/admin/articles/${id}/cover`, { method: 'DELETE' }),
       toggleFeatured: (id: number) =>
         request(`/api/admin/articles/${id}/featured`, { method: 'PATCH' }),
       importDocx: async (file: File) => {
@@ -324,6 +352,13 @@ export const api = {
           }),
         }),
     },
+    covers: {
+      // 批量封面健康检查：返回每个期刊/文章的 cover_image URL 是否还指向一个真实文件
+      status: (): Promise<{
+        journals: Array<{ id: number; title: string; slug: string; cover_image: string | null; status: 'ok' | 'missing' | 'missing_file'; reason?: string | null }>
+        articles: Array<{ id: number; title: string; slug: string; journal_id: number | null; cover_image: string | null; status: 'ok' | 'missing' | 'missing_file'; reason?: string | null }>
+      }> => request('/api/admin/covers/status'),
+    },
     journals: {
       list: (params?: { q?: string; status?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<JournalAdmin>> => {
         const sp = new URLSearchParams()
@@ -333,7 +368,7 @@ export const api = {
         if (params?.per_page) sp.set('per_page', String(params.per_page))
         return request<PaginatedResponse<JournalAdmin>>('/api/admin/journals?' + sp.toString())
       },
-      create: (body: Record<string, unknown>) =>
+      create: (body: Record<string, unknown>): Promise<JournalAdmin & { id: number }> =>
         request('/api/admin/journals', { method: 'POST', body: JSON.stringify(body) }),
       get: (id: number): Promise<JournalAdmin> =>
         request<JournalAdmin>(`/api/admin/journals/${id}`),
@@ -341,6 +376,34 @@ export const api = {
         request(`/api/admin/journals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
       delete: (id: number) =>
         request(`/api/admin/journals/${id}`, { method: 'DELETE' }),
+      // Multipart upload — must NOT set Content-Type: application/json
+      uploadCover: async (id: number, file: File) => {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch(API_BASE + `/api/admin/journals/${id}/cover`, {
+          method: 'POST',
+          credentials: 'include',
+          body: fd,
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            window.location.href = '/admin/login'
+            throw new ApiError('Session expired', 'unauthorized', 401, null)
+          }
+          let body: unknown = null
+          try { body = await res.json() } catch {}
+          const errBody = (body as { error?: { code?: string; message?: string } } | null)?.error
+          const message =
+            errBody?.message ||
+            (body as { detail?: string } | null)?.detail ||
+            res.statusText ||
+            'Upload failed'
+          throw new ApiError(message, errBody?.code || codeForStatus(res.status), res.status, body)
+        }
+        return res.json() as Promise<JournalAdmin>
+      },
+      clearCover: (id: number) =>
+        request(`/api/admin/journals/${id}/cover`, { method: 'DELETE' }),
       completeness: (id: number): Promise<JournalCompleteness> =>
         request<JournalCompleteness>(`/api/admin/journals/${id}/completeness`),
       completenessBatch: (ids: number[]): Promise<Record<string, JournalCompleteness>> =>
