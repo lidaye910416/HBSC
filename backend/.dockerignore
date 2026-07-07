@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local dev artifacts
+.env
+.env.local
+.env.*.local
+research.db
+research.db-journal
+# 注意：uploads/ 不再排除 — 种子封面图需要烤进镜像到 /app/seed-uploads/
+# 运行时上传通过 docker volume 持久化到 /app/uploads/，与镜像的种子分离。
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Git
+.git/
+.gitignore

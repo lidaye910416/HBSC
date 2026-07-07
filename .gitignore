@@ -69,3 +69,9 @@ skills-lock.json
 test-results/
 frontend-vite/test-results/
 frontend-vite/playwright-report/
+
+# ── Deploy artifacts (release/) ──────────────
+# Commit manifests + docs; never secrets or binary tarballs
+release/.env
+release/hbsc-backend.tar
+release/hbsc-frontend.tar
