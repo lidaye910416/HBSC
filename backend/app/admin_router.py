@@ -21,7 +21,7 @@ from .schemas.admin import (
     JournalArticlesByCategoryOut,
 )
 from .security import get_current_admin
-from .upload_service import save_upload, read_upload_with_limit, UploadTooLarge
+from .upload_service import save_upload, read_upload_with_limit, UploadTooLarge, get_public_path
 from .services.image_gen import generate_image
 from .services.completeness import is_journal_complete
 
@@ -288,6 +288,75 @@ def delete_article(
     return OkResponse()
 
 
+@router.post("/articles/{article_id}/cover")
+async def upload_article_cover(
+    article_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Upload a cover image for an article in one round-trip.
+
+    Same semantics as ``POST /journals/{id}/cover`` — saves through
+    ``save_upload``, writes URL back to ``Article.cover_image``, best-effort
+    deletes the previous local file. Used by the per-article CMS cover widget
+    and by the journal-detail bulk fix-up action.
+    """
+    a = db.query(Article).filter(Article.id == article_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="文章不存在")
+
+    try:
+        content = await read_upload_with_limit(file)
+    except UploadTooLarge as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    safe_name = _sanitize_filename(file.filename or "cover")
+
+    try:
+        info = save_upload(filename=safe_name, content=content, uploaded_by=admin, db=db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    old_cover = a.cover_image
+    a.cover_image = info["url"]
+    db.commit()
+    db.refresh(a)
+
+    if old_cover and old_cover.startswith("/uploads/"):
+        try:
+            old_path = get_public_path(old_cover)
+            upload_root = Path(settings.UPLOAD_DIR).resolve()
+            if old_path.resolve().is_relative_to(upload_root) and old_path.exists():
+                old_path.unlink()
+        except OSError:
+            pass
+
+    return _article_to_dict(a)
+
+
+@router.delete("/articles/{article_id}/cover", response_model=OkResponse)
+def clear_article_cover(
+    article_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    a = db.query(Article).filter(Article.id == article_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    old = a.cover_image
+    a.cover_image = None
+    db.commit()
+    if old and old.startswith("/uploads/"):
+        try:
+            old_path = get_public_path(old)
+            upload_root = Path(settings.UPLOAD_DIR).resolve()
+            if old_path.resolve().is_relative_to(upload_root) and old_path.exists():
+                old_path.unlink()
+        except OSError:
+            pass
+    return OkResponse()
+
+
 # ============== JOURNALS ==============
 
 def _journal_to_dict(j: Journal) -> dict:
@@ -388,6 +457,135 @@ def delete_journal(
     db.delete(j)
     db.commit()
     return OkResponse()
+
+
+@router.post("/journals/{journal_id}/cover")
+async def upload_journal_cover(
+    journal_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Upload a cover image for a journal in one round-trip.
+
+    Saves the bytes through ``save_upload`` (Pillow validation, /uploads/YYYY/MM/),
+    then writes the returned URL back to ``Journal.cover_image``. Old cover file
+    (when local and inside the upload root) is deleted to avoid orphaned bytes.
+    """
+    j = db.query(Journal).filter(Journal.id == journal_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+
+    try:
+        content = await read_upload_with_limit(file)
+    except UploadTooLarge as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    safe_name = _sanitize_filename(file.filename or "cover")
+
+    try:
+        info = save_upload(filename=safe_name, content=content, uploaded_by=admin, db=db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    old_cover = j.cover_image
+    j.cover_image = info["url"]
+    db.commit()
+    db.refresh(j)
+
+    # Best-effort cleanup of previous cover file. Only delete when the URL
+    # points inside the upload root (so we never try to remove arbitrary paths).
+    if old_cover and old_cover.startswith("/uploads/"):
+        try:
+            old_path = get_public_path(old_cover)
+            upload_root = Path(settings.UPLOAD_DIR).resolve()
+            if old_path.resolve().is_relative_to(upload_root) and old_path.exists():
+                old_path.unlink()
+        except OSError:
+            pass  # best-effort; orphan bytes are not fatal
+
+    return _journal_to_dict(j)
+
+
+@router.delete("/journals/{journal_id}/cover", response_model=OkResponse)
+def clear_journal_cover(
+    journal_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Remove the journal's cover image (DB column cleared, file deleted when local)."""
+    j = db.query(Journal).filter(Journal.id == journal_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="期刊不存在")
+    old = j.cover_image
+    j.cover_image = None
+    db.commit()
+    if old and old.startswith("/uploads/"):
+        try:
+            old_path = get_public_path(old)
+            upload_root = Path(settings.UPLOAD_DIR).resolve()
+            if old_path.resolve().is_relative_to(upload_root) and old_path.exists():
+                old_path.unlink()
+        except OSError:
+            pass
+    return OkResponse()
+
+
+def _cover_status(url: Optional[str]) -> dict:
+    """Compute 'ok' / 'missing' for a cover URL.
+
+    - empty/null URL  -> missing (no URL set)
+    - non-/uploads/ URL (e.g. external) -> ok (we can't verify, trust caller)
+    - /uploads/ URL with file present -> ok
+    - /uploads/ URL with file absent  -> missing_file (DB has stale URL)
+    """
+    if not url:
+        return {"status": "missing", "reason": "no_url"}
+    if not url.startswith("/uploads/"):
+        return {"status": "ok", "reason": "external"}
+    try:
+        path = get_public_path(url)
+        return {"status": "ok" if path.exists() else "missing_file", "reason": None}
+    except Exception:
+        return {"status": "ok", "reason": "external"}
+
+
+@router.get("/covers/status")
+def covers_status(
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Batch report of cover image health across all journals and articles.
+
+    Frontend uses this to highlight rows whose cover URL 404s so an admin
+    can re-upload (rather than discovering the broken image only when a
+    visitor opens the page).
+    """
+    journals = db.query(Journal).all()
+    articles = db.query(Article).filter(Article.cover_image.isnot(None), Article.cover_image != "").all()
+
+    return {
+        "journals": [
+            {
+                "id": j.id,
+                "title": j.title,
+                "slug": j.slug,
+                "cover_image": j.cover_image,
+                **_cover_status(j.cover_image),
+            }
+            for j in journals
+        ],
+        "articles": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "slug": a.slug,
+                "journal_id": a.journal_id,
+                "cover_image": a.cover_image,
+                **_cover_status(a.cover_image),
+            }
+            for a in articles
+        ],
+    }
 
 
 @router.get("/journals/{journal_id}/completeness")
