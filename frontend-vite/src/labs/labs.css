@@ -121,7 +121,7 @@
   position: absolute; inset: 0;
   background:
     radial-gradient(circle at 20% 50%, var(--color-accent-glow-soft), transparent 50%),
-    radial-gradient(circle at 80% 50%, rgba(147, 197, 253, 0.18), transparent 50%);
+    radial-gradient(circle at 80% 50%, var(--color-accent-glow), transparent 50%);
 }
 .lab-waveform {
   display: flex; align-items: center; gap: 3px; z-index: 1;
