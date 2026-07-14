@@ -2,14 +2,20 @@
 //
 // Iframe wrapper for the MiniCast lab. Resolves iframeSrc from the shared
 // registry, surfacing a fallback (retry + service start instructions) when
-// cross-origin or network failure leaves the frame empty. The hbsc nav
-// remains above the iframe — no double header.
-import { useState } from 'react'
+// MiniCast does not signal readiness in time. The hbsc nav remains above the
+// iframe — no double header.
+import { useEffect, useState } from 'react'
 import registry from './registry.json'
 import type { LabRegistry } from './types'
 
 const typedRegistry = registry as LabRegistry
 const minicast = typedRegistry.labs.find((l) => l.id === 'minicast')!
+
+// If MiniCast has not signalled readiness within this window, assume the
+// service is unreachable and show the fallback. This is the common failure
+// (dev service down, cross-origin unreachable) that contentDocument probing
+// silently swallowed for cross-origin frames.
+const READY_TIMEOUT_MS = 8000
 
 export function MiniCastLab() {
   // In prod the iframe must point at a real, separately-deployed MiniCast
@@ -22,6 +28,33 @@ export function MiniCastLab() {
     : (import.meta.env.VITE_MINICAST_URL ?? minicast.iframeSrc.prod)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+
+  // Cross-origin-safe readiness detection: MiniCast's embed mode posts
+  // { type: 'minicast:ready' } once mounted. If no such message arrives
+  // before READY_TIMEOUT_MS, surface the fallback. Works across origins
+  // (unlike iframe.contentDocument inspection, which throws SecurityError
+  // on cross-origin frames and was silently caught).
+  useEffect(() => {
+    let ready = false
+    const timer = setTimeout(() => {
+      if (!ready) setLoadError(true)
+    }, READY_TIMEOUT_MS)
+    const onMessage = (e: MessageEvent) => {
+      if (
+        e.data &&
+        typeof e.data === 'object' &&
+        (e.data as { type?: unknown }).type === 'minicast:ready'
+      ) {
+        ready = true
+        clearTimeout(timer)
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('message', onMessage)
+    }
+  }, [reloadKey])
 
   if (loadError) {
     return (
@@ -62,19 +95,6 @@ export function MiniCastLab() {
         // Sandbox: allow scripts + same-origin (so localStorage works for API key)
         sandbox="allow-scripts allow-same-origin allow-forms"
         onError={() => setLoadError(true)}
-        onLoad={(e) => {
-          // Detect failure: if iframe loaded but contents are blank (cross-origin
-          // unreachable), surface a fallback. Same-origin dev loads succeed silently.
-          const iframe = e.currentTarget
-          try {
-            const doc = iframe.contentDocument
-            if (doc && doc.body && doc.body.innerHTML === '') {
-              setLoadError(true)
-            }
-          } catch {
-            // Cross-origin — cannot inspect, assume OK
-          }
-        }}
       />
       <noscript>
         <div className="minicast-lab__error">
