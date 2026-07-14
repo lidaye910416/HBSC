@@ -1,0 +1,43 @@
+{
+  "labs": [
+    {
+      "id": "minicast",
+      "title": "MiniCast",
+      "subtitle": "AI 播客生成器 · Mandarin / English",
+      "description": "输入一个 URL、PDF 或一段文本，自动生成中英双人对谈播客。6 个精选音色，强制用户审阅脚本，30 秒即可产出可发布音频。",
+      "icon": "🎙️",
+      "iframeSrc": {
+        "dev": "http://localhost:5577/?embed=1",
+        "prod": "/labs/minicast/?embed=1"
+      },
+      "status": "active",
+      "tags": ["LLM", "TTS", "FFMPEG", "VIBE-CODING"]
+    },
+    {
+      "id": "placeholder-1",
+      "title": "下一个 Lab",
+      "subtitle": "Prototyping",
+      "description": "数创实验室是开放的实验场，后续会有更多由团队用 vibe coding 方式构建的 AI 工具陆续上线。",
+      "icon": "🧪",
+      "iframeSrc": {
+        "dev": "",
+        "prod": ""
+      },
+      "status": "coming-soon",
+      "tags": ["PLANNED"]
+    },
+    {
+      "id": "placeholder-2",
+      "title": "下一个 Lab",
+      "subtitle": "Prototyping",
+      "description": "数创实验室是开放的实验场，后续会有更多由团队用 vibe coding 方式构建的 AI 工具陆续上线。",
+      "icon": "🧪",
+      "iframeSrc": {
+        "dev": "",
+        "prod": ""
+      },
+      "status": "coming-soon",
+      "tags": ["PLANNED"]
+    }
+  ]
+}
