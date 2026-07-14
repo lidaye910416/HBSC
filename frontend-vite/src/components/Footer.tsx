@@ -11,6 +11,7 @@ const researchLinks = [
 
 const siteLinks = [
   { label: '期刊', path: '/articles' },
+  { label: '数创实验室', path: '/labs' },
   { label: '关于我们', path: '/about' },
 ]
 
