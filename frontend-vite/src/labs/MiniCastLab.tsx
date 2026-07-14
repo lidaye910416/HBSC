@@ -12,7 +12,14 @@ const typedRegistry = registry as LabRegistry
 const minicast = typedRegistry.labs.find((l) => l.id === 'minicast')!
 
 export function MiniCastLab() {
-  const src = import.meta.env.DEV ? minicast.iframeSrc.dev : minicast.iframeSrc.prod
+  // In prod the iframe must point at a real, separately-deployed MiniCast
+  // origin — NOT a same-origin /labs/minicast path (that URL is this very
+  // React Router route, so a same-origin src would recursively re-render
+  // MiniCastLab → infinite iframe nesting). Deployment injects the real URL
+  // via VITE_MINICAST_URL at build time; registry.prod is the fallback.
+  const src = import.meta.env.DEV
+    ? minicast.iframeSrc.dev
+    : (import.meta.env.VITE_MINICAST_URL ?? minicast.iframeSrc.prod)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 

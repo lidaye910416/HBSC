@@ -8,7 +8,7 @@
       "icon": "🎙️",
       "iframeSrc": {
         "dev": "http://localhost:5577/?embed=1",
-        "prod": "/labs/minicast/?embed=1"
+        "prod": "https://minicast.example.com/?embed=1"
       },
       "status": "active",
       "tags": ["LLM", "TTS", "FFMPEG", "VIBE-CODING"]
