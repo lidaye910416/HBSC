@@ -1,0 +1,45 @@
+server:
+  host: 192.168.15.204
+  port: 22
+  user: root
+  auth:
+    type: password
+    password: CPYF@2022
+
+deploy:
+  owner: jasonlee
+  remote_base: /opt/apps
+  docker_network: app-network
+
+nginx:
+  image: nginx:alpine
+  container_name: app-nginx-hbsc
+  http_port: 18889
+  config_template: ./frontend-vite/nginx.prod.conf
+
+services:
+  # --- 前端：HBSC 站点静态资源 ---
+  - name: hbsc-web
+    type: frontend
+    local_dist: ./frontend-vite/dist
+    remote_mount: /opt/apps/nginx/html/hbsc
+    url_path: /
+
+  # --- 后端：HBSC FastAPI 服务 ---
+  - name: hbsc-api
+    type: backend
+    image: python:3.11-slim
+    local_artifact: /tmp/hbsc-api.tar.gz
+    remote_workdir: /opt/apps/hbsc-api
+    start_command: "bash start.sh"
+    container_port: 8000
+    host_port: 18000
+    health_path: /api/articles
+    health_timeout: 90
+    env:
+      - DATABASE_URL=sqlite:///./research.db
+      - DEBUG=false
+      - UPLOAD_DIR=./uploads
+      - IMAGE_MAX_SIZE_MB=5
+      - DOCX_MAX_SIZE_MB=50
+      - 'ALLOWED_ORIGINS=["http://localhost","http://192.168.15.204","http://192.168.15.204:18889"]'
