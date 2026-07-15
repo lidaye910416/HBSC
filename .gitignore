@@ -65,6 +65,8 @@ skills-lock.json
 .dev-pids/
 # superpowers brainstorm/spec caches
 .superpowers/
+# git worktree directories (project-local isolation)
+.worktrees/
 # Playwright test artifacts (root + per-package)
 test-results/
 frontend-vite/test-results/

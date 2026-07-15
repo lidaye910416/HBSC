@@ -77,6 +77,7 @@ export function Navigation() {
 
   const isIssuesActive = location.pathname.startsWith('/issues')
   const isArticlesActive = location.pathname.startsWith('/articles')
+  const isLabsActive = location.pathname.startsWith('/labs')
 
   return (
     <nav className="nav">
@@ -159,6 +160,13 @@ export function Navigation() {
           >
             所有文章
           </Link>
+
+          <Link
+            to="/labs"
+            className={`nav__link ${isLabsActive ? 'nav__link--active' : ''}`}
+          >
+            数创实验室
+          </Link>
         </div>
 
         <div className="nav__actions">
@@ -203,6 +211,12 @@ export function Navigation() {
             className={`nav__mobile-link ${isArticlesActive ? 'active' : ''}`}
           >
             所有文章
+          </Link>
+          <Link
+            to="/labs"
+            className={`nav__mobile-link ${isLabsActive ? 'active' : ''}`}
+          >
+            数创实验室
           </Link>
         </div>
       )}

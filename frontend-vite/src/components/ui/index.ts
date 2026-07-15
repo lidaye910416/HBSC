@@ -1,6 +1,6 @@
-export { Button, type ButtonProps } from './Button'
+export { Button, type ButtonProps } from './button'
 export { IconButton, type IconButtonProps } from './IconButton'
-export { Card, CardHeader, CardTitle, type CardProps } from './Card'
+export { Card, CardHeader, CardTitle, type CardProps } from './card'
 export { Stat, type StatProps } from './Stat'
 export { PageHeader, type PageHeaderProps } from './PageHeader'
 export {
@@ -10,5 +10,5 @@ export { Breadcrumb, type BreadcrumbItem, type BreadcrumbProps } from './Breadcr
 export { StatusBadge, type Status, type StatusBadgeProps } from './StatusBadge'
 export { Empty, type EmptyProps } from './Empty'
 export { Pill, type PillProps } from './Pill'
-export { Tabs, type TabItem, type TabsProps } from './Tabs'
+export { Tabs, type TabItem, type TabsProps } from './tabs'
 export { Modal, type ModalProps } from './Modal'

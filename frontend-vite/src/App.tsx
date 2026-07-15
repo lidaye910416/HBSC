@@ -9,6 +9,8 @@ import { Issues } from './pages/Issues'
 import { IssueDetail } from './pages/IssueDetail'
 import { About } from './pages/About'
 import { SearchPage } from './pages/Search'
+import { LabsPage } from './labs/LabsPage'
+import { MiniCastLab } from './labs/MiniCastLab'
 import { ProtectedRoute } from './components/admin/ProtectedRoute'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { PublicPageAgentMount } from './components/PublicPageAgentMount'
@@ -77,6 +79,8 @@ export default function App() {
           <Route path="/issues/:slug" element={<Layout><IssueDetail /></Layout>} />
           <Route path="/about" element={<Layout><About /></Layout>} />
           <Route path="/search" element={<Layout><SearchPage /></Layout>} />
+          <Route path="/labs" element={<Layout><LabsPage /></Layout>} />
+          <Route path="/labs/minicast" element={<Layout><MiniCastLab /></Layout>} />
           <Route path="*" element={<NotFound />} />
 
           {/* Admin 登录（公开） */}
