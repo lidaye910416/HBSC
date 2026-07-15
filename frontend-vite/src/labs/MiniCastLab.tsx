@@ -25,7 +25,6 @@ export function MiniCastLab() {
       src={src}
       title="MiniCast"
       baseClass="minicast-lab"
-      readyMessageType="minicast:ready"
       renderFallback={(retry) => (
         <div className="minicast-lab__error" role="alert">
           <h3>MiniCast 服务暂不可用</h3>
