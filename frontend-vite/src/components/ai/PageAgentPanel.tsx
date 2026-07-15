@@ -157,7 +157,18 @@ export function PageAgentPanel({
             reply = '⚠️ 页面助手刚被刷新，请重试一次'
           }
         } else {
-          reply = '⚠️ ' + (e instanceof Error ? e.message : '调用失败')
+          // The page-agent library occasionally fails to parse the LLM's
+          // tool_call response ("No tool_call and the message content does
+          // not contain valid JSON"). The library's internal LLM retry also
+          // fails, so we just translate the cryptic raw error into a
+          // user-friendly Chinese hint. (Real fix is upstream: switch to a
+          // model with better tool-call support or upgrade the library.)
+          const rawMsg = e instanceof Error ? e.message : '调用失败'
+          if (rawMsg.includes('No tool_call') && rawMsg.includes('valid JSON')) {
+            reply = '⚠️ 页面助手暂时无法理解当前任务，请换种描述重试'
+          } else {
+            reply = '⚠️ ' + rawMsg
+          }
         }
       }
       if (reply === null && result) {
