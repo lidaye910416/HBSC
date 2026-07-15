@@ -1,25 +1,28 @@
 // frontend-vite/tests/labs-integration.spec.ts
 //
 // Full integration: nav → /labs → MiniCast card → /labs/minicast →
-// iframe loads minicast → embed mode hides minicast Header →
+// iframe loads minicast → minicast Header + ProgressBar visible
+// (user needs in-app controls: settings, API key, progress) →
 // minicast standalone still has its Header (regression).
 //
+// Header visibility in embed mode was intentionally reversed (2026-07-15):
+// hiding the Header also hid the Settings button and API Key indicator,
+// which the user needs while the lab is hosted inside hbsc. The hbsc Nav
+// and minicast Header serve different layers and don't visually conflict.
+//
 // REQUIRES: all dev servers running.
-//   # hbsc frontend (5174, playwright baseURL)
+//   # hbsc frontend
 //   cd frontend-vite && npx vite --port 5174 --host 127.0.0.1
 //   # minicast frontend (5577)
 //   cd /Users/jasonlee/Projects/MiniCast/web && npm run dev
 //   # (optional) hbsc + minicast backends for full data flow:
 //   cd backend && uvicorn app.main:app --reload --port 8000
 //   cd /Users/jasonlee/Projects/MiniCast && python -m minicast server
-//
-// Note: minicast's Header renders as a <header> element (verified in
-// MiniCast/web/src/components/layout/Header.tsx). embed=1 hides it.
 
 import { test, expect } from '@playwright/test'
 
 test.describe('Labs full integration (manual smoke)', () => {
-  test('nav → labs → minicast iframe → embed mode hides inner header', async ({ page }) => {
+  test('nav → labs → minicast iframe → Header + Settings visible', async ({ page }) => {
     // 1. Home → click nav 数创实验室
     await page.goto('/')
     await page.locator('nav.nav a').filter({ hasText: '数创实验室' }).click()
@@ -36,12 +39,20 @@ test.describe('Labs full integration (manual smoke)', () => {
 
     // 4. iframe loads minicast
     const iframe = page.frameLocator('iframe.minicast-lab__frame')
-    // Wait for minicast's app body to render content
     await expect(iframe.locator('body')).not.toBeEmpty({ timeout: 15_000 })
 
-    // 5. embed mode: minicast's internal Header must NOT be present
+    // 5. embed mode now keeps the Header visible — verify it AND the
+    //    critical controls (Settings button + API Key status).
     const innerHeader = iframe.locator('header')
-    await expect(innerHeader).toHaveCount(0)
+    await expect(innerHeader).toHaveCount(1) // visible (not hidden)
+
+    // The Settings button is the reason we keep the Header in embed mode.
+    // The button is icon-only with aria-label="设置" (no visible text).
+    await expect(iframe.locator('button[aria-label="设置"]')).toBeVisible()
+
+    // API Key status is also exposed via the Header (e.g. "API Key: 已设置").
+    // Asserting visibility of the indicator text is the cleanest signal.
+    await expect(iframe.getByText(/API Key/)).toBeVisible()
   })
 
   test('minicast standalone still has header (regression check)', async ({ page }) => {

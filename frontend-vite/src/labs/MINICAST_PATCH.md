@@ -46,21 +46,28 @@ const isEmbedded =
   Hook 规则
 - 触发条件：URL query 包含 `embed=1`（严格匹配，避免 `embed=11` 误判）
 
-### 3. JSX 中条件渲染 Header
+### 3. JSX 中 Header 改为始终渲染（2026-07-15 用户反馈调整）
 
 ```tsx
-{!isEmbedded && (
-  <Header
-    onReset={() => {
-      if (confirm('确定重置整个工作流？已生成的音频链接也会丢失。')) {
-        dispatch({ type: 'RESET' })
-      }
-    }}
-    onOpenSettings={() => setSettingsOpen(true)}
-    keySource={keySource}
-  />
-)}
+{/* Header 在 embed 模式也显示 —— 它暴露设置按钮（API key、voice
+    defaults）和 "返回首页" reset 操作，lab 嵌入 hbsc 后用户需要这些
+    控制入口。hbsc Nav（页面导航）与 minicast Header（应用内控制）
+    服务不同层级，不冲突。 */}
+<Header
+  onReset={() => {
+    if (confirm('确定重置整个工作流？已生成的音频链接也会丢失。')) {
+      dispatch({ type: 'RESET' })
+    }
+  }}
+  onOpenSettings={() => setSettingsOpen(true)}
+  keySource={keySource}
+/>
 ```
+
+**变更动机**：早先版本把 Header 也隐藏，导致嵌入场景下用户无法访问
+设置面板（API key、6 个精选音色选择、提取来源映射等关键配置）。
+实测反馈"设置什么的无法设置"正是这个原因。Header 与 hbsc Nav 视觉风格
+完全不同（前者深色 + Logo + 状态指示，后者浅色 + 页面链接），共存不冲突。
 
 ### 4. ProgressBar 改为始终渲染（2026-07-15 用户反馈调整）
 
@@ -120,7 +127,8 @@ MiniCast 仓根目录 `.snapshots/` 下已创建：
 ```
 .snapshots/embed_mode_20260714_225613.tar.gz           # 初版（含模块级 useMemo bug）
 .snapshots/embed_mode_fix_20260714_232103.tar.gz        # 修正版（模块级常量，Header+ProgressBar 都隐藏）
-.snapshots/progress_in_embed_20260715_084119.tar.gz    # ProgressBar 在 embed 模式下保留（用户反馈调整）
+.snapshots/progress_in_embed_20260715_084119.tar.gz    # ProgressBar 在 embed 模式下保留
+.snapshots/header_in_embed_20260715_084832.tar.gz       # Header 也保留（暴露设置按钮）
 ```
 
 包含 patch 后的 `web/src/App.tsx`，便于回滚或对比。
