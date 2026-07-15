@@ -28,11 +28,13 @@ interface BaseLabIframeProps {
   baseClass: string
   /** fallback content shown when the embed fails to signal readiness */
   renderFallback: (retry: () => void) => ReactNode
+  /** content rendered above the iframe (e.g. toolbar with back / open-in-new-window) */
+  header?: ReactNode
   /** iframe sandbox attribute; defaults to scripts + same-origin + forms + downloads + popups */
   sandbox?: string
   /** ms to wait for the reachability probe before giving up */
   reachTimeoutMs?: number
-  /** extra content (e.g. <noscript>) rendered inside the wrapper */
+  /** extra content (e.g. <noscript>) rendered below the iframe */
   children?: ReactNode
 }
 
@@ -41,6 +43,7 @@ export function BaseLabIframe({
   title,
   baseClass,
   renderFallback,
+  header,
   sandbox = DEFAULT_SANDBOX,
   reachTimeoutMs = DEFAULT_REACH_TIMEOUT_MS,
   children,
@@ -102,6 +105,7 @@ export function BaseLabIframe({
 
   return (
     <div className={baseClass}>
+      {header}
       {phase === 'probing' ? (
         // While probing, render the iframe anyway — most lab apps load fast
         // and the probe is just a fast-fail guard for unreachable targets.

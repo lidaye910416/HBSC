@@ -62,17 +62,23 @@ const isEmbedded =
 )}
 ```
 
-### 4. JSX 中条件渲染 ProgressBar
+### 4. ProgressBar 改为始终渲染（2026-07-15 用户反馈调整）
 
 ```tsx
-{!isEmbedded && (
-  <ProgressBar
-    steps={stepsOrder}
-    current={state.step}
-    onJump={(s) => go(s)}
-  />
-)}
+{/* ProgressBar 在 embed 模式下也显示 —— hbsc 用户需要看到 4 步进度
+    上下文。仅 Header 保持隐藏（hbsc Nav 充当 header 角色）。 */}
+<ProgressBar
+  steps={stepsOrder}
+  current={state.step}
+  onJump={(s) => go(s)}
+/>
 ```
+
+**变更动机**：早先版本把 Header 和 ProgressBar 都隐藏，导致嵌入场景
+下用户看不到 4-step wizard 的进度提示（仅看到 Step 1 的内容 + "下一步"
+按钮，缺少"现在在哪一步"反馈）。实测反馈"minicast 没有完全显示"
+正是这个原因。保留 ProgressBar + 仅隐藏 Header 的组合既不与 hbsc Nav
+冲突，又给用户完整的进度上下文。
 
 注意：原 ProgressBar 实际 prop 是 `current={state.step}`，不是 `step`。
 之前 task 描述里 `step={state.step}` 是简写，实际 patch 必须匹配真实
@@ -112,8 +118,9 @@ prop 签名（否则 TS 编译失败）。
 MiniCast 仓根目录 `.snapshots/` 下已创建：
 
 ```
-.snapshots/embed_mode_20260714_225613.tar.gz       # 初版（含模块级 useMemo bug）
-.snapshots/embed_mode_fix_20260714_232103.tar.gz    # 修正版（模块级常量，已验证）
+.snapshots/embed_mode_20260714_225613.tar.gz           # 初版（含模块级 useMemo bug）
+.snapshots/embed_mode_fix_20260714_232103.tar.gz        # 修正版（模块级常量，Header+ProgressBar 都隐藏）
+.snapshots/progress_in_embed_20260715_084119.tar.gz    # ProgressBar 在 embed 模式下保留（用户反馈调整）
 ```
 
 包含 patch 后的 `web/src/App.tsx`，便于回滚或对比。
