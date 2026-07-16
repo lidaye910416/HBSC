@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Navigation } from './components/Navigation'
 import { Footer } from './components/Footer'
@@ -45,6 +45,12 @@ const queryClient = new QueryClient({
 })
 
 function Layout({ children }: { children: React.ReactNode }) {
+  // /labs* routes (数创实验室 landing + MiniCast iframe) are a self-contained
+  // immersive space — Footer + AI 导航 FAB are visual noise that competes with
+  // the lab cards / iframe for screen real estate. Hide them there; the
+  // hbsc Navigation stays so users can still navigate back.
+  const isLabRoute = useLocation().pathname.startsWith('/labs')
+
   return (
     <>
       {/* Fixed full-viewport background — as a sibling div, not inside document flow.
@@ -55,12 +61,9 @@ function Layout({ children }: { children: React.ReactNode }) {
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 0 }}>
         <Navigation />
         <div style={{ flex: 1 }}>{children}</div>
-        <Footer />
+        {!isLabRoute && <Footer />}
       </div>
-      {/* Public page-agent FAB — sits above the background and footer, scrolls
-          with the public Layout but only renders when `page_agent.enabled`
-          AND a non-empty api_key are configured in the admin settings. */}
-      <PublicPageAgentMount />
+      {!isLabRoute && <PublicPageAgentMount />}
     </>
   )
 }
