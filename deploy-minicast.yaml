@@ -1,0 +1,45 @@
+server:
+  host: 192.168.15.204
+  port: 22
+  user: root
+  auth:
+    type: password
+    password: CPYF@2022
+
+deploy:
+  owner: jasonlee
+  remote_base: /opt/apps
+  docker_network: app-network
+
+nginx:
+  image: nginx:alpine
+  container_name: app-nginx-minicast
+  http_port: 5577
+
+services:
+  # --- 前端：MiniCast 静态资源（独立的 nginx，与 hbsc 的 18889 隔离）---
+  - name: minicast-web
+    type: frontend
+    local_dist: /Users/jasonlee/Projects/MiniCast/web/dist
+    remote_mount: /opt/apps/nginx/html/minicast
+    url_path: /
+
+  # --- 后端：MiniCast FastAPI 服务（必须先于 hbsc 启动，因 hbsc 的
+  #     /labs/minicast iframe 通过 VITE_MINICAST_URL 间接依赖此服务）---
+  - name: minicast-api
+    type: backend
+    image: python:3.11-slim
+    local_artifact: /tmp/minicast-api.tar.gz
+    remote_workdir: /opt/apps/minicast-api
+    start_command: "bash start.sh"
+    container_port: 8899
+    host_port: 18999
+    health_path: /api/voices
+    health_timeout: 90
+    env:
+      - MINIMAX_API_KEY=sk-cp-tV4TuUIpZt64tdZO3kjFDIydJtrgaSDPDAXNo8zYk8CTHD39wz7vg1JN7_Dqd8LpevwJo-ZozDcpRo1REhX3PaCak4A8M-Rl8MXAEMvGbMoNOSi73B27yoM
+      - MINICAST_API_KEY_DEV_PREFILL=false
+      # Allow minicast to fetch from internal hosts (e.g. hbsc API on 192.168.x.x
+      # via source mapping). Without this, extractor.py's SSRF guard rejects
+      # any RFC1918 IP. Set to true ONLY for trusted internal deployments.
+      - MINICAST_ALLOW_INTERNAL=true
