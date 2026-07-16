@@ -17,9 +17,18 @@ export function MiniCastLab() {
   // React Router route, so a same-origin src would recursively re-render
   // MiniCastLab → infinite iframe nesting). Deployment injects the real URL
   // via VITE_MINICAST_URL at build time; registry.prod is the fallback.
-  const src = import.meta.env.DEV
+  const rawSrc = import.meta.env.DEV
     ? minicast.iframeSrc.dev
     : (import.meta.env.VITE_MINICAST_URL ?? minicast.iframeSrc.prod)
+
+  // Always ensure ?embed=1 is set — minicast reads this flag to hide its
+  // internal Header/ProgressBar and to auto-configure the hbsc source
+  // mapping for URL extraction. If the configured URL omits the query
+  // (e.g. VITE_MINICAST_URL=http://host:port was set without ?embed=1),
+  // append it. Standalone-url stripping below handles both ?embed=1
+  // and &embed=1 forms.
+  const sep = rawSrc.includes('?') ? '&' : '?'
+  const src = rawSrc.includes('embed=1') ? rawSrc : `${rawSrc}${sep}embed=1`
 
   // Open-in-new-window: strip the ?embed=1 marker so the standalone minicast
   // shows its full Header. In dev, point at the dev server origin (no
