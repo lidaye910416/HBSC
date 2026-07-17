@@ -17,6 +17,9 @@ import {
 import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { Breadcrumb } from '../components/Breadcrumb'
+import { ReadingProgress } from '../components/ReadingProgress'
+import { motionAllowed } from '../animations/reducedMotion'
+import { gsap } from 'gsap'
 
 /**
  * Map an article slug to the on-disk source-image subdirectory under
@@ -140,6 +143,24 @@ export function ArticleDetail() {
   const [activeId, setActiveId] = useState<string>('')
   const [copied, setCopied] = useState(false)
 
+  // Hero timeline choreography (P0-03). Re-runs whenever the article slug
+  // changes so navigating between articles rebuilds the entrance, but is
+  // skipped entirely under prefers-reduced-motion / Save-Data. Declared
+  // above the early returns so the hooks order stays stable across renders.
+  const heroRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!article || !motionAllowed()) return
+    const ctx = gsap.context(() => {
+      gsap.timeline({ defaults: { ease: 'power3.out' } })
+        .from('[data-detail-cover]', { y: 32, autoAlpha: 0, duration: 0.8 })
+        .from('[data-detail-eyebrow]', { y: 12, autoAlpha: 0, duration: 0.4 }, '<0.1')
+        .from('[data-detail-title]', { y: 24, autoAlpha: 0, duration: 0.6 }, '<0.05')
+        .from('[data-detail-lede]', { y: 14, autoAlpha: 0, duration: 0.5 }, '<0.1')
+        .from('[data-detail-meta]', { y: 10, autoAlpha: 0, duration: 0.4 }, '<0.1')
+    }, heroRef)
+    return () => ctx.revert()
+  }, [article?.slug])
+
   useEffect(() => {
     if (headings.length === 0) {
       setActiveId('')
@@ -231,10 +252,11 @@ export function ArticleDetail() {
 
   return (
     <main className="article-detail">
+      <ReadingProgress targetSelector=".article-detail" />
       {/* Hero / Cover */}
-      <header className="article-detail__hero">
+      <header ref={heroRef} className="article-detail__hero">
         {article.cover_image && (
-          <div className="article-detail__cover">
+          <div className="article-detail__cover" data-detail-cover>
             <img src={article.cover_image} alt={article.title} />
             <div className="article-detail__cover-overlay" />
           </div>
@@ -256,17 +278,17 @@ export function ArticleDetail() {
             />
 
             {(article as any).issue?.title ? (
-              <span className="article-detail__eyebrow">{(article as any).issue.title}</span>
+              <span className="article-detail__eyebrow" data-detail-eyebrow>{(article as any).issue.title}</span>
             ) : date ? (
-              <span className="article-detail__eyebrow">{date}</span>
+              <span className="article-detail__eyebrow" data-detail-eyebrow>{date}</span>
             ) : null}
-            <h1 className="article-detail__title">{article.title}</h1>
+            <h1 className="article-detail__title" data-detail-title>{article.title}</h1>
 
             {article.summary && (
-              <p className="article-detail__lede">{article.summary}</p>
+              <p className="article-detail__lede" data-detail-lede>{article.summary}</p>
             )}
 
-            <div className="article-detail__meta">
+            <div className="article-detail__meta" data-detail-meta>
               {article.author_avatar && (
                 <img
                   src={article.author_avatar}
