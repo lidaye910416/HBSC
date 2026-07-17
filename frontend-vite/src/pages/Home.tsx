@@ -9,6 +9,7 @@ import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { CoverImage } from '../components/CoverImage'
 import { EditorialCommittee } from '../components/EditorialCommittee'
+import { HeroParticles } from '../components/HeroParticles'
 import { mountCountUp } from '../animations/countUp'
 import { batchReveal } from '../animations/batchReveal'
 import './Home.css'
@@ -72,6 +73,7 @@ export function Home() {
     <main className="home">
       {/* Hero */}
       <section className="hero">
+        <HeroParticles />
         <div className="hero__pattern" aria-hidden="true" />
         <div className="container hero__content">
           <p className="hero__label animate-fade-up" data-reveal>
