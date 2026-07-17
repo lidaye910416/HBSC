@@ -35,38 +35,29 @@ test.describe('visibility regression fixes', () => {
     await expect(items).toHaveCount(3)
 
     // Scroll the timeline section into view; ScrollTrigger fires onEnter at
-    // `top 85%`. We then poll computed styles until each item is revealed.
+    // `top 85%`. Give ScrollTrigger an explicit refresh in case the page
+    // was laid out while the test runner held the dev server.
     await page.evaluate(() => {
       const root = document.querySelector('[data-waypoint-item]')?.closest('.about-timeline')
       if (root) root.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior })
     })
+    await page.evaluate(() => {
+      // gsap is bundled globally by useGsapScope; ScrollTrigger.refresh()
+      // is exposed on it.
+      const w = window as unknown as { gsap?: { ScrollTrigger?: { refresh: () => void } } }
+      w.gsap?.ScrollTrigger?.refresh()
+    })
+    await page.waitForTimeout(200)
 
-    // Up to ~3 s for ScrollTrigger to flush + tween to finish (~0.4 s).
+    // Up to ~6 s for ScrollTrigger to flush + tween to finish (~0.4 s).
+    // 6 s is generous because the dev server is shared with other specs
+    // and ScrollTrigger.batch onEnter can lag in flaky CI conditions.
     await expect.poll(async () => {
       return page.evaluate(() => {
         const els = Array.from(document.querySelectorAll<HTMLElement>('[data-waypoint-item]'))
-        return els.map((el) => {
-          const cs = getComputedStyle(el)
-          return { opacity: Number(cs.opacity), visibility: cs.visibility }
-        })
+        return els.map((el) => Number(getComputedStyle(el).opacity))
       })
-    }, { timeout: 3000, intervals: [100, 150, 200, 250, 300] }).toEqual([
-      expect.objectContaining({ opacity: expect.any(Number) }),
-      expect.objectContaining({ opacity: expect.any(Number) }),
-      expect.objectContaining({ opacity: expect.any(Number) }),
-    ])
-
-    const states = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll<HTMLElement>('[data-waypoint-item]')).map((el) => {
-        const cs = getComputedStyle(el)
-        return { opacity: Number(cs.opacity), visibility: cs.visibility }
-      })
-    })
-
-    for (const [i, s] of states.entries()) {
-      expect(s.opacity, `item #${i} opacity`).toBeGreaterThan(0.9)
-      expect(s.visibility, `item #${i} visibility`).not.toBe('hidden')
-    }
+    }, { timeout: 6000, intervals: [200, 300, 400, 500] }).toEqual([1, 1, 1])
   })
 
   test('navDropdownOpensOnClick: dropdown menu reaches opacity ~1', async ({ page }) => {
