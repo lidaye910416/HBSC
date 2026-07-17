@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Menu, X, ChevronDown, BookOpen } from 'lucide-react'
 import { useGSAP } from '@gsap/react'
@@ -143,6 +143,21 @@ export function Navigation() {
   const isArticlesActive = location.pathname.startsWith('/articles')
   const isLabsActive = location.pathname.startsWith('/labs')
 
+  // The Issues trigger should be a 1-click path to the most recent issue.
+  // Hover still opens the dropdown for browsing the archive; click jumps
+  // straight to the latest. Falls back to opening the dropdown if the
+  // issues query hasn't loaded yet.
+  const navigate = useNavigate()
+  const latestIssue = sortedIssues[0]
+  const goToLatestIssue = () => {
+    if (latestIssue) {
+      navigate(`/issues/${latestIssue.slug}`)
+      setIssuesOpen(false)
+    } else {
+      setIssuesOpen(v => !v)
+    }
+  }
+
   return (
     <nav className="nav" ref={containerRef}>
       <div className="nav__inner container">
@@ -178,7 +193,8 @@ export function Navigation() {
               aria-expanded={issuesOpen}
               aria-haspopup="true"
               aria-controls="nav-issues-menu"
-              onClick={() => setIssuesOpen(v => !v)}
+              aria-label={latestIssue ? `期刊 — 跳到最新：${latestIssue.title}` : '期刊'}
+              onClick={goToLatestIssue}
             >
               期刊 <ChevronDown size={14} strokeWidth={1.75} className={`nav__caret ${issuesOpen ? 'is-open' : ''}`} />
             </button>
@@ -204,17 +220,18 @@ export function Navigation() {
                 {sortedIssues.length === 0 ? (
                   <div className="nav__dropdown-empty">暂无期刊</div>
                 ) : (
-                  sortedIssues.slice(0, 6).map(issue => (
+                  sortedIssues.slice(0, 6).map((issue, i) => (
                     <Link
                       key={issue.id}
                       to={`/issues/${issue.slug}`}
                       data-nav-dropdown-item
-                      className={`nav__dropdown-item ${location.pathname === `/issues/${issue.slug}` ? 'is-active' : ''}`}
+                      className={`nav__dropdown-item ${location.pathname === `/issues/${issue.slug}` ? 'is-active' : ''} ${i === 0 ? 'is-latest' : ''}`}
                       role="menuitem"
                       tabIndex={issuesOpen ? 0 : -1}
                     >
                       <span className="nav__dropdown-item-title">{issue.title}</span>
-                      {issue.issue_number && (
+                      {i === 0 && <span className="nav__dropdown-item-badge" aria-label="最新期刊">最新</span>}
+                      {issue.issue_number && i !== 0 && (
                         <span className="nav__dropdown-item-meta">{issue.issue_number}</span>
                       )}
                     </Link>
