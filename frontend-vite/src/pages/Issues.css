@@ -154,6 +154,46 @@
 .issues-archive-grid {
   margin-top: var(--space-2);
 }
+
+/* P1-04 — horizontal pinned gallery.
+   Below 1024px we keep the native vertical grid (cards stack as a 2- or
+   1-column grid the way they always did). At ≥1024px the grid becomes a
+   horizontal flex track inside an overflow-hidden viewport, and a
+   ScrollTrigger pins the viewport while translating the track on the X
+   axis. The CSS only sets up the layout; the JS in Issues.tsx owns the
+   pin + scroll mapping and the motion gate. */
+.issues-archive-viewport {
+  position: relative;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .issues-archive-viewport {
+    overflow: hidden;
+  }
+  /* Override the shared .grid + .grid-3 rules at this breakpoint so the
+     cards lay out as a single horizontal row inside the viewport. */
+  .grid.issues-archive-track {
+    display: flex;
+    flex-wrap: nowrap;
+    will-change: transform;
+    /* Right padding gives the last card breathing room once it scrolls
+       flush against the viewport edge. */
+    padding-right: var(--space-4);
+  }
+  .grid.issues-archive-track > .issue-archive-card {
+    /* Three cards visible at rest; track overflows the viewport once
+       total card width + gaps exceeds the viewport width. */
+    flex: 0 0 calc((100% - var(--space-3) * 2) / 3);
+    width: calc((100% - var(--space-3) * 2) / 3);
+    max-width: 460px;
+  }
+}
+
+/* Below 1024px the shared .grid + .grid-3 rules already produce the
+   vertical layout, so we don't override anything here — that keeps the
+   mobile / tablet experience bit-identical to what shipped before T6. */
+
 .issue-archive-card {
   text-decoration: none;
   color: inherit;

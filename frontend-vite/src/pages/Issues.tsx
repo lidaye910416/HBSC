@@ -1,10 +1,13 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Calendar, FileText, Library, ArrowUpRight, BookOpen } from 'lucide-react'
+import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { api } from '../services/api'
 import { Breadcrumb } from '../components/Breadcrumb'
 import { CoverImage } from '../components/CoverImage'
+import { motionAllowed } from '../animations/reducedMotion'
 import './Issues.css'
 
 function formatDate(d?: string) {
@@ -33,6 +36,72 @@ export function Issues() {
   }, [issues])
 
   const totalArticles = sorted.reduce((sum, i) => sum + (i.article_count ?? 0), 0)
+
+  // P1-04 — desktop horizontal pinned gallery.
+  // Mobile / tablet keep the native vertical grid; we only engage on
+  // ≥1024px AND when motion is allowed (no reduced-motion, no Save-Data).
+  // The track and viewport refs are populated after the grid mounts;
+  // matchMedia handles live resize + breakpoint transitions.
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!motionAllowed()) return
+    const track = trackRef.current
+    const viewport = viewportRef.current
+    if (!track || !viewport) return
+
+    const ctx = gsap.context(() => {
+      const mm = gsap.matchMedia()
+      mm.add('(min-width: 1024px)', () => {
+        // Skip pin when track already fits (e.g. 1–2 issues) — the spec
+        // says "1 issue = no pin", and 2 small cards shouldn't trap the
+        // user in a pinned scroll with no horizontal travel either.
+        // `distance` stays as a thunk so GSAP re-measures on every refresh
+        // (cover images decode async and may grow the track after mount).
+        const distance = () => {
+          const trackWidth = track.scrollWidth
+          const viewportWidth = viewport.clientWidth
+          return Math.max(0, trackWidth - viewportWidth)
+        }
+
+        // Defer to next frame so the initial layout is committed before
+        // we measure (covers async cover-image decode that may grow the track).
+        const raf = requestAnimationFrame(() => {
+          if (distance() <= 0) return
+          gsap.to(track, {
+            x: () => -distance(),
+            ease: 'none',
+            scrollTrigger: {
+              trigger: viewport,
+              start: 'top top',
+              pin: true,
+              scrub: 0.8,
+              end: () => '+=' + distance(),
+              invalidateOnRefresh: true,
+              anticipatePin: 1,
+            },
+          })
+        })
+
+        return () => cancelAnimationFrame(raf)
+      })
+      // Explicit empty branch for <1024px — keeps matchMedia aware of both
+      // breakpoints so the tween gets reverted on resize, even though we
+      // never installed anything below 1024px.
+      mm.add('(max-width: 1023px)', () => undefined)
+      return () => mm.revert()
+    }, viewport)
+
+    return () => {
+      ctx.revert()
+      // Belt-and-braces: kill any stray ScrollTriggers we may have created
+      // against this viewport (e.g. if the page unmounts mid-animation).
+      ScrollTrigger.getAll()
+        .filter((t) => t.trigger === viewport)
+        .forEach((t) => t.kill())
+    }
+  }, [])
 
   return (
     <main className="issues-page">
@@ -100,55 +169,57 @@ export function Issues() {
               <p>暂无期刊 — 期刊正在筹备中，敬请期待</p>
             </div>
           ) : (
-            <div className="grid grid-3 issues-archive-grid">
-              {sorted.map((issue) => {
-                const isLatest = sorted[0]?.id === issue.id
-                return (
-                  <Link
-                    key={issue.id}
-                    to={`/issues/${issue.slug}`}
-                    className={`issue-archive-card card ${isLatest ? 'is-latest' : ''}`}
-                    aria-label={`查看期刊 ${issue.title}`}
-                  >
-                    <div className="card__cover issue-archive-card__cover">
-                      <CoverImage src={issue.cover_image} alt={issue.title} aspectRatio="16 / 10" />
-                      {isLatest && (
-                        <span className="issue-archive-card__badge">最新</span>
-                      )}
-                    </div>
-
-                    <div className="card__body issue-archive-card__body">
-                      {issue.issue_number && (
-                        <p className="issue-archive-card__number">
-                          <span className="text-en">ISSUE {issue.issue_number}</span>
-                        </p>
-                      )}
-                      <h3 className="card__title issue-archive-card__title">{issue.title}</h3>
-
-                      {issue.description && (
-                        <p className="issue-archive-card__desc">{issue.description}</p>
-                      )}
-
-                      <div className="issue-archive-card__meta">
-                        {issue.published_at && (
-                          <span>
-                            <Calendar size={13} strokeWidth={1.5} />
-                            {formatDate(issue.published_at)}
-                          </span>
+            <div ref={viewportRef} className="issues-archive-viewport">
+              <div ref={trackRef} className="grid grid-3 issues-archive-grid issues-archive-track">
+                {sorted.map((issue) => {
+                  const isLatest = sorted[0]?.id === issue.id
+                  return (
+                    <Link
+                      key={issue.id}
+                      to={`/issues/${issue.slug}`}
+                      className={`issue-archive-card card ${isLatest ? 'is-latest' : ''}`}
+                      aria-label={`查看期刊 ${issue.title}`}
+                    >
+                      <div className="card__cover issue-archive-card__cover">
+                        <CoverImage src={issue.cover_image} alt={issue.title} aspectRatio="16 / 10" />
+                        {isLatest && (
+                          <span className="issue-archive-card__badge">最新</span>
                         )}
-                        <span>
-                          <FileText size={13} strokeWidth={1.5} />
-                          {issue.article_count} 篇文章
-                        </span>
                       </div>
 
-                      <span className="issue-archive-card__cta">
-                        阅读本期 <ArrowUpRight size={14} strokeWidth={2} />
-                      </span>
-                    </div>
-                  </Link>
-                )
-              })}
+                      <div className="card__body issue-archive-card__body">
+                        {issue.issue_number && (
+                          <p className="issue-archive-card__number">
+                            <span className="text-en">ISSUE {issue.issue_number}</span>
+                          </p>
+                        )}
+                        <h3 className="card__title issue-archive-card__title">{issue.title}</h3>
+
+                        {issue.description && (
+                          <p className="issue-archive-card__desc">{issue.description}</p>
+                        )}
+
+                        <div className="issue-archive-card__meta">
+                          {issue.published_at && (
+                            <span>
+                              <Calendar size={13} strokeWidth={1.5} />
+                              {formatDate(issue.published_at)}
+                            </span>
+                          )}
+                          <span>
+                            <FileText size={13} strokeWidth={1.5} />
+                            {issue.article_count} 篇文章
+                          </span>
+                        </div>
+
+                        <span className="issue-archive-card__cta">
+                          阅读本期 <ArrowUpRight size={14} strokeWidth={2} />
+                        </span>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
