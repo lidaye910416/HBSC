@@ -16,7 +16,12 @@ export function ArticleCard({ article }: Props) {
     : ''
 
   return (
-    <Link to={`/articles/${article.slug}`} className="article-card group">
+    <Link
+      to={`/articles/${article.slug}`}
+      className="article-card group"
+      data-flip-id={article.slug}
+      data-reveal-card
+    >
       <CoverImage
         src={article.cover_image}
         alt={article.title}

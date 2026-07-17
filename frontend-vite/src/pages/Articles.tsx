@@ -1,9 +1,14 @@
+import { useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, BookOpen } from 'lucide-react'
+import { Flip } from 'gsap/Flip'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { Breadcrumb } from '../components/Breadcrumb'
+import { motionAllowed } from '../animations/reducedMotion'
+import { batchReveal } from '../animations/batchReveal'
 import './Articles.css'
 
 const categories = ['全部', '战略与政策', '技术与产业', '方案与思考', '动态与文化']
@@ -12,15 +17,43 @@ export function Articles() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeCategory = searchParams.get('category') || ''
   const page = parseInt(searchParams.get('page') || '1')
+  const gridRef = useRef<HTMLDivElement>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['articles', activeCategory, page],
     queryFn: () => api.articles.list({ category: activeCategory || undefined, page, per_page: 9 }),
   })
 
+  // First load: batch reveal cards as they appear in viewport.
+  // After category/page change: FLIP from previous positions for a positional continuity.
   const setCategory = (cat: string) => {
-    setSearchParams(cat && cat !== '全部' ? { category: cat } : {})
+    const catValue = cat && cat !== '全部' ? cat : ''
+    const grid = gridRef.current
+    if (grid && motionAllowed()) {
+      const state = Flip.getState(grid.querySelectorAll('[data-flip-id]'))
+      setSearchParams(catValue ? { category: catValue } : {})
+      // Wait for React to commit the new list before playing FLIP.
+      queueMicrotask(() => {
+        requestAnimationFrame(() => {
+          Flip.from(state, {
+            targets: grid.querySelectorAll('[data-flip-id]'),
+            duration: 0.55,
+            ease: 'power3.inOut',
+            absolute: true,
+            stagger: 0.035,
+            onComplete: () => ScrollTrigger.refresh(),
+          })
+        })
+      })
+    } else {
+      setSearchParams(catValue ? { category: catValue } : {})
+    }
   }
+
+  useEffect(() => {
+    if (!data || isLoading) return
+    return batchReveal({ root: gridRef.current ?? document, selector: '[data-reveal-card]', y: 28, stagger: 0.07 })
+  }, [data, isLoading])
 
   const activeLabel = activeCategory || '全部'
 
@@ -114,7 +147,7 @@ export function Articles() {
             </div>
           ) : (
             <>
-              <div className="grid grid-3 articles-grid">
+              <div className="grid grid-3 articles-grid" ref={gridRef}>
                 {data?.items.map(article => (
                   <ArticleCard key={article.id} article={article} />
                 ))}
