@@ -4,11 +4,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Search, BookOpen } from 'lucide-react'
 import { Flip } from 'gsap/Flip'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { gsap } from 'gsap'
 import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { Breadcrumb } from '../components/Breadcrumb'
 import { motionAllowed } from '../animations/reducedMotion'
 import { batchReveal } from '../animations/batchReveal'
+import { splitHeadingsIn } from '../animations/splitHeading'
 import './Articles.css'
 
 const categories = ['全部', '战略与政策', '技术与产业', '方案与思考', '动态与文化']
@@ -55,6 +57,21 @@ export function Articles() {
     return batchReveal({ root: gridRef.current ?? document, selector: '[data-reveal-card]', y: 28, stagger: 0.07 })
   }, [data, isLoading])
 
+  // Section title SplitText + divider draw, batched across the whole page.
+  useEffect(() => {
+    if (!motionAllowed()) return
+    const c1 = splitHeadingsIn(document, { mode: 'words', stagger: 0.02 })
+    const ctx = gsap.context(() => {
+      gsap.utils.toArray<HTMLElement>('[data-divider-draw]').forEach(el => {
+        gsap.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 90%', once: true } })
+      })
+    })
+    return () => {
+      c1()
+      ctx.revert()
+    }
+  }, [])
+
   const activeLabel = activeCategory || '全部'
 
   return (
@@ -77,7 +94,7 @@ export function Articles() {
           <p className="section-label articles-hero__eyebrow">
             <BookOpen size={14} strokeWidth={2} /> CONTENT · 期刊内容
           </p>
-          <h1 className="articles-hero__title">湖北数创期刊</h1>
+          <h1 className="articles-hero__title" data-split-heading>湖北数创期刊</h1>
           <p className="articles-hero__desc">
             记录数字变革、传播前沿理念、赋能产业升级 ——
             汇聚战略洞察、技术解析与行业思考，构建可持续的产业知识高地
@@ -106,8 +123,8 @@ export function Articles() {
         <div className="container">
           <div className="section-header">
             <p className="section-label">BROWSE</p>
-            <h2 className="section-title">浏览全部文章</h2>
-            <div className="divider" />
+            <h2 className="section-title" data-split-heading>浏览全部文章</h2>
+            <div className="divider divider--draw" data-divider-draw />
             <p className="section-subtitle">按主题筛选，发现你感兴趣的内容</p>
           </div>
 

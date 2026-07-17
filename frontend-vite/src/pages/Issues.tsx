@@ -8,6 +8,7 @@ import { api } from '../services/api'
 import { Breadcrumb } from '../components/Breadcrumb'
 import { CoverImage } from '../components/CoverImage'
 import { motionAllowed } from '../animations/reducedMotion'
+import { splitHeadingsIn } from '../animations/splitHeading'
 import './Issues.css'
 
 function formatDate(d?: string) {
@@ -103,6 +104,20 @@ export function Issues() {
     }
   }, [])
 
+  // Section title SplitText + divider draw on the page.
+  useEffect(() => {
+    if (!motionAllowed()) return
+    const c1 = splitHeadingsIn(document, { mode: 'words', stagger: 0.02 })
+    const dividers = gsap.utils.toArray<HTMLElement>('[data-divider-draw]').map(el =>
+      gsap.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: 'power3.out', scrollTrigger: { trigger: el, start: 'top 90%', once: true } })
+    )
+    return () => {
+      c1()
+      dividers.forEach(t => t.scrollTrigger?.kill())
+      dividers.forEach(t => t.kill())
+    }
+  }, [])
+
   return (
     <main className="issues-page">
       {/* Hero */}
@@ -123,7 +138,7 @@ export function Issues() {
           <p className="section-label issues-hero__eyebrow">
             <Library size={14} strokeWidth={2} /> ARCHIVE · 期刊档案
           </p>
-          <h1 className="issues-hero__title">期刊矩阵</h1>
+          <h1 className="issues-hero__title" data-split-heading>期刊矩阵</h1>
           <p className="issues-hero__desc">
             完整收录历期《湖北数创》期刊 ——
             从政策洞察到产业实践，跨越季度的时间维度，记录数字产业创新轨迹
@@ -152,8 +167,8 @@ export function Issues() {
         <div className="container">
           <div className="section-header">
             <p className="section-label">ALL ISSUES</p>
-            <h2 className="section-title">全部期刊</h2>
-            <div className="divider" />
+            <h2 className="section-title" data-split-heading>全部期刊</h2>
+            <div className="divider divider--draw" data-divider-draw />
             <p className="section-subtitle">按发布时间倒序排列，最新期刊置顶</p>
           </div>
 
