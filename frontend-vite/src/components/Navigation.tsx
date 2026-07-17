@@ -63,7 +63,7 @@ export function Navigation() {
         return
       }
 
-      if (dropdownMenu && dropdownItems && dropdownItems.length) {
+      if (dropdownMenu && dropdownItems) {
         gsap.set(dropdownMenu, { autoAlpha: 0, y: -8 })
         const tl = gsap
           .timeline({ paused: true, defaults: { ease: 'power2.out' } })
@@ -89,7 +89,7 @@ export function Navigation() {
         mobileTlRef.current = tl
       }
     },
-    { scope: containerRef, dependencies: [] },
+    { scope: containerRef, dependencies: [sortedIssues] },
   )
 
   // Drive timelines from state. contextSafe keeps handlers valid after the
