@@ -3,6 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
+import { installAnimationRuntime } from './animations/runtime'
+
+// Register GSAP plugins (ScrollTrigger, Flip, SplitText, DrawSVG, Inertia)
+// exactly once at module load. Idempotent; safe under React StrictMode.
+installAnimationRuntime()
 
 // FOUC-prevention: set theme attribute on <html> before React mounts.
 // This avoids a flash of the default (dark) theme when the user picked light.

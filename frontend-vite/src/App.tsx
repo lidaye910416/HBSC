@@ -14,6 +14,7 @@ import { MiniCastLab } from './labs/MiniCastLab'
 import { ProtectedRoute } from './components/admin/ProtectedRoute'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { PublicPageAgentMount } from './components/PublicPageAgentMount'
+import { PublicRouteTransition } from './components/PublicRouteTransition'
 import { Login } from './pages/admin/Login'
 import { Dashboard } from './pages/admin/Dashboard'
 import { ArticleList } from './pages/admin/ArticleList'
@@ -60,7 +61,9 @@ function Layout({ children }: { children: React.ReactNode }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative', zIndex: 0 }}>
         <Navigation />
-        <div style={{ flex: 1 }}>{children}</div>
+        <div style={{ flex: 1 }}>
+          <PublicRouteTransition>{children}</PublicRouteTransition>
+        </div>
         {!isLabRoute && <Footer />}
       </div>
       {!isLabRoute && <PublicPageAgentMount />}
