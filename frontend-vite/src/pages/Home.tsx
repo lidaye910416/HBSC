@@ -9,16 +9,18 @@ import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { CoverImage } from '../components/CoverImage'
 import { EditorialCommittee } from '../components/EditorialCommittee'
+import { mountCountUp } from '../animations/countUp'
+import { batchReveal } from '../animations/batchReveal'
 import './Home.css'
 
 const formatIssueDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' }) : ''
 
 const STATS = [
-  { icon: <BookOpen size={22} strokeWidth={1.5} />, value: '9', label: '期刊文章' },
-  { icon: <FileText size={22} strokeWidth={1.5} />, value: '4', label: '内容板块' },
-  { icon: <TrendingUp size={22} strokeWidth={1.5} />, value: '6', label: '研究领域' },
-  { icon: <Users size={22} strokeWidth={1.5} />, value: '37', label: '编委成员' },
+  { icon: <BookOpen size={22} strokeWidth={1.5} />, value: 9, label: '期刊文章' },
+  { icon: <FileText size={22} strokeWidth={1.5} />, value: 4, label: '内容板块' },
+  { icon: <TrendingUp size={22} strokeWidth={1.5} />, value: 6, label: '研究领域' },
+  { icon: <Users size={22} strokeWidth={1.5} />, value: 37, label: '编委成员' },
 ]
 
 const CATEGORIES = [
@@ -40,6 +42,21 @@ export function Home() {
   const latestIssue = sorted[0]
   const otherIssues = sorted.slice(1, 3)
 
+  // Mount count-up tweens on every [data-count-up] element.
+  useEffect(() => {
+    const stats = Array.from(document.querySelectorAll<HTMLElement>('[data-count-up]'))
+    const cleanups = stats.map(el =>
+      mountCountUp(el, { to: Number(el.dataset.countUp ?? '0'), duration: 1.2 }),
+    )
+    return () => cleanups.forEach(c => c())
+  }, [])
+
+  // Batch reveal [data-reveal] entries on scroll.
+  useEffect(() => {
+    const cleanup = batchReveal({ root: document, selector: '[data-reveal]', stagger: 0.08, y: 32 })
+    return cleanup
+  }, [])
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in-view') }),
@@ -57,18 +74,18 @@ export function Home() {
       <section className="hero">
         <div className="hero__pattern" aria-hidden="true" />
         <div className="container hero__content">
-          <p className="hero__label animate-fade-up">
+          <p className="hero__label animate-fade-up" data-reveal>
             <span className="text-en">Hubei Digital Innovation</span>
           </p>
-          <h1 className="hero__title animate-fade-up animate-delay-1">
+          <h1 className="hero__title animate-fade-up animate-delay-1" data-reveal>
             智领AI荆楚新程<br />
             <span className="hero__title-accent">数绘产业发展新篇</span>
           </h1>
-          <p className="hero__subtitle animate-fade-up animate-delay-2">
+          <p className="hero__subtitle animate-fade-up animate-delay-2" data-reveal>
             湖北数创是湖北数字产业创新研究的内部期刊<br />
             记录数字变革、传播前沿理念、赋能产业升级
           </p>
-          <div className="hero__actions animate-fade-up animate-delay-3">
+          <div className="hero__actions animate-fade-up animate-delay-3" data-reveal>
             <Link to="/articles" className="btn btn-primary">阅读期刊 <ArrowRight size={16} /></Link>
             <Link to="/about" className="btn btn-outline">关于我们</Link>
           </div>
@@ -82,7 +99,7 @@ export function Home() {
             {STATS.map((s, i) => (
               <div key={i} className="stats__item">
                 <div className="stats__icon">{s.icon}</div>
-                <div className="stats__value">{s.value}</div>
+                <div className="stats__value" data-count-up={s.value}>0</div>
                 <div className="stats__label">{s.label}</div>
               </div>
             ))}

@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
 import './CoverImage.css'
+import { motionAllowed } from '@/animations/reducedMotion'
 
 interface Props {
   src?: string | null
@@ -15,6 +17,10 @@ interface Props {
  *
  * The placeholder uses a subtle hue rotation per category and a 5% dot-pattern
  * overlay so that empty states still feel branded rather than broken.
+ *
+ * When motion is allowed, the image also runs a soft decode-reveal: it
+ * fades in while slightly scaling back from 1.03 → 1, so the cover
+ * doesn't pop in stark on first paint.
  */
 export function CoverImage({
   src,
@@ -24,6 +30,7 @@ export function CoverImage({
   className,
 }: Props) {
   const [failed, setFailed] = useState(false)
+  const imgRef = useRef<HTMLImageElement | null>(null)
 
   const useFallback = !src || failed
   // `auto` means "preserve the image's natural aspect ratio" — used by the
@@ -38,6 +45,24 @@ export function CoverImage({
   const classes = ['cover-image', `cover-image--${slug}`, className]
     .filter(Boolean)
     .join(' ')
+
+  const playDecodeReveal = (img: HTMLImageElement) => {
+    if (!motionAllowed()) return
+    img.style.opacity = '0'
+    img.style.transform = 'scale(1.03)'
+    gsap.to(img, { opacity: 1, scale: 1, duration: 0.9, ease: 'power3.out' })
+  }
+
+  const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    playDecodeReveal(e.currentTarget)
+  }
+
+  // If the image is already cached / complete on mount, fire the reveal too.
+  useEffect(() => {
+    const img = imgRef.current
+    if (!img) return
+    if (img.complete && img.naturalWidth > 0) playDecodeReveal(img)
+  }, [src])
 
   if (useFallback) {
     return (
@@ -59,10 +84,12 @@ export function CoverImage({
       style={natural ? undefined : { aspectRatio }}
     >
       <img
+        ref={imgRef}
         src={src!}
         alt={alt}
         loading="lazy"
         className={natural ? 'cover-image__img--natural' : undefined}
+        onLoad={handleLoad}
         onError={() => setFailed(true)}
       />
     </div>
