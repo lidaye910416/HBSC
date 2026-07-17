@@ -19,6 +19,7 @@ import { ArticleCard } from '../components/ArticleCard'
 import { Breadcrumb } from '../components/Breadcrumb'
 import { ReadingProgress } from '../components/ReadingProgress'
 import { motionAllowed } from '../animations/reducedMotion'
+import { batchReveal } from '../animations/batchReveal'
 import { gsap } from 'gsap'
 
 /**
@@ -148,6 +149,7 @@ export function ArticleDetail() {
   // skipped entirely under prefers-reduced-motion / Save-Data. Declared
   // above the early returns so the hooks order stays stable across renders.
   const heroRef = useRef<HTMLElement>(null)
+  const articleRef = useRef<HTMLElement>(null)
   useEffect(() => {
     if (!article || !motionAllowed()) return
     const ctx = gsap.context(() => {
@@ -159,6 +161,23 @@ export function ArticleDetail() {
         .from('[data-detail-meta]', { y: 10, autoAlpha: 0, duration: 0.4 }, '<0.1')
     }, heroRef)
     return () => ctx.revert()
+  }, [article?.slug])
+
+  // Block-level stagger reveal for the long-form article body.
+  // We do NOT split per character; each block (h2/h3/p/blockquote/pre/img/table)
+  // fades and lifts in as it crosses the viewport.
+  useEffect(() => {
+    if (!motionAllowed()) return
+    const root = articleRef.current
+    if (!root) return
+    return batchReveal({
+      root,
+      selector: ':scope > h2, :scope > h3, :scope > p, :scope > blockquote, :scope > pre, :scope > img, :scope > .prose-table-wrap, :scope > .prose-figure',
+      y: 20,
+      stagger: 0.045,
+      duration: 0.55,
+      start: 'top 90%',
+    })
   }, [article?.slug])
 
   useEffect(() => {
@@ -324,7 +343,7 @@ export function ArticleDetail() {
       {/* Body */}
       <div className="container">
         <div className="article-detail__layout">
-          <article className="article-detail__main">
+          <article ref={articleRef} className="article-detail__main">
             <Link to="/articles" className="article-detail__back" aria-label="返回文章列表">
               <ArrowLeft size={16} strokeWidth={1.5} /> 返回文章列表
             </Link>
