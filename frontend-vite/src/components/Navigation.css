@@ -122,44 +122,37 @@
   pointer-events: auto;
 }
 
-.nav__dropdown-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  text-decoration: none;
-  color: inherit;
-  background: var(--color-accent-light);
-  margin-bottom: 4px;
-}
-.nav__dropdown-head-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-accent);
-  color: #fff;
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-.nav__dropdown-head-text strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-.nav__dropdown-head-text span {
-  display: block;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-}
-.nav__dropdown-head:hover { background: rgba(37, 99, 235, 0.18); }
+/* ============================================================
+   Latest-two-issues dropdown layout.
 
-.nav__dropdown-list {
-  max-height: 320px;
-  overflow-y: auto;
+   The "期刊" trigger now toggles a dropdown that surfaces the two
+   most recent issues as cover + meta cards, then a "view all" footer
+   link. Each card is a real Link to /issues/<slug> so clicking jumps
+   straight into that issue page.
+   ============================================================ */
+.nav__dropdown-section-label {
+  font-family: var(--font-sans-en);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  padding: 4px 12px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav__dropdown-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--color-border), transparent);
+}
+.nav__dropdown-latest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 4px 6px;
 }
 .nav__dropdown-empty {
   padding: 16px 12px;
@@ -167,57 +160,93 @@
   color: var(--color-text-secondary);
   text-align: center;
 }
-.nav__dropdown-item {
+.nav__dropdown-card {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.nav__dropdown-card:hover {
+  background: var(--color-muted);
+  border-color: var(--color-border);
+}
+.nav__dropdown-card.is-active {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+}
+.nav__dropdown-card.is-latest {
+  border-color: var(--color-accent);
+}
+.nav__dropdown-card__cover {
+  width: 56px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: var(--color-muted);
+}
+.nav__dropdown-card__cover--placeholder {
   display: flex;
   align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+.nav__dropdown-card__body {
+  display: flex;
+  flex-direction: column;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--color-text);
-  text-decoration: none;
-  transition: background var(--transition-fast);
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
 }
-.nav__dropdown-item:hover {
-  background: var(--color-muted);
-  color: var(--color-primary);
-}
-.nav__dropdown-item.is-active {
-  background: var(--color-accent-light);
-  color: var(--color-accent);
-  font-weight: 500;
-}
-.nav__dropdown-item.is-latest {
-  border-left: 2px solid var(--color-accent);
-  padding-left: calc(12px - 2px);
-}
-.nav__dropdown-item-badge {
-  display: inline-flex;
-  align-items: center;
+.nav__dropdown-card__number {
   font-family: var(--font-sans-en);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #ffffff;
-  background: var(--color-accent);
-  padding: 2px 6px;
-  border-radius: 3px;
-  margin-left: 8px;
+  color: var(--color-accent);
+  text-transform: uppercase;
 }
-.nav__dropdown-item-title {
-  flex: 1;
+.nav__dropdown-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+  line-height: 1.3;
   display: -webkit-box;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.nav__dropdown-item-meta {
+.nav__dropdown-card__date {
   font-family: var(--font-sans-en);
   font-size: 11px;
-  font-weight: 600;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
+}
+.nav__dropdown-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 0;
+  border-top: 1px dashed var(--color-border);
+  border-radius: 0 0 8px 8px;
+  font-size: 13px;
   color: var(--color-accent);
-  letter-spacing: 0.05em;
+  text-decoration: none;
+  background: transparent;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.nav__dropdown-foot:hover {
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-primary);
 }
 
 /* ---------- Right actions ---------- */

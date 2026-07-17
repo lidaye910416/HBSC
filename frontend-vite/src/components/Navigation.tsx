@@ -143,20 +143,13 @@ export function Navigation() {
   const isArticlesActive = location.pathname.startsWith('/articles')
   const isLabsActive = location.pathname.startsWith('/labs')
 
-  // The Issues trigger should be a 1-click path to the most recent issue.
-  // Hover still opens the dropdown for browsing the archive; click jumps
-  // straight to the latest. Falls back to opening the dropdown if the
-  // issues query hasn't loaded yet.
+  // Click toggles the dropdown so users can see the latest 2 issues at a
+  // glance and jump directly to either. Hover still opens the same panel
+  // for trackpad / mouse-only users.
   const navigate = useNavigate()
   const latestIssue = sortedIssues[0]
-  const goToLatestIssue = () => {
-    if (latestIssue) {
-      navigate(`/issues/${latestIssue.slug}`)
-      setIssuesOpen(false)
-    } else {
-      setIssuesOpen(v => !v)
-    }
-  }
+  const formatIssueDate = (d?: string) =>
+    d ? new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' }) : ''
 
   return (
     <nav className="nav" ref={containerRef}>
@@ -193,8 +186,8 @@ export function Navigation() {
               aria-expanded={issuesOpen}
               aria-haspopup="true"
               aria-controls="nav-issues-menu"
-              aria-label={latestIssue ? `期刊 — 跳到最新：${latestIssue.title}` : '期刊'}
-              onClick={goToLatestIssue}
+              aria-label="期刊 — 显示最新两期可跳转"
+              onClick={() => setIssuesOpen(v => !v)}
             >
               期刊 <ChevronDown size={14} strokeWidth={1.75} className={`nav__caret ${issuesOpen ? 'is-open' : ''}`} />
             </button>
@@ -208,36 +201,61 @@ export function Navigation() {
               aria-hidden={!issuesOpen}
               inert={!issuesOpen}
             >
-              <Link to="/issues" className="nav__dropdown-head" role="menuitem" tabIndex={issuesOpen ? 0 : -1}>
-                <div className="nav__dropdown-head-icon"><BookOpen size={14} strokeWidth={1.75} /></div>
-                <div className="nav__dropdown-head-text">
-                  <strong>全部期刊</strong>
-                  <span>查看完整期刊档案</span>
-                </div>
-              </Link>
-
-              <div className="nav__dropdown-list">
+              <div className="nav__dropdown-section-label">
+                最新两期 · 快速跳转
+              </div>
+              <div className="nav__dropdown-latest">
                 {sortedIssues.length === 0 ? (
                   <div className="nav__dropdown-empty">暂无期刊</div>
                 ) : (
-                  sortedIssues.slice(0, 6).map((issue, i) => (
+                  sortedIssues.slice(0, 2).map((issue, i) => (
                     <Link
                       key={issue.id}
                       to={`/issues/${issue.slug}`}
                       data-nav-dropdown-item
-                      className={`nav__dropdown-item ${location.pathname === `/issues/${issue.slug}` ? 'is-active' : ''} ${i === 0 ? 'is-latest' : ''}`}
+                      data-issue-index={i}
+                      className={`nav__dropdown-card ${i === 0 ? 'is-latest' : ''} ${location.pathname === `/issues/${issue.slug}` ? 'is-active' : ''}`}
                       role="menuitem"
                       tabIndex={issuesOpen ? 0 : -1}
+                      onClick={() => setIssuesOpen(false)}
                     >
-                      <span className="nav__dropdown-item-title">{issue.title}</span>
-                      {i === 0 && <span className="nav__dropdown-item-badge" aria-label="最新期刊">最新</span>}
-                      {issue.issue_number && i !== 0 && (
-                        <span className="nav__dropdown-item-meta">{issue.issue_number}</span>
+                      {issue.cover_image ? (
+                        <img
+                          src={issue.cover_image}
+                          alt=""
+                          className="nav__dropdown-card__cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="nav__dropdown-card__cover nav__dropdown-card__cover--placeholder" aria-hidden="true">
+                          <BookOpen size={20} strokeWidth={1.5} />
+                        </div>
                       )}
+                      <div className="nav__dropdown-card__body">
+                        {issue.issue_number && (
+                          <span className="nav__dropdown-card__number">第 {issue.issue_number} 期</span>
+                        )}
+                        <span className="nav__dropdown-card__title">{issue.title}</span>
+                        {issue.published_at && (
+                          <span className="nav__dropdown-card__date">
+                            {formatIssueDate(issue.published_at)}
+                          </span>
+                        )}
+                      </div>
                     </Link>
                   ))
                 )}
               </div>
+              <Link
+                to="/issues"
+                className="nav__dropdown-foot"
+                role="menuitem"
+                tabIndex={issuesOpen ? 0 : -1}
+                onClick={() => setIssuesOpen(false)}
+              >
+                <BookOpen size={14} strokeWidth={1.75} />
+                查看全部期刊档案
+              </Link>
             </div>
           </div>
 
