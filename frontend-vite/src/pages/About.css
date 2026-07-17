@@ -39,8 +39,38 @@
 @media(max-width: 768px) { .about-mission { grid-template-columns: 1fr; } }
 
 /* Timeline */
-.about-timeline { display: flex; flex-direction: column; gap: 0; }
+.about-timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+/* DrawSVG track — sits behind the dots. Positioned at the centre of the
+   20 px dot column (column 1 = 60 px, gap = var(--space-3) = 24 px → start 84 px,
+   column centre = 94 px). width 20 px so the path's viewBox centre (x=10) lands
+   on the dot centreline. Pinned on desktop via ScrollTrigger, so it spans
+   the natural timeline height plus the scrub headroom. */
+.about-timeline__path {
+  position: absolute;
+  left: 84px;
+  top: 16px;
+  bottom: 16px;
+  width: 20px;
+  height: calc(100% - 32px);
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+.about-timeline__path path {
+  fill: none;
+  stroke: #C9A84C;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .about-timeline__item {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 60px 20px 1fr;
   gap: var(--space-3);
@@ -53,17 +83,25 @@
   font-family: var(--font-sans-en);
   font-size: .875rem;
   font-weight: 700;
-  color: var(--color-accent);
+  color: #C9A84C;
   text-align: right;
 }
 .about-timeline__dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--color-accent);
+  background: #C9A84C;
   margin: 0 auto;
+  box-shadow: 0 0 0 4px rgba(201, 168, 76, 0.12);
 }
 .about-timeline__event { font-size: .9375rem; color: var(--color-text); }
+
+/* Pinned timeline (desktop) needs extra breathing room below the section
+   so ScrollTrigger's pin-spacer can host the 2× viewport scrub distance
+   without colliding with the partners section. */
+@media (min-width: 1024px) {
+  .about-timeline-section { padding-bottom: var(--space-10); }
+}
 
 /* Member Card */
 .about-member-card {

@@ -1,4 +1,8 @@
+import { useRef } from 'react'
+import { gsap } from 'gsap'
 import './About.css'
+import { useGsapScope } from '@/animations/useGsapScope'
+import { batchReveal } from '@/animations/batchReveal'
 
 const timeline = [
   { year: '2024', event: '湖北数创创刊，聚焦湖北数字产业创新研究' },
@@ -16,6 +20,88 @@ const partners = [
 ]
 
 export function About() {
+  const timelineRef = useRef<HTMLDivElement | null>(null)
+  const pathRef = useRef<SVGPathElement | null>(null)
+  const itemsRef = useRef<HTMLDivElement[]>([])
+
+  // P1-05 — About waypoint timeline + DrawSVG
+  //
+  // Desktop (≥ 1024px, motion allowed): pin the timeline and scrub the gold
+  // SVG path's draw length, snapping the playhead to each waypoint so the
+  // year chips appear one after another.
+  // Mobile / tablet or reduced-motion users: skip the pin and reveal the
+  // items as a normal batch when they cross the viewport.
+  // No-JS / pre-hydration: nothing is pre-hidden, so the static DOM stays
+  // readable (year + dot + event). SVG carries aria-hidden so screen readers
+  // don't double-read the line.
+  useGsapScope(() => {
+    const root = timelineRef.current
+    const path = pathRef.current
+    const items = itemsRef.current.filter(Boolean)
+    if (!root || !path || !items.length) return
+
+    const ctx = gsap.context(() => {
+      const mm = gsap.matchMedia()
+
+      mm.add(
+        {
+          isDesktop:
+            '(min-width: 1024px) and (prefers-reduced-motion: no-preference)',
+          isMotion: '(prefers-reduced-motion: no-preference)',
+        },
+        (matchContext) => {
+          const conditions = matchContext.conditions as {
+            isDesktop: boolean
+            isMotion: boolean
+          }
+
+          if (conditions.isDesktop) {
+            // Initial state must be set inside the motion branch so reduced-
+            // motion users (and SSR/no-JS) never see hidden year chips.
+            gsap.set(items, { autoAlpha: 0, y: 24 })
+            const tl = gsap.timeline({
+              scrollTrigger: {
+                trigger: root,
+                pin: true,
+                scrub: 0.55,
+                end: () => '+=' + window.innerHeight * 2,
+                snap: { snapTo: 0.5, duration: 0.3, ease: 'power2.inOut' },
+                anticipatePin: 1,
+              },
+            })
+            tl.from(path, { drawSVG: 0, ease: 'none' })
+            items.forEach((item, i) => {
+              tl.to(
+                item,
+                { autoAlpha: 1, y: 0, duration: 0.4, ease: 'power2.out' },
+                i,
+              )
+            })
+            return () => {
+              tl.scrollTrigger?.kill()
+              tl.kill()
+            }
+          }
+
+          if (conditions.isMotion) {
+            gsap.set(items, { autoAlpha: 0, y: 20 })
+            return batchReveal({
+              root,
+              selector: '[data-waypoint-item]',
+              y: 20,
+              stagger: 0.1,
+              start: 'top 85%',
+            })
+          }
+        },
+      )
+
+      return () => mm.revert()
+    }, root)
+
+    return () => ctx.revert()
+  }, [])
+
   return (
     <main className="about-page">
       {/* Hero */}
@@ -62,16 +148,36 @@ export function About() {
       </section>
 
       {/* Timeline */}
-      <section className="section section--secondary">
+      <section className="section section--secondary about-timeline-section">
         <div className="container">
           <div className="text-center" style={{marginBottom:'48px'}}>
             <p className="section-label">发展历程</p>
             <h2>我们的足迹</h2>
             <div className="divider divider--center" />
           </div>
-          <div className="about-timeline">
+          <div className="about-timeline" ref={timelineRef}>
+            <svg
+              className="about-timeline__path"
+              aria-hidden="true"
+              focusable="false"
+              preserveAspectRatio="none"
+              viewBox="0 0 20 100"
+            >
+              <path
+                ref={pathRef}
+                data-timeline-path
+                d="M10 0 L10 100"
+              />
+            </svg>
             {timeline.map((item, i) => (
-              <div key={i} className="about-timeline__item">
+              <div
+                key={i}
+                ref={(el) => {
+                  if (el) itemsRef.current[i] = el
+                }}
+                className="about-timeline__item"
+                data-waypoint-item
+              >
                 <div className="about-timeline__year">{item.year}</div>
                 <div className="about-timeline__dot" />
                 <div className="about-timeline__event">{item.event}</div>
