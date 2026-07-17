@@ -4,6 +4,7 @@ import { Flip } from 'gsap/Flip'
 import { SplitText } from 'gsap/SplitText'
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin'
 import { InertiaPlugin } from 'gsap/InertiaPlugin'
+import { Draggable } from 'gsap/Draggable'
 
 /**
  * Animation runtime — the single entry point that registers every GSAP
@@ -22,7 +23,7 @@ let installed = false
 
 export function installAnimationRuntime(): void {
   if (installed || typeof window === 'undefined') return
-  gsap.registerPlugin(ScrollTrigger, Flip, SplitText, DrawSVGPlugin, InertiaPlugin)
+  gsap.registerPlugin(ScrollTrigger, Flip, SplitText, DrawSVGPlugin, InertiaPlugin, Draggable)
   gsap.config({ nullTargetWarn: false })
   ScrollTrigger.defaults({ markers: false })
   ScrollTrigger.normalizeScroll(true)

@@ -9,6 +9,7 @@ import { Breadcrumb } from '../components/Breadcrumb'
 import { CoverImage } from '../components/CoverImage'
 import { motionAllowed } from '../animations/reducedMotion'
 import { splitHeadingsIn } from '../animations/splitHeading'
+import { IssueCardStack } from '../components/IssueCardStack'
 import './Issues.css'
 
 function formatDate(d?: string) {
@@ -171,6 +172,19 @@ export function Issues() {
             <div className="divider divider--draw" data-divider-draw />
             <p className="section-subtitle">按发布时间倒序排列，最新期刊置顶</p>
           </div>
+
+          {/* Mobile-only swipeable stack. The vertical grid below remains the
+              primary entry — IssueCardStack self-disables on desktop
+              (≥1024px) and on reduced-motion.   */}
+          <IssueCardStack
+            items={sorted.map((issue) => ({
+              slug: issue.slug,
+              title: issue.title,
+              cover: issue.cover_image,
+              date: formatDate(issue.published_at),
+              badge: issue.issue_number ? `第 ${issue.issue_number} 期` : undefined,
+            }))}
+          />
 
           {isLoading ? (
             <div className="issues-loading">
