@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Mail } from 'lucide-react'
+import { batchReveal } from '../animations/batchReveal'
 import './Footer.css'
 
 const researchLinks = [
@@ -16,10 +18,27 @@ const siteLinks = [
 ]
 
 export function Footer() {
+  const rootRef = useRef<HTMLElement>(null)
+
+  // P1-08: Footer ScrollTrigger stagger. Reveals brand, the three link columns,
+  // and the bottom row together when the footer scrolls into view. `batchReveal`
+  // is a no-op under `prefers-reduced-motion` / Save-Data so the layout is
+  // available regardless of the gate.
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return () => {}
+    return batchReveal({
+      root,
+      selector: '[data-footer-cell]',
+      stagger: 0.07,
+      y: 28,
+    })
+  }, [])
+
   return (
-    <footer className="footer">
+    <footer className="footer" ref={rootRef}>
       <div className="footer__inner container">
-        <div className="footer__brand">
+        <div className="footer__brand" data-footer-cell>
           <div className="footer__logo">
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
               <rect x="2" y="2" width="28" height="28" rx="6" fill="rgba(37, 99, 235, 0.15)" stroke="#2563eb" strokeWidth="1.5"/>
@@ -39,7 +58,7 @@ export function Footer() {
         </div>
 
         <div className="footer__links">
-          <div className="footer__col">
+          <div className="footer__col" data-footer-cell>
             <h4 className="footer__col-title">内容分类</h4>
             <ul>
               {researchLinks.map(l => (
@@ -47,7 +66,7 @@ export function Footer() {
               ))}
             </ul>
           </div>
-          <div className="footer__col">
+          <div className="footer__col" data-footer-cell>
             <h4 className="footer__col-title">导航</h4>
             <ul>
               {siteLinks.map(l => (
@@ -55,7 +74,7 @@ export function Footer() {
               ))}
             </ul>
           </div>
-          <div className="footer__col">
+          <div className="footer__col" data-footer-cell>
             <h4 className="footer__col-title">联系我们</h4>
             <ul className="footer__contact">
               <li>contact@hbdit.com</li>
@@ -65,7 +84,7 @@ export function Footer() {
           </div>
         </div>
       </div>
-      <div className="footer__bottom">
+      <div className="footer__bottom" data-footer-cell>
         <div className="container">
           <p>© 2024 湖北数创 · Hubei Digital Innovation</p>
           <p className="footer__legal">

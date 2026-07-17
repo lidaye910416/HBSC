@@ -31,6 +31,14 @@
   line-height: 1.6;
   margin-bottom: var(--space-4);
 }
+/*
+ * Auto-height transition wrapper for the idle/loading/error -> success switch.
+ * GSAP writes inline height/opacity/overflow; CSS stays out of the way so the
+ * measurement that drives the height tween is reliable.
+ */
+.newsletter__state {
+  display: block;
+}
 .newsletter__form {
   display: flex;
   gap: 12px;
