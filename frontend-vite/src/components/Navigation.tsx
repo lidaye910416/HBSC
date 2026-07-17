@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Menu, X, ChevronDown, BookOpen } from 'lucide-react'
 import { useGSAP } from '@gsap/react'
@@ -48,12 +48,6 @@ export function Navigation() {
       const motion = motionAllowed()
       const dropdownMenu = dropdownMenuRef.current
       const mobileMenu = mobileMenuRef.current
-      const dropdownItems = containerRef.current?.querySelectorAll<HTMLElement>(
-        '[data-nav-dropdown-item]',
-      )
-      const mobileItems = containerRef.current?.querySelectorAll<HTMLElement>(
-        '[data-nav-mobile-item]',
-      )
 
       // Reduced motion: skip the timeline entirely. We still keep the panels
       // mounted and just snap visibility via gsap.set on every state change.
@@ -63,29 +57,29 @@ export function Navigation() {
         return
       }
 
-      if (dropdownMenu && dropdownItems) {
+      // The dropdown panels are always mounted; we only animate the panel's
+      // own autoAlpha + y. Items inside rely on the parent's visibility/opacity
+      // (CSS rule: child opacity contributes through parent's effective
+      // opacity rendering) and inherit the open/close naturally. We
+      // deliberately do NOT use `.from(items, { autoAlpha: 0 })` here — that
+      // pattern pins an inline opacity:0 on each item at timeline build time
+      // and, because the timeline is paused then played later (after a state
+      // flip), GSAP can leave items stuck at the start frame if any prior
+      // from() instance hasn't fully unwound (e.g. StrictMode double-mount,
+      // dependency-driven re-runs).
+      if (dropdownMenu) {
         gsap.set(dropdownMenu, { autoAlpha: 0, y: -8 })
         const tl = gsap
           .timeline({ paused: true, defaults: { ease: 'power2.out' } })
           .to(dropdownMenu, { autoAlpha: 1, y: 0, duration: 0.22, overwrite: 'auto' }, 0)
-          .from(
-            dropdownItems,
-            { y: -5, autoAlpha: 0, stagger: 0.035, duration: 0.28, overwrite: 'auto' },
-            '<0.05',
-          )
         dropdownTlRef.current = tl
       }
 
-      if (mobileMenu && mobileItems && mobileItems.length) {
+      if (mobileMenu) {
         gsap.set(mobileMenu, { autoAlpha: 0, y: -12 })
         const tl = gsap
           .timeline({ paused: true, defaults: { ease: 'power2.out' } })
           .to(mobileMenu, { autoAlpha: 1, y: 0, duration: 0.25, overwrite: 'auto' }, 0)
-          .from(
-            mobileItems,
-            { y: -6, autoAlpha: 0, stagger: 0.04, duration: 0.3, overwrite: 'auto' },
-            '<0.06',
-          )
         mobileTlRef.current = tl
       }
     },
@@ -146,8 +140,6 @@ export function Navigation() {
   // Click toggles the dropdown so users can see the latest 2 issues at a
   // glance and jump directly to either. Hover still opens the same panel
   // for trackpad / mouse-only users.
-  const navigate = useNavigate()
-  const latestIssue = sortedIssues[0]
   const formatIssueDate = (d?: string) =>
     d ? new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' }) : ''
 

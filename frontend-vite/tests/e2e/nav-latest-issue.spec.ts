@@ -49,6 +49,14 @@ test.describe('nav issues trigger opens latest-two dropdown', () => {
       const href = await cards.nth(i).getAttribute('href')
       expect(href, `card #${i} href`).toMatch(/^\/issues\/[A-Za-z0-9_\-]+$/)
     }
+    // Each card is actually visible — not stuck at autoAlpha:0 from a
+    // paused gsap.from() that never gets to play.
+    await expect.poll(async () =>
+      page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.nav__dropdown-card'))
+        return cards.map((c) => parseFloat(getComputedStyle(c).opacity))
+      }),
+    ).toEqual([1, 1])
   })
 
   test('each card carries cover / number / title / date', async ({ page }) => {
