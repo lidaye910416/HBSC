@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Search, FileText, Zap, ArrowRight } from 'lucide-react'
 import { api } from '../services/api'
+import { batchReveal } from '../animations/batchReveal'
 import './Search.css'
 
 export function SearchPage() {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const resultsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(query), 300)
@@ -19,6 +21,21 @@ export function SearchPage() {
     queryFn: () => api.search(debouncedQuery) as Promise<{ total: number; articles: Array<{ id: number; title: string; slug: string; type: string }>; insights: Array<{ id: number; title: string; slug: string; type: string }> }>,
     enabled: debouncedQuery.length >= 2,
   })
+
+  // P1-01: Reveal result items as their row scrolls into the viewport.
+  // batchReveal returns a cleanup that kills the underlying ScrollTriggers;
+  // re-runs whenever the result set changes so newly fetched rows animate in.
+  useEffect(() => {
+    const root = resultsRef.current
+    if (!root || isLoading || !data || data.total === 0) return
+    const cleanup = batchReveal({
+      root,
+      selector: '[data-reveal-card]',
+      y: 24,
+      stagger: 0.06,
+    })
+    return cleanup
+  }, [isLoading, data])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +75,7 @@ export function SearchPage() {
               <div className="skeleton-result" />
             </div>
           ) : data && debouncedQuery.length >= 2 ? (
-            <div className="search-results">
+            <div className="search-results" ref={resultsRef}>
               <p className="search-results__count">
                 找到 <strong>{data.total}</strong> 个结果
               </p>
@@ -70,7 +87,7 @@ export function SearchPage() {
                   </h3>
                   <div className="search-results-list">
                     {data.articles.map((item: { id: number; title: string; slug: string; type: string }) => (
-                      <Link key={item.id} to={`/articles/${item.slug}`} className="search-result-item">
+                      <Link key={item.id} to={`/articles/${item.slug}`} className="search-result-item" data-reveal-card>
                         <div className="search-result-item__icon">
                           <FileText size={18} strokeWidth={1.5} />
                         </div>
@@ -92,7 +109,7 @@ export function SearchPage() {
                   </h3>
                   <div className="search-results-list">
                     {data.insights.map((item: { id: number; title: string; type: string }) => (
-                      <div key={item.id} className="search-result-item">
+                      <div key={item.id} className="search-result-item" data-reveal-card>
                         <div className="search-result-item__icon">
                           <Zap size={18} strokeWidth={1.5} />
                         </div>
