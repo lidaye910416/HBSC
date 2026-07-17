@@ -57,7 +57,7 @@
   color: var(--color-text);
   text-decoration: none;
   border-radius: 8px;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -77,7 +77,10 @@
 }
 .nav__caret.is-open { transform: rotate(180deg); }
 
-/* ---------- Dropdown ---------- */
+/* ---------- Dropdown ----------
+   The menu stays mounted; GSAP toggles autoAlpha + y via a single paused
+   timeline (play/reverse). The CSS gives the menu its resting layout only —
+   no opacity, transform, or visibility rules here, those belong to GSAP. */
 .nav__dropdown {
   position: relative;
 }
@@ -96,12 +99,13 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
   padding: var(--space-1);
   z-index: 110;
-  animation: navDropdownFade 0.18s ease-out;
-  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+  /* Closed-state defaults — GSAP overrides these on the timeline. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
-@keyframes navDropdownFade {
-  from { opacity: 0; transform: translate(-50%, -4px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+.nav__dropdown-menu[aria-hidden="false"] {
+  pointer-events: auto;
 }
 
 /* Layer 1: invisible hover bridge — covers the 8px gap between
@@ -116,13 +120,6 @@
   height: 8px;
   background: transparent;
   pointer-events: auto;
-}
-
-/* Layer 3: closing state — fades out before unmount */
-.nav__dropdown-menu--closing {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-4px);
-  pointer-events: none;
 }
 
 .nav__dropdown-head {
@@ -248,7 +245,10 @@
   background: var(--color-accent-light);
 }
 
-/* ---------- Mobile drawer ---------- */
+/* ---------- Mobile drawer ----------
+   Always rendered; GSAP toggles autoAlpha + y via a paused timeline.
+   `position: fixed` keeps the closed drawer out of normal flow so it does
+   not push page content. `inert` + visibility-hidden handle accessibility. */
 .nav__mobile {
   position: fixed;
   top: var(--nav-height, 64px);
@@ -262,6 +262,13 @@
   gap: 4px;
   z-index: 99;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  /* Closed-state defaults — GSAP overrides these on the timeline. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.nav__mobile[aria-hidden="false"] {
+  pointer-events: auto;
 }
 .nav__mobile-link {
   display: block;

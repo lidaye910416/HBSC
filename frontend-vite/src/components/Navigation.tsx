@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Menu, X, ChevronDown, BookOpen } from 'lucide-react'
+import { useGSAP } from '@gsap/react'
+import { gsap } from 'gsap'
 import { api } from '../services/api'
+import { motionAllowed } from '../animations/reducedMotion'
 import './Navigation.css'
 
 const navLinks = [
@@ -13,33 +16,9 @@ const navLinks = [
 export function Navigation() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [issuesOpen, setIssuesOpen] = useState(false)
-  const [issuesClosing, setIssuesClosing] = useState(false)
   const location = useLocation()
+  const containerRef = useRef<HTMLElement | null>(null)
   const issuesRef = useRef<HTMLDivElement | null>(null)
-  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const clearCloseTimeout = () => {
-    if (closeTimeoutRef.current !== null) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
-  }
-
-  const openIssues = () => {
-    clearCloseTimeout()
-    setIssuesClosing(false)
-    setIssuesOpen(true)
-  }
-
-  const scheduleCloseIssues = () => {
-    clearCloseTimeout()
-    setIssuesClosing(true)
-    closeTimeoutRef.current = setTimeout(() => {
-      setIssuesOpen(false)
-      setIssuesClosing(false)
-      closeTimeoutRef.current = null
-    }, 150)
-  }
 
   const { data: issues } = useQuery({
     queryKey: ['issues'],
@@ -55,32 +34,117 @@ export function Navigation() {
       return bd - ad
     })
 
-  useEffect(() => {
-    setMobileOpen(false)
-    setIssuesOpen(false)
-    setIssuesClosing(false)
-    clearCloseTimeout()
-  }, [location])
+  // Single paused timeline per panel: play() opens, reverse() closes.
+  // The same timeline is reused for every enter/exit so rapid hover/click
+  // never leaves a stuck half-state. Both panels stay mounted (visibility
+  // toggled by GSAP autoAlpha) so reverse() always has a target to animate.
+  const dropdownTlRef = useRef<gsap.core.Timeline | null>(null)
+  const mobileTlRef = useRef<gsap.core.Timeline | null>(null)
+  const dropdownMenuRef = useRef<HTMLDivElement | null>(null)
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null)
 
+  useGSAP(
+    () => {
+      const motion = motionAllowed()
+      const dropdownMenu = dropdownMenuRef.current
+      const mobileMenu = mobileMenuRef.current
+      const dropdownItems = containerRef.current?.querySelectorAll<HTMLElement>(
+        '[data-nav-dropdown-item]',
+      )
+      const mobileItems = containerRef.current?.querySelectorAll<HTMLElement>(
+        '[data-nav-mobile-item]',
+      )
+
+      // Reduced motion: skip the timeline entirely. We still keep the panels
+      // mounted and just snap visibility via gsap.set on every state change.
+      if (!motion) {
+        if (dropdownMenu) gsap.set(dropdownMenu, { autoAlpha: issuesOpen ? 1 : 0, y: 0 })
+        if (mobileMenu) gsap.set(mobileMenu, { autoAlpha: mobileOpen ? 1 : 0, y: 0 })
+        return
+      }
+
+      if (dropdownMenu && dropdownItems && dropdownItems.length) {
+        gsap.set(dropdownMenu, { autoAlpha: 0, y: -8 })
+        const tl = gsap
+          .timeline({ paused: true, defaults: { ease: 'power2.out' } })
+          .to(dropdownMenu, { autoAlpha: 1, y: 0, duration: 0.22, overwrite: 'auto' }, 0)
+          .from(
+            dropdownItems,
+            { y: -5, autoAlpha: 0, stagger: 0.035, duration: 0.28, overwrite: 'auto' },
+            '<0.05',
+          )
+        dropdownTlRef.current = tl
+      }
+
+      if (mobileMenu && mobileItems && mobileItems.length) {
+        gsap.set(mobileMenu, { autoAlpha: 0, y: -12 })
+        const tl = gsap
+          .timeline({ paused: true, defaults: { ease: 'power2.out' } })
+          .to(mobileMenu, { autoAlpha: 1, y: 0, duration: 0.25, overwrite: 'auto' }, 0)
+          .from(
+            mobileItems,
+            { y: -6, autoAlpha: 0, stagger: 0.04, duration: 0.3, overwrite: 'auto' },
+            '<0.06',
+          )
+        mobileTlRef.current = tl
+      }
+    },
+    { scope: containerRef, dependencies: [] },
+  )
+
+  // Drive timelines from state. contextSafe keeps handlers valid after the
+  // gsap.context reverts in StrictMode.
   useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (!issuesRef.current) return
-      if (!issuesRef.current.contains(e.target as Node)) setIssuesOpen(false)
+    if (!motionAllowed()) {
+      if (dropdownMenuRef.current)
+        gsap.set(dropdownMenuRef.current, { autoAlpha: issuesOpen ? 1 : 0, y: 0 })
+      return
     }
-    if (issuesOpen) document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
+    if (issuesOpen) dropdownTlRef.current?.play()
+    else dropdownTlRef.current?.reverse()
   }, [issuesOpen])
 
   useEffect(() => {
-    return () => clearCloseTimeout()
-  }, [])
+    if (!motionAllowed()) {
+      if (mobileMenuRef.current)
+        gsap.set(mobileMenuRef.current, { autoAlpha: mobileOpen ? 1 : 0, y: 0 })
+      return
+    }
+    if (mobileOpen) mobileTlRef.current?.play()
+    else mobileTlRef.current?.reverse()
+  }, [mobileOpen])
+
+  // Close menus on route change so we never carry a half-open panel across
+  // navigation. Reverse runs naturally; no setTimeout involved.
+  useEffect(() => {
+    setMobileOpen(false)
+    setIssuesOpen(false)
+  }, [location.pathname])
+
+  // Outside click + Escape close. Both panels share the same logic.
+  useEffect(() => {
+    if (!issuesOpen) return
+    const onMouseDown = (e: MouseEvent) => {
+      if (!issuesRef.current) return
+      if (!issuesRef.current.contains(e.target as Node)) setIssuesOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIssuesOpen(false)
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [issuesOpen])
 
   const isIssuesActive = location.pathname.startsWith('/issues')
   const isArticlesActive = location.pathname.startsWith('/articles')
   const isLabsActive = location.pathname.startsWith('/labs')
 
   return (
-    <nav className="nav">
+    <nav className="nav" ref={containerRef}>
       <div className="nav__inner container">
         <Link to="/" className="nav__logo" aria-label="返回首页">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -105,53 +169,59 @@ export function Navigation() {
           <div
             ref={issuesRef}
             className={`nav__dropdown ${isIssuesActive || issuesOpen ? 'nav__dropdown--open' : ''}`}
-            onMouseEnter={openIssues}
-            onMouseLeave={scheduleCloseIssues}
+            onMouseEnter={() => setIssuesOpen(true)}
+            onMouseLeave={() => setIssuesOpen(false)}
           >
             <button
               type="button"
               className={`nav__link nav__dropdown-trigger ${isIssuesActive ? 'nav__link--active' : ''}`}
               aria-expanded={issuesOpen}
               aria-haspopup="true"
-              onClick={() => (issuesOpen ? scheduleCloseIssues() : openIssues())}
+              aria-controls="nav-issues-menu"
+              onClick={() => setIssuesOpen(v => !v)}
             >
               期刊 <ChevronDown size={14} strokeWidth={1.75} className={`nav__caret ${issuesOpen ? 'is-open' : ''}`} />
             </button>
 
-            {issuesOpen && (
-              <div
-                className={`nav__dropdown-menu ${issuesClosing ? 'nav__dropdown-menu--closing' : ''}`}
-                role="menu"
-              >
-                <Link to="/issues" className="nav__dropdown-head" role="menuitem">
-                  <div className="nav__dropdown-head-icon"><BookOpen size={14} strokeWidth={1.75} /></div>
-                  <div className="nav__dropdown-head-text">
-                    <strong>全部期刊</strong>
-                    <span>查看完整期刊档案</span>
-                  </div>
-                </Link>
-
-                <div className="nav__dropdown-list">
-                  {sortedIssues.length === 0 ? (
-                    <div className="nav__dropdown-empty">暂无期刊</div>
-                  ) : (
-                    sortedIssues.slice(0, 6).map(issue => (
-                      <Link
-                        key={issue.id}
-                        to={`/issues/${issue.slug}`}
-                        className={`nav__dropdown-item ${location.pathname === `/issues/${issue.slug}` ? 'is-active' : ''}`}
-                        role="menuitem"
-                      >
-                        <span className="nav__dropdown-item-title">{issue.title}</span>
-                        {issue.issue_number && (
-                          <span className="nav__dropdown-item-meta">{issue.issue_number}</span>
-                        )}
-                      </Link>
-                    ))
-                  )}
+            <div
+              id="nav-issues-menu"
+              ref={dropdownMenuRef}
+              data-nav-dropdown
+              className="nav__dropdown-menu"
+              role="menu"
+              aria-hidden={!issuesOpen}
+              inert={!issuesOpen}
+            >
+              <Link to="/issues" className="nav__dropdown-head" role="menuitem" tabIndex={issuesOpen ? 0 : -1}>
+                <div className="nav__dropdown-head-icon"><BookOpen size={14} strokeWidth={1.75} /></div>
+                <div className="nav__dropdown-head-text">
+                  <strong>全部期刊</strong>
+                  <span>查看完整期刊档案</span>
                 </div>
+              </Link>
+
+              <div className="nav__dropdown-list">
+                {sortedIssues.length === 0 ? (
+                  <div className="nav__dropdown-empty">暂无期刊</div>
+                ) : (
+                  sortedIssues.slice(0, 6).map(issue => (
+                    <Link
+                      key={issue.id}
+                      to={`/issues/${issue.slug}`}
+                      data-nav-dropdown-item
+                      className={`nav__dropdown-item ${location.pathname === `/issues/${issue.slug}` ? 'is-active' : ''}`}
+                      role="menuitem"
+                      tabIndex={issuesOpen ? 0 : -1}
+                    >
+                      <span className="nav__dropdown-item-title">{issue.title}</span>
+                      {issue.issue_number && (
+                        <span className="nav__dropdown-item-meta">{issue.issue_number}</span>
+                      )}
+                    </Link>
+                  ))
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           <Link
@@ -175,51 +245,71 @@ export function Navigation() {
           </Link>
           <button
             className="nav__mobile-toggle"
-            onClick={() => setMobileOpen(!mobileOpen)}
+            onClick={() => setMobileOpen(v => !v)}
             aria-label={mobileOpen ? '关闭菜单' : '打开菜单'}
+            aria-expanded={mobileOpen}
+            aria-controls="nav-mobile-menu"
           >
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
 
-      {mobileOpen && (
-        <div className="nav__mobile">
-          {navLinks.map(link => (
-            <Link
-              key={link.path}
-              to={link.path}
-              className={`nav__mobile-link ${location.pathname === link.path ? 'active' : ''}`}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Link to="/issues" className={`nav__mobile-link ${isIssuesActive ? 'active' : ''}`}>
-            期刊
-          </Link>
-          {sortedIssues.slice(0, 4).map(issue => (
-            <Link
-              key={issue.id}
-              to={`/issues/${issue.slug}`}
-              className="nav__mobile-link nav__mobile-sublink"
-            >
-              · {issue.title}
-            </Link>
-          ))}
+      <div
+        id="nav-mobile-menu"
+        ref={mobileMenuRef}
+        data-nav-mobile
+        className="nav__mobile"
+        aria-hidden={!mobileOpen}
+        inert={!mobileOpen}
+      >
+        {navLinks.map(link => (
           <Link
-            to="/articles"
-            className={`nav__mobile-link ${isArticlesActive ? 'active' : ''}`}
+            key={link.path}
+            to={link.path}
+            data-nav-mobile-item
+            className={`nav__mobile-link ${location.pathname === link.path ? 'active' : ''}`}
+            tabIndex={mobileOpen ? 0 : -1}
           >
-            所有文章
+            {link.label}
           </Link>
+        ))}
+        <Link
+          to="/issues"
+          data-nav-mobile-item
+          className={`nav__mobile-link ${isIssuesActive ? 'active' : ''}`}
+          tabIndex={mobileOpen ? 0 : -1}
+        >
+          期刊
+        </Link>
+        {sortedIssues.slice(0, 4).map(issue => (
           <Link
-            to="/labs"
-            className={`nav__mobile-link ${isLabsActive ? 'active' : ''}`}
+            key={issue.id}
+            to={`/issues/${issue.slug}`}
+            data-nav-mobile-item
+            className="nav__mobile-link nav__mobile-sublink"
+            tabIndex={mobileOpen ? 0 : -1}
           >
-            数创实验室
+            · {issue.title}
           </Link>
-        </div>
-      )}
+        ))}
+        <Link
+          to="/articles"
+          data-nav-mobile-item
+          className={`nav__mobile-link ${isArticlesActive ? 'active' : ''}`}
+          tabIndex={mobileOpen ? 0 : -1}
+        >
+          所有文章
+        </Link>
+        <Link
+          to="/labs"
+          data-nav-mobile-item
+          className={`nav__mobile-link ${isLabsActive ? 'active' : ''}`}
+          tabIndex={mobileOpen ? 0 : -1}
+        >
+          数创实验室
+        </Link>
+      </div>
     </nav>
   )
 }
