@@ -16,8 +16,17 @@ import { Draggable } from 'gsap/Draggable'
  * Server-safe: returns early when `window` is undefined so SSR/import-time
  * evaluation never throws.
  *
- * Production behaviour: no markers, null-target warnings off, normalized
- * scroll so iOS momentum + nested scroll containers behave predictably.
+ * Production behaviour: no markers, null-target warnings off.
+ *
+ * NOTE — DO NOT enable `ScrollTrigger.normalizeScroll(true)` here without
+ * also using ScrollSmoother. The normalizer captures wheel/touch events with
+ * `preventDefault: true` and tries to manage scroll through a wrapper that's
+ * only calibrated when ScrollSmoother is the active scroller. Without
+ * ScrollSmoother, the wrapper caps wheel-driven and programmatic
+ * `window.scrollTo` at the wrong value (smaller than the document's true
+ * max), and the page appears "stuck" — wheels do move the page a bit, but
+ * they bottom out well above the document end and JS-set scroll positions
+ * resolve to a fraction of what was asked. We rely on native scroll.
  */
 let installed = false
 
@@ -26,7 +35,6 @@ export function installAnimationRuntime(): void {
   gsap.registerPlugin(ScrollTrigger, Flip, SplitText, DrawSVGPlugin, InertiaPlugin, Draggable)
   gsap.config({ nullTargetWarn: false })
   ScrollTrigger.defaults({ markers: false })
-  ScrollTrigger.normalizeScroll(true)
   installed = true
 }
 
