@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import './About.css'
 import { useGsapScope } from '@/animations/useGsapScope'
 import { batchReveal } from '@/animations/batchReveal'
@@ -27,74 +28,65 @@ export function About() {
   const pathRef = useRef<SVGPathElement | null>(null)
   const itemsRef = useRef<HTMLDivElement[]>([])
 
-  // P1-05 — About waypoint timeline + DrawSVG
+  // P1-05 — About waypoint timeline reveal.
   //
-  // Desktop (≥ 1024px, motion allowed): pin the timeline and scrub the gold
-  // SVG path's draw length, snapping the playhead to each waypoint so the
-  // year chips appear one after another.
-  // Mobile / tablet or reduced-motion users: skip the pin and reveal the
-  // items as a normal batch when they cross the viewport.
-  // No-JS / pre-hydration: nothing is pre-hidden, so the static DOM stays
-  // readable (year + dot + event). SVG carries aria-hidden so screen readers
-  // don't double-read the line.
+  // Motion-allowed users: batch-reveal the year/event rows as they cross the
+  // viewport, and scale the gold connecting path in at the same time. The
+  // previous desktop-only `pin + scrub + drawSVG` path was fragile (a double
+  // `gsap.set(items, {autoAlpha:0})` from two matching matchMedia conditions
+  // left items stuck at opacity 0 in every viewport), so it has been dropped
+  // in favour of a single, ScrollTrigger.batch-driven reveal.
+  // Reduced-motion users / no-JS: nothing is pre-hidden, so the static DOM
+  // stays readable. SVG carries aria-hidden so screen readers don't double-
+  // read the line.
   useGsapScope(() => {
     const root = timelineRef.current
     const path = pathRef.current
     const items = itemsRef.current.filter(Boolean)
-    if (!root || !path || !items.length) return
+    if (!root || !items.length) return
 
     const ctx = gsap.context(() => {
       const mm = gsap.matchMedia()
 
       mm.add(
-        {
-          isDesktop:
-            '(min-width: 1024px) and (prefers-reduced-motion: no-preference)',
-          isMotion: '(prefers-reduced-motion: no-preference)',
-        },
+        { isMotion: '(prefers-reduced-motion: no-preference)' },
         (matchContext) => {
-          const conditions = matchContext.conditions as {
-            isDesktop: boolean
-            isMotion: boolean
-          }
+          if (!matchContext.conditions?.isMotion) return
 
-          if (conditions.isDesktop) {
-            // Initial state must be set inside the motion branch so reduced-
-            // motion users (and SSR/no-JS) never see hidden year chips.
-            gsap.set(items, { autoAlpha: 0, y: 24 })
-            const tl = gsap.timeline({
-              scrollTrigger: {
-                trigger: root,
-                pin: true,
-                scrub: 0.55,
-                end: () => '+=' + window.innerHeight * 2,
-                snap: { snapTo: 0.5, duration: 0.3, ease: 'power2.inOut' },
-                anticipatePin: 1,
+          // batchReveal owns the hide-then-show via `fromTo autoAlpha:0→1`,
+          // so we deliberately do NOT pre-set items to autoAlpha:0 here.
+          // Pre-hiding would race the viewport check and leave items stuck
+          // at opacity 0 if the timeline is already on-screen at hydration.
+          const killItems = batchReveal({
+            root,
+            selector: '[data-waypoint-item]',
+            y: 20,
+            stagger: 0.1,
+            start: 'top 85%',
+          })
+
+          // Draw the gold connecting path in alongside the first item.
+          // scaleY on the wrapper so we don't need the DrawSVG plugin here.
+          let killPath: (() => void) | undefined
+          if (path) {
+            const pathTrigger = ScrollTrigger.create({
+              trigger: root,
+              start: 'top 85%',
+              once: true,
+              onEnter: () => {
+                gsap.fromTo(
+                  path,
+                  { scaleY: 0, transformOrigin: 'top center' },
+                  { scaleY: 1, duration: 0.9, ease: 'power3.out' },
+                )
               },
             })
-            tl.from(path, { drawSVG: 0, ease: 'none' })
-            items.forEach((item, i) => {
-              tl.to(
-                item,
-                { autoAlpha: 1, y: 0, duration: 0.4, ease: 'power2.out' },
-                i,
-              )
-            })
-            return () => {
-              tl.scrollTrigger?.kill()
-              tl.kill()
-            }
+            killPath = () => pathTrigger.kill()
           }
 
-          if (conditions.isMotion) {
-            gsap.set(items, { autoAlpha: 0, y: 20 })
-            return batchReveal({
-              root,
-              selector: '[data-waypoint-item]',
-              y: 20,
-              stagger: 0.1,
-              start: 'top 85%',
-            })
+          return () => {
+            killItems()
+            killPath?.()
           }
         },
       )
