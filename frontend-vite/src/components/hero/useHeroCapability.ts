@@ -34,7 +34,7 @@ function detectWebGL(): { supported: boolean; renderer: string | null } {
   }
 }
 
-function tierFromRenderer(renderer: string | null, isMobile: boolean): GpuTier {
+function tierFromRenderer(renderer: string | null, _isMobile: boolean): GpuTier {
   if (!renderer) return 'low' // unknown → conservative
   const r = renderer.toLowerCase()
   // High tier: dedicated GPU / Apple Silicon

@@ -8,9 +8,13 @@
 //   - GLSL vertex displacement (uTime + uMouse bump) + emissive fragment modulation
 //   - RAF tick: stepCluster + write instanceMatrix + update uniforms
 //   - DPR cap + visibility gate + cleanup (StrictMode-safe)
+//   - ScrollTrigger: drive camera dolly + cluster rotation as hero scrolls out
+//   - Mouse world position: derived from ndcRef + own camera in RAF (pointer.worldRef
+//     may be null when hook is created with camera=null — see B2 fix below)
 
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { vertexInjection } from './shaders/vertex.glsl'
 import { fragmentInjection } from './shaders/fragment.glsl'
 import {
@@ -171,7 +175,24 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     // 8. RAF tick
     const startTime = performance.now()
     let lastTime = startTime
+    // B1 fix: drive scrollExitT via ScrollTrigger so the camera/cluster actually
+    // respond to hero scrolling out of view (was dead code before — declared,
+    // never written, always 0).
     let scrollExitT = 0
+    const scrollTrigger = ScrollTrigger.create({
+      trigger: canvas.parentElement || document.body,
+      start: 'top top',
+      end: 'bottom top',
+      scrub: 0.6,
+      onUpdate: (self) => {
+        scrollExitT = self.progress
+      },
+    })
+
+    // B2 fix: derive worldRef in RAF from ndcRef + this camera.
+    // (usePointerGravity was created with camera:null so worldRef stayed (0,0,0).)
+    const _tmpVec = new THREE.Vector3()
+    const _mouseWorldEuler: Vec3Like = { x: 0, y: 0, z: 0 }
 
     const tick = () => {
       if (!running) {
@@ -182,13 +203,20 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       const dt = Math.min((now - lastTime) / 1000, 0.05)
       lastTime = now
 
-      // Step cluster forces
-      const mouseWorld: Vec3Like = {
-        x: pointer.worldRef.current.x,
-        y: pointer.worldRef.current.y,
-        z: pointer.worldRef.current.z,
+      // Derive world position from NDC + camera (fix B2)
+      _tmpVec.set(pointer.ndcRef.current.x, pointer.ndcRef.current.y, 0.5)
+        .unproject(camera)
+      const dir = _tmpVec.sub(camera.position).normalize()
+      if (Math.abs(dir.z) > 0.001) {
+        const distance = -camera.position.z / dir.z
+        _tmpVec.copy(camera.position).add(dir.multiplyScalar(distance))
+        _mouseWorldEuler.x = _tmpVec.x
+        _mouseWorldEuler.y = _tmpVec.y
+        _mouseWorldEuler.z = _tmpVec.z
       }
-      const next = stepCluster(nodes, mouseWorld, dt)
+
+      // Step cluster forces
+      const next = stepCluster(nodes, _mouseWorldEuler, dt)
       applyClusterStep(nodes, next)
 
       // Write instance matrix
@@ -242,10 +270,15 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       window.removeEventListener('resize', resize)
       document.removeEventListener('visibilitychange', onVis)
       canvas.removeEventListener('webglcontextlost', onLost as EventListener)
-      mesh.dispose?.()
+      scrollTrigger.kill()
+      // B4 fix: InstancedMesh has no dispose() — remove the no-op call.
+      // B5 fix: WebGLRenderer.dispose() does not release the GL context
+      // — explicit forceContextLoss() is required.
       geometry.dispose()
       material.dispose()
       renderer.dispose()
+      const loseExt = renderer.getContext().getExtension('WEBGL_lose_context')
+      loseExt?.loseContext()
       // Drop references
       sceneStateRef.current = {}
     }

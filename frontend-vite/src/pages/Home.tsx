@@ -10,6 +10,8 @@ import { ArticleCard } from '../components/ArticleCard'
 import { CoverImage } from '../components/CoverImage'
 import { EditorialCommittee } from '../components/EditorialCommittee'
 import { HeroImmersive } from '../components/hero/HeroImmersive'
+import { HeroParticles } from '../components/HeroParticles'
+import { HeroShader } from '../components/HeroShader'
 import { mountCountUp } from '../animations/countUp'
 import { batchReveal } from '../animations/batchReveal'
 import './Home.css'
@@ -74,6 +76,13 @@ export function Home() {
     <main className="home">
       {/* Hero */}
       <section className="hero" id="hero" aria-labelledby="hero-title" ref={heroSectionRef}>
+        {/* B3 fix: restore HeroShader + HeroParticles as the multiply-blend noise
+            base layer; HeroImmersive overlays the gold cluster on top. Without
+            these, the WebGL path loses the original "editorial" texture and the
+            page feels flatter. They remain in HeroFallback for reduced-motion
+            users too. */}
+        <HeroShader />
+        <HeroParticles />
         <HeroImmersive heroRef={heroSectionRef} />
         <div className="hero__pattern" aria-hidden="true" />
         <div className="container hero__content">
