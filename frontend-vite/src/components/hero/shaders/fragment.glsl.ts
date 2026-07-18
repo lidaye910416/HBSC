@@ -1,12 +1,13 @@
 // frontend-vite/src/components/hero/shaders/fragment.glsl.ts
+//
+// Fragment shader injection for MeshStandardMaterial.
+// We modulate `totalEmissiveRadiance` AFTER Three.js has computed it
+// (it's declared as a vec3 in <emissivemap_fragment> chunk territory).
 
-export const fragmentInjection = /* glsl */ `
+export const commonInjection = /* glsl */ `
 varying float vDisplace;
+`
 
-void main() {
-  // Standard MeshStandardMaterial output is already composed above this point.
-  // We just modulate emissive by displacement (subtle).
-  // Note: totalEmissiveRadiance is the variable name in three.js shaders.
-  totalEmissiveRadiance *= (1.0 + vDisplace * 0.4);
-}
+export const emissiveInjection = /* glsl */ `
+  totalEmissiveRadiance *= ( 1.0 + vDisplace * 0.4 );
 `

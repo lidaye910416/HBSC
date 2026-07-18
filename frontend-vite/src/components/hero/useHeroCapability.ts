@@ -25,9 +25,10 @@ function detectWebGL(): { supported: boolean; renderer: string | null } {
     if (!gl) return { supported: false, renderer: null }
     const ext = gl.getExtension('WEBGL_debug_renderer_info')
     const renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null
-    // Free the test context
-    const lose = gl.getExtension('WEBGL_lose_context')
-    lose?.loseContext()
+    // Don't call loseContext() — it can pollute browser GL state in some
+    // Chromium versions, causing subsequent WebGLRenderer init to fail with
+    // "Cannot read properties of null (reading 'precision')". The temp canvas
+    // is garbage-collected when the function returns.
     return { supported: true, renderer: typeof renderer === 'string' ? renderer : null }
   } catch {
     return { supported: false, renderer: null }

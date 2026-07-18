@@ -15,8 +15,14 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { vertexInjection } from './shaders/vertex.glsl'
-import { fragmentInjection } from './shaders/fragment.glsl'
+import {
+  beginVertexInjection,
+  commonInjection as vertexCommonInjection,
+} from './shaders/vertex.glsl'
+import {
+  commonInjection as fragmentCommonInjection,
+  emissiveInjection,
+} from './shaders/fragment.glsl'
 import {
   buildCluster,
   stepCluster,
@@ -71,13 +77,27 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     const count = TIER_INSTANCE_COUNT[tier]
     const dprCap = TIER_DPR_CAP[tier]
 
-    // 1. Renderer
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: tier !== 'low',
-      alpha: true,
-      powerPreference: 'high-performance',
-    })
+    // 1. Renderer — wrap in try/catch: if context creation fails (e.g. context-lost
+    // cascade from a prior failed mount in StrictMode), bail out cleanly so the
+    // ErrorBoundary doesn't trip. HeroFallback will be tried by the parent gate.
+    let renderer: THREE.WebGLRenderer
+    try {
+      // Diagnose: log what's wrong if init fails
+      const testGl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      if (!testGl) {
+        console.warn('[ThreeScene] canvas.getContext returned null — WebGL blocked on this element')
+        return
+      }
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: tier !== 'low',
+        alpha: true,
+        powerPreference: 'high-performance',
+      })
+    } catch (err) {
+      console.warn('[ThreeScene] WebGLRenderer init failed, skipping:', err)
+      return
+    }
     renderer.setClearColor(0x000000, 0)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap))
 
@@ -103,27 +123,47 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       opacity: 0.92,
     })
 
-    // Shader uniforms (shared with onBeforeCompile injection below)
+    // Shader uniforms (shared with onBeforeCompile injection below).
+    // THREE.ShaderMaterial accepts a `uniforms` prop on regular materials too
+    // via onBeforeCompile, but the safer path for MeshStandardMaterial is to
+    // attach them as material.userData.uniforms AND mirror them in shader.uniforms.
     const uniforms: Record<string, THREE.IUniform> = {
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector2(0, 0) },
       uMouseVel: { value: new THREE.Vector2(0, 0) },
     }
+    // Attach so the WebGLProgram caches a uniform location for these names.
+    ;(material as unknown as { uniforms: typeof uniforms }).uniforms = uniforms
 
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = uniforms.uTime
       shader.uniforms.uMouse = uniforms.uMouse
       shader.uniforms.uMouseVel = uniforms.uMouseVel
 
+      // Vertex: declare varying + uniforms at the top, displace `transformed`
+      // by hooking into <begin_vertex> (Three.js declares `vec3 transformed`
+      // inside <begin_vertex> — we override the chunk to assign our own).
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
-          `#include <common>\n${vertexInjection}`,
+          `#include <common>\n${vertexCommonInjection}`,
         )
+        .replace(
+          '#include <begin_vertex>',
+          beginVertexInjection,
+        )
+
+      // Fragment: declare varying at top, modulate totalEmissiveRadiance
+      // after Three.js has computed it (it's declared in <lights_physical_fragment>
+      // and assigned in <lights_fragment_begin>/<lights_fragment_end>).
       shader.fragmentShader = shader.fragmentShader
         .replace(
           '#include <common>',
-          `#include <common>\n${fragmentInjection}`,
+          `#include <common>\n${fragmentCommonInjection}`,
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>\n${emissiveInjection}`,
         )
     }
     material.needsUpdate = true
@@ -272,13 +312,13 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       canvas.removeEventListener('webglcontextlost', onLost as EventListener)
       scrollTrigger.kill()
       // B4 fix: InstancedMesh has no dispose() — remove the no-op call.
-      // B5 fix: WebGLRenderer.dispose() does not release the GL context
-      // — explicit forceContextLoss() is required.
+      // Note: WebGLRenderer.dispose() does not release the GL context;
+      // we rely on canvas DOM node removal + GC for context cleanup.
+      // (Explicit forceContextLoss() was removed — it can pollute browser
+      // GL state in some Chromium versions, breaking subsequent mounts.)
       geometry.dispose()
       material.dispose()
       renderer.dispose()
-      const loseExt = renderer.getContext().getExtension('WEBGL_lose_context')
-      loseExt?.loseContext()
       // Drop references
       sceneStateRef.current = {}
     }
