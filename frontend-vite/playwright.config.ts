@@ -7,6 +7,8 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   reporter: 'list',
+  // Playwright must NOT pick up vitest unit tests that live in tests/animations/.
+  testIgnore: ['**/*.test.ts', '**/*.test.tsx'],
   use: {
     baseURL: process.env.BASE_URL ?? 'http://localhost:5174',
     trace: 'off',
