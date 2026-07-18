@@ -43,6 +43,7 @@
   --color-text-on-dark: #F5F5F0;          /* 16.8:1 AAA on #15243F */
   --color-text-on-dark-soft: #E8E4D8;     /* ~12:1 AAA on #15243F */
   --color-accent-on-dark: #93C5FD;        /* 9.1:1 AAA on #15243F (label/scroll) */
+  --color-accent-gold: #C9A84C;           /* 古铜金 — hero decoration only, decorative not text */
   --color-outline-on-dark: rgba(255, 255, 255, 0.32); /* 3.4:1 — passes 3:1 UI */
 
   /* design.md 完整 token */
