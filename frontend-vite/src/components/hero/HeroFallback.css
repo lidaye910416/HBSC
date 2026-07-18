@@ -1,0 +1,8 @@
+/* frontend-vite/src/components/hero/HeroFallback.css */
+
+.hero-fallback {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
