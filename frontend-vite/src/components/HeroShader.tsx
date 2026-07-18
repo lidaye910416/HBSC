@@ -40,30 +40,63 @@ out vec4 outColor;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform float uProgress;
+uniform vec2 uPointer;
 
-const vec3 INK = vec3(0.102, 0.102, 0.180);   // #1A1A2E
-const vec3 GOLD = vec3(0.788, 0.659, 0.298);  // #C9A84C
-
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+// domain warp with 2 layers
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash(i), hash(i + vec2(1,0)), u.x),
+    mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), u.x),
+    u.y
+  );
+}
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noise(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v;
 }
 
 void main() {
-  vec2 uv = v_uv;
-  vec2 p = uv * 2.0 - 1.0;
-  p.x *= uResolution.x / max(uResolution.y, 1.0);
+  vec2 uv = gl_FragCoord.xy / vec2(uResolution.x, uResolution.y);
+  vec2 p = (uv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0); // aspect-correct
 
-  float n = hash(floor(uv * 80.0)) * 0.04;
-  float wave = sin(p.x * 1.2 + uTime * 0.18) * 0.5 + 0.5;
-  float wave2 = cos(p.y * 1.4 - uTime * 0.13) * 0.5 + 0.5;
-  float t = clamp(wave * wave2 + n + uProgress * 0.6, 0.0, 1.0);
+  // Layer 1: low-freq noise, time + pointer driven
+  vec2 q = vec2(
+    fbm(p + uTime * 0.04 + uPointer * 0.04),
+    fbm(p + vec2(5.2, 1.3) + uTime * 0.05 + uPointer * 0.04)
+  );
+  // Layer 2: second warp
+  float r = fbm(p + q * 0.6 + uTime * 0.03);
 
-  vec3 col = mix(INK, GOLD, smoothstep(0.0, 0.85, t * 0.35));
-  // Soft vignette
-  float v = smoothstep(1.4, 0.4, length(p));
-  col *= mix(0.85, 1.0, v);
+  // HBSC palette
+  vec3 inkBase = vec3(0.06, 0.08, 0.18);    // #0F1429
+  vec3 inkMid  = vec3(0.10, 0.13, 0.24);    // #1A2139
+  vec3 gold    = vec3(0.79, 0.66, 0.30);    // #C9A84C
 
-  outColor = vec4(col, 0.85);
+  // Base ink gradient (top-to-bottom darken)
+  vec3 col = mix(inkBase, inkMid, uv.y * 0.6);
+
+  // Gold shimmer where second-warp r is high
+  float goldMix = smoothstep(0.6, 0.85, r);
+  col = mix(col, gold, goldMix * 0.12); // max 12% gold blend
+
+  // Radial vignette
+  float vign = 1.0 - length(uv - 0.5) * 0.5;
+  col *= vign;
+
+  // uProgress (scroll exit) slightly brightens
+  col *= (0.85 + uProgress * 0.3);
+
+  outColor = vec4(col, 1.0);
 }`
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
@@ -115,6 +148,7 @@ export function HeroShader() {
     let uTime: WebGLUniformLocation | null = null
     let uProgress: WebGLUniformLocation | null = null
     let uResolution: WebGLUniformLocation | null = null
+    let uPointer: WebGLUniformLocation | null = null
     let vao: WebGLVertexArrayObject | null = null
     let buffer: WebGLBuffer | null = null
 
@@ -131,6 +165,7 @@ export function HeroShader() {
       uTime = gl!.getUniformLocation(program!, 'uTime')
       uProgress = gl!.getUniformLocation(program!, 'uProgress')
       uResolution = gl!.getUniformLocation(program!, 'uResolution')
+      uPointer = gl!.getUniformLocation(program!, 'uPointer')
 
       vao = gl!.createVertexArray()
       gl!.bindVertexArray(vao)
@@ -150,6 +185,22 @@ export function HeroShader() {
 
     const params = { progress: 0 }
     let started = performance.now()
+
+    // Pointer NDC (-1..1, +y up). Defaults to origin when pointer leaves or
+    // device is coarse (touch). Mirrors usePointerGravity semantics but stays
+    // self-contained — HeroShader has no camera / scene.
+    const pointer = { x: 0, y: 0, inside: false }
+    const onPointerMove = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect()
+      const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+      const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
+      pointer.x = nx
+      pointer.y = ny
+      pointer.inside = true
+    }
+    const onPointerLeave = () => {
+      pointer.inside = false
+    }
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -171,6 +222,7 @@ export function HeroShader() {
       gl!.bindVertexArray(vao)
       if (uTime) gl!.uniform1f(uTime, now)
       if (uProgress) gl!.uniform1f(uProgress, params.progress)
+      if (uPointer) gl!.uniform2f(uPointer, pointer.x, pointer.y)
       gl!.drawArrays(gl!.TRIANGLES, 0, 6)
       raf = requestAnimationFrame(render)
     }
@@ -186,6 +238,8 @@ export function HeroShader() {
 
     resize()
     canvas.addEventListener('webglcontextlost', onLost as any, false)
+    canvas.addEventListener('pointermove', onPointerMove)
+    canvas.addEventListener('pointerleave', onPointerLeave)
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('resize', onResize)
 
@@ -200,6 +254,8 @@ export function HeroShader() {
     return () => {
       cancelAnimationFrame(raf)
       canvas.removeEventListener('webglcontextlost', onLost as any)
+      canvas.removeEventListener('pointermove', onPointerMove)
+      canvas.removeEventListener('pointerleave', onPointerLeave)
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('resize', onResize)
       scrollTween.scrollTrigger?.kill()

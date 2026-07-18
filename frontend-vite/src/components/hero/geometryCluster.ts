@@ -9,13 +9,44 @@ export interface Vec3Like {
   z: number
 }
 
+export type GeometryKind = 'icosa' | 'dodec' | 'torus'
+
 export interface ClusterNode {
   index: number
   basePos: Vec3Like
   originalBase: Vec3Like
   spin: Vec3Like
   scale: number
-  type: 'A' | 'B'
+  /** Size variation multiplier (preserves the old A=1.0 / B=0.7 spread). */
+  sizeFactor: number
+  type: GeometryKind
+}
+
+/**
+ * Assign geometry kinds per tier count so the cluster mixes icosahedrons,
+ * dodecahedrons and tori in fixed proportions.
+ *   high (24) → 14 icosa + 6 dodec + 4 torus
+ *   mid  (18) → 11 icosa + 4 dodec + 3 torus
+ *   low  (12) →  7 icosa + 3 dodec + 2 torus
+ */
+export function assignGeometryTypes(count: number): GeometryKind[] {
+  if (count === 24) return [
+    ...Array(14).fill('icosa' as const),
+    ...Array(6).fill('dodec' as const),
+    ...Array(4).fill('torus' as const),
+  ]
+  if (count === 18) return [
+    ...Array(11).fill('icosa' as const),
+    ...Array(4).fill('dodec' as const),
+    ...Array(3).fill('torus' as const),
+  ]
+  if (count === 12) return [
+    ...Array(7).fill('icosa' as const),
+    ...Array(3).fill('dodec' as const),
+    ...Array(2).fill('torus' as const),
+  ]
+  // Default fallback
+  return Array(count).fill('icosa' as const)
 }
 
 const TAU = Math.PI * 2
@@ -56,7 +87,9 @@ export function buildCluster(count: number, opts: {
         z: (Math.random() - 0.5) * TAU * 0.0015,
       },
       scale: 0.6 + Math.random() * 0.6,
-      type: i % 3 === 0 ? 'A' : 'B',
+      // Preserve the old A=1.0 / B=0.7 size spread independently of geom kind.
+      sizeFactor: i % 3 === 0 ? 1.0 : 0.7,
+      type: 'icosa',
     })
   }
   return nodes

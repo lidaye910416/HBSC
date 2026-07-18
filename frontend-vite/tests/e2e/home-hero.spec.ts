@@ -36,3 +36,25 @@ test('hero section has aria-labelledby pointing to h1 id', async ({ page }) => {
   await expect(section).toHaveAttribute('aria-labelledby', 'hero-title')
   await expect(page.locator('h1#hero-title')).toBeAttached()
 })
+
+test('mouse parallax shifts the hero text', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForTimeout(800)
+
+  // Per-element parallax translates inner layers (.hero__title, .hero__subtitle,
+  // .hero__label, .hero__actions) — the .hero__content container itself stays put.
+  const title = page.locator('.hero__title')
+  const beforeBox = await title.boundingBox()
+  expect(beforeBox).not.toBeNull()
+
+  await page.mouse.move(100, 100)
+  await page.waitForTimeout(600)
+
+  const afterBox = await title.boundingBox()
+  expect(afterBox).not.toBeNull()
+
+  // Subtle shift expected (1-15px range)
+  const dx = Math.abs(afterBox!.x - beforeBox!.x)
+  const dy = Math.abs(afterBox!.y - beforeBox!.y)
+  expect(dx + dy).toBeGreaterThan(0)
+})

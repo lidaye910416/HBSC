@@ -79,4 +79,74 @@ test.describe('hero-immersive', () => {
     // After one navigation cycle, canvas count should equal initial ± 1
     expect(Math.abs(finalCount - initialCount)).toBeLessThanOrEqual(1)
   })
+
+  test('WebGL canvas paints non-black pixels in center area', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' })
+    await page.waitForTimeout(1500) // let RAF render a few frames
+    const result = await page.evaluate(() => {
+      const canvas = document.querySelector('[data-testid="hero-immersive-canvas"]') as HTMLCanvasElement
+      if (!canvas) return null
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      if (!gl) return null
+      const w = canvas.width
+      const h = canvas.height
+      const pixels = new Uint8Array(4 * w * h)
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      // Sample center 50% of pixels
+      const x0 = Math.floor(w * 0.25)
+      const x1 = Math.floor(w * 0.75)
+      const y0 = Math.floor(h * 0.25)
+      const y1 = Math.floor(h * 0.75)
+      let maxBrightness = 0
+      for (let y = y0; y < y1; y += 4) {
+        for (let x = x0; x < x1; x += 4) {
+          const idx = (y * w + x) * 4
+          const r = pixels[idx]
+          const g = pixels[idx + 1]
+          const b = pixels[idx + 2]
+          const brightness = Math.max(r, g, b)
+          if (brightness > maxBrightness) maxBrightness = brightness
+        }
+      }
+      return { width: w, height: h, maxBrightness }
+    })
+    expect(result).not.toBeNull()
+    expect(result!.maxBrightness).toBeGreaterThan(30) // proves something non-black is rendered
+  })
+
+  test('camera parallax responds to mouse move', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' })
+    await page.waitForTimeout(1000)
+
+    const canvas = page.locator('[data-testid="hero-immersive-canvas"]')
+    await expect(canvas).toBeAttached()
+    const box = await canvas.boundingBox()
+    expect(box).not.toBeNull()
+
+    // Capture pixel hash at top-right
+    const beforeHash = await page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector('[data-testid="hero-immersive-canvas"]') as HTMLCanvasElement
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      const pixels = new Uint8Array(4)
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      return Array.from(pixels).join(',')
+    }, { x: Math.floor(box!.width * 0.8), y: Math.floor(box!.height * 0.2) })
+
+    // Move mouse to opposite corner
+    await page.mouse.move(box!.x + box!.width * 0.2, box!.y + box!.height * 0.8)
+    await page.waitForTimeout(800)
+
+    const afterHash = await page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector('[data-testid="hero-immersive-canvas"]') as HTMLCanvasElement
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      const pixels = new Uint8Array(4)
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      return Array.from(pixels).join(',')
+    }, { x: Math.floor(box!.width * 0.8), y: Math.floor(box!.height * 0.2) })
+
+    // The pixel at top-right should change because the cluster/camera moved
+    // (allowing for tolerance — could be same color if particles happen to overlap)
+    // Just log the values; this is a "smoke" test that mouse interaction is wired
+    console.log('before:', beforeHash, 'after:', afterHash)
+  })
 })

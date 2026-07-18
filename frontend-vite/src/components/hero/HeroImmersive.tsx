@@ -7,7 +7,7 @@
 //   useHeroCapability().tier === 'none' → render <HeroFallback />
 //   otherwise                          → render <canvas> + <ThreeScene>
 
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motionAllowed } from '../../animations/reducedMotion'
 import { HeroFallback } from './HeroFallback'
 import { useHeroCapability } from './useHeroCapability'
@@ -29,6 +29,30 @@ export function HeroImmersive({ heroRef }: HeroImmersiveProps) {
     strength: 0.12,
   })
 
+  // T6: Idle grayscale — after 20s of no pointer activity, fade canvas to grayscale.
+  // Reset on pointer activity. Only affects the WebGL canvas, not DOM text.
+  const [isIdle, setIsIdle] = useState(false)
+  const idleTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!heroRef.current) return
+    if (!motionAllowed()) return
+    const el = heroRef.current
+    const resetIdle = () => {
+      setIsIdle(false)
+      if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = window.setTimeout(() => setIsIdle(true), 20000)
+    }
+    resetIdle()
+    el.addEventListener('pointermove', resetIdle, { passive: true })
+    el.addEventListener('pointerenter', resetIdle, { passive: true })
+    return () => {
+      el.removeEventListener('pointermove', resetIdle)
+      el.removeEventListener('pointerenter', resetIdle)
+      if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current)
+    }
+  }, [heroRef])
+
   // Fallback path: motion off OR no WebGL
   if (!motionAllowed() || cap.tier === 'none') {
     return <HeroFallback />
@@ -44,6 +68,10 @@ export function HeroImmersive({ heroRef }: HeroImmersiveProps) {
         ref={canvasRef}
         className="hero-immersive__canvas"
         data-testid="hero-immersive-canvas"
+        style={{
+          transition: 'filter 0.6s ease-out',
+          filter: isIdle ? 'grayscale(1) brightness(0.85)' : 'none',
+        }}
       />
       <ThreeScene canvasRef={canvasRef} tier={cap.tier} pointer={pointer} />
     </div>

@@ -14,6 +14,7 @@ import { HeroParticles } from '../components/HeroParticles'
 import { HeroShader } from '../components/HeroShader'
 import { mountCountUp } from '../animations/countUp'
 import { batchReveal } from '../animations/batchReveal'
+import { motionAllowed } from '../animations/reducedMotion'
 import './Home.css'
 
 const formatIssueDate = (d?: string) =>
@@ -55,6 +56,143 @@ export function Home() {
     return () => cleanups.forEach(c => c())
   }, [])
 
+  // Per-element pointer parallax on the hero text. Each layer drifts with its
+  // own magnitude so the title moves most and the label least, producing a
+  // sense of depth. Also feeds the cursor position into CSS custom properties
+  // for the radial halo under the content. Bounded to ~8px so nothing reflows.
+  useEffect(() => {
+    const hero = heroSectionRef.current
+    if (!hero) return
+    if (!motionAllowed()) return
+
+    // Each layer has different magnitude
+    const layers = [
+      { selector: '.hero__label',    maxX: 4, maxY: 3 },
+      { selector: '.hero__title',    maxX: 8, maxY: 5 },
+      { selector: '.hero__subtitle', maxX: 5, maxY: 4 },
+      { selector: '.hero__actions',  maxX: 6, maxY: 6 },
+    ]
+    const elements = layers.map(l => ({
+      el: hero.querySelector<HTMLElement>(l.selector),
+      maxX: l.maxX,
+      maxY: l.maxY,
+      curX: 0,
+      curY: 0,
+      targetX: 0,
+      targetY: 0,
+    })).filter(x => x.el !== null)
+
+    let raf = 0
+    const onMove = (e: PointerEvent) => {
+      const r = hero.getBoundingClientRect()
+      const px = ((e.clientX - r.left) / r.width) * 100
+      const py = ((e.clientY - r.top) / r.height) * 100
+      hero.style.setProperty('--cursor-x', `${px.toFixed(2)}%`)
+      hero.style.setProperty('--cursor-y', `${py.toFixed(2)}%`)
+      const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+      const ny = ((e.clientY - r.top) / r.height) * 2 - 1
+      for (const layer of elements) {
+        layer.targetX = Math.max(-1, Math.min(1, nx)) * layer.maxX
+        layer.targetY = Math.max(-1, Math.min(1, ny)) * layer.maxY
+      }
+      if (!raf) raf = requestAnimationFrame(tick)
+    }
+
+    const tick = () => {
+      raf = 0
+      let stillMoving = false
+      for (const layer of elements) {
+        layer.curX += (layer.targetX - layer.curX) * 0.12
+        layer.curY += (layer.targetY - layer.curY) * 0.12
+        if (layer.el) {
+          layer.el.style.transform = `translate3d(${layer.curX.toFixed(2)}px, ${layer.curY.toFixed(2)}px, 0)`
+        }
+        if (Math.abs(layer.targetX - layer.curX) > 0.05 || Math.abs(layer.targetY - layer.curY) > 0.05) {
+          stillMoving = true
+        }
+      }
+      if (stillMoving) raf = requestAnimationFrame(tick)
+    }
+
+    hero.addEventListener('pointermove', onMove, { passive: true })
+    return () => {
+      hero.removeEventListener('pointermove', onMove)
+      if (raf) cancelAnimationFrame(raf)
+      for (const layer of elements) {
+        if (layer.el) layer.el.style.transform = ''
+      }
+    }
+  }, [])
+
+  // Button magnetic pull: when the cursor enters a button's ~80px zone, the
+  // button eases toward the pointer (weaker on Y than X) then springs back.
+  useEffect(() => {
+    const hero = heroSectionRef.current
+    if (!hero) return
+    if (!motionAllowed()) return
+    const buttons = Array.from(hero.querySelectorAll<HTMLElement>('.btn'))
+    let raf = 0
+    const states = new Map<HTMLElement, { tx: number; ty: number; cx: number; cy: number; inZone: boolean }>()
+
+    const onMove = (e: PointerEvent) => {
+      for (const btn of buttons) {
+        const br = btn.getBoundingClientRect()
+        const cx = br.left + br.width / 2
+        const cy = br.top + br.height / 2
+        const dx = e.clientX - cx
+        const dy = e.clientY - cy
+        // Magnetic zone: within ~80px of button center
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const inZone = dist < 80
+        let state = states.get(btn)
+        if (!state) {
+          state = { tx: 0, ty: 0, cx: 0, cy: 0, inZone: false }
+          states.set(btn, state)
+        }
+        state.inZone = inZone
+        if (inZone) {
+          // Pull toward cursor (weaker than full snap, ~30% strength)
+          state.tx = dx * 0.3
+          state.ty = dy * 0.2
+        } else {
+          state.tx = 0
+          state.ty = 0
+        }
+      }
+      if (!raf) raf = requestAnimationFrame(tick)
+    }
+
+    const tick = () => {
+      raf = 0
+      for (const [btn, s] of states) {
+        s.cx += (s.tx - s.cx) * 0.18
+        s.cy += (s.ty - s.cy) * 0.18
+        btn.style.transform = `translate3d(${s.cx.toFixed(2)}px, ${s.cy.toFixed(2)}px, 0)`
+      }
+      // Keep ticking as long as any button is moving or in zone
+      raf = requestAnimationFrame(tick)
+    }
+
+    const onLeave = () => {
+      for (const [, s] of states) {
+        s.inZone = false
+        s.tx = 0
+        s.ty = 0
+      }
+    }
+
+    hero.addEventListener('pointermove', onMove, { passive: true })
+    hero.addEventListener('pointerleave', onLeave, { passive: true })
+    return () => {
+      hero.removeEventListener('pointermove', onMove)
+      hero.removeEventListener('pointerleave', onLeave)
+      if (raf) cancelAnimationFrame(raf)
+      for (const btn of buttons) {
+        btn.style.transform = ''
+      }
+    }
+  }, [])
+
   // Batch reveal [data-reveal] entries on scroll.
   useEffect(() => {
     const cleanup = batchReveal({ root: document, selector: '[data-reveal]', stagger: 0.08, y: 32 })
@@ -86,18 +224,26 @@ export function Home() {
         <HeroImmersive heroRef={heroSectionRef} />
         <div className="hero__pattern" aria-hidden="true" />
         <div className="container hero__content">
-          <p className="hero__label animate-fade-up" data-reveal>
+          {/* Note: animate-fade-up is intentionally omitted here. That class uses
+              animation-fill-mode: both, which persists a `transform: translateY(0)`
+              at cascade level 5 (animation declarations) and overrides inline
+              transforms at level 9, so per-element mouse parallax can't take
+              effect. The data-reveal gsap batch reveal (Home.tsx useEffect below)
+              still drives the entrance fade-up — it sets inline transform during
+              the tween and clears it afterwards, leaving these elements free to
+              receive parallax transforms on pointermove. */}
+          <p className="hero__label" data-reveal>
             <span className="text-en">Hubei Digital Innovation</span>
           </p>
-          <h1 id="hero-title" className="hero__title animate-fade-up animate-delay-1" data-reveal>
+          <h1 id="hero-title" className="hero__title" data-reveal>
             智领AI荆楚新程<br />
             <span className="hero__title-accent">数绘产业发展新篇</span>
           </h1>
-          <p className="hero__subtitle animate-fade-up animate-delay-2" data-reveal>
+          <p className="hero__subtitle" data-reveal>
             湖北数创是湖北数字产业创新研究的内部期刊<br />
             记录数字变革、传播前沿理念、赋能产业升级
           </p>
-          <div className="hero__actions animate-fade-up animate-delay-3" data-reveal>
+          <div className="hero__actions" data-reveal>
             <Link to="/articles" className="btn btn-primary">阅读期刊 <ArrowRight size={16} /></Link>
             <Link to="/about" className="btn btn-outline">关于我们</Link>
           </div>
