@@ -5,13 +5,14 @@
 // Responsibilities:
 //   - WebGLRenderer + Scene + PerspectiveCamera + Lights
 //   - InstancedMesh of N icosahedrons (A/B alternating)
-//   - RAF tick: stepCluster + write instanceMatrix
+//   - GLSL vertex displacement (uTime + uMouse bump) + emissive fragment modulation
+//   - RAF tick: stepCluster + write instanceMatrix + update uniforms
 //   - DPR cap + visibility gate + cleanup (StrictMode-safe)
-//
-// Shaders are added in T7 — for now uses plain MeshStandardMaterial.
 
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { vertexInjection } from './shaders/vertex.glsl'
+import { fragmentInjection } from './shaders/fragment.glsl'
 import {
   buildCluster,
   stepCluster,
@@ -87,7 +88,7 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     const hemi = new THREE.HemisphereLight(0x1a2e5a, 0x0f172a, 0.4)
     scene.add(key, hemi)
 
-    // 4. Geometry — alternating A/B sizes
+    // 4. Geometry — alternating A/B sizes, with shader injection
     const geometry = new THREE.IcosahedronGeometry(1, 0)
     const material = new THREE.MeshStandardMaterial({
       color: 0xc9a84c,
@@ -97,6 +98,32 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       transparent: true,
       opacity: 0.92,
     })
+
+    // Shader uniforms (shared with onBeforeCompile injection below)
+    const uniforms: Record<string, THREE.IUniform> = {
+      uTime: { value: 0 },
+      uMouse: { value: new THREE.Vector2(0, 0) },
+      uMouseVel: { value: new THREE.Vector2(0, 0) },
+    }
+
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uniforms.uTime
+      shader.uniforms.uMouse = uniforms.uMouse
+      shader.uniforms.uMouseVel = uniforms.uMouseVel
+
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>\n${vertexInjection}`,
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>\n${fragmentInjection}`,
+        )
+    }
+    material.needsUpdate = true
+
     const mesh = new THREE.InstancedMesh(geometry, material, count)
     scene.add(mesh)
 
@@ -182,6 +209,11 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       camera.position.z = 6 - 1.5 * scrollExitT
       mesh.rotation.z = 0.4 * scrollExitT
 
+      // Update shader uniforms
+      uniforms.uTime!.value = (now - startTime) / 1000
+      uniforms.uMouse!.value.copy(pointer.ndcRef.current)
+      uniforms.uMouseVel!.value.copy(pointer.velocityRef.current)
+
       renderer.render(scene, camera)
       sceneStateRef.current.raf = requestAnimationFrame(tick)
     }
@@ -199,6 +231,7 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     sceneStateRef.current.running = true
     sceneStateRef.current.scrollExitT = scrollExitT
     sceneStateRef.current.lastTime = lastTime
+    ;(sceneStateRef.current as unknown as { uniforms?: typeof uniforms }).uniforms = uniforms
 
     // 10. Cleanup
     return () => {
