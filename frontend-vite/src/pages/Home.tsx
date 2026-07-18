@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, BookOpen, Users, FileText, TrendingUp,
@@ -9,8 +9,7 @@ import { api } from '../services/api'
 import { ArticleCard } from '../components/ArticleCard'
 import { CoverImage } from '../components/CoverImage'
 import { EditorialCommittee } from '../components/EditorialCommittee'
-import { HeroParticles } from '../components/HeroParticles'
-import { HeroShader } from '../components/HeroShader'
+import { HeroImmersive } from '../components/hero/HeroImmersive'
 import { mountCountUp } from '../animations/countUp'
 import { batchReveal } from '../animations/batchReveal'
 import './Home.css'
@@ -35,6 +34,7 @@ const CATEGORIES = [
 export function Home() {
   const { data: issues } = useQuery({ queryKey: ['issues'], queryFn: api.issues.list })
   const { data: featured } = useQuery({ queryKey: ['featured'], queryFn: api.articles.featured })
+  const heroSectionRef = useRef<HTMLElement | null>(null)
 
   const sorted = (issues ?? []).slice().sort((a, b) => {
     const ad = a.published_at ? new Date(a.published_at).getTime() : 0
@@ -73,15 +73,14 @@ export function Home() {
   return (
     <main className="home">
       {/* Hero */}
-      <section className="hero">
-        <HeroShader />
-        <HeroParticles />
+      <section className="hero" id="hero" aria-labelledby="hero-title" ref={heroSectionRef}>
+        <HeroImmersive heroRef={heroSectionRef} />
         <div className="hero__pattern" aria-hidden="true" />
         <div className="container hero__content">
           <p className="hero__label animate-fade-up" data-reveal>
             <span className="text-en">Hubei Digital Innovation</span>
           </p>
-          <h1 className="hero__title animate-fade-up animate-delay-1" data-reveal>
+          <h1 id="hero-title" className="hero__title animate-fade-up animate-delay-1" data-reveal>
             智领AI荆楚新程<br />
             <span className="hero__title-accent">数绘产业发展新篇</span>
           </h1>

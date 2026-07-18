@@ -7,7 +7,7 @@
 //   useHeroCapability().tier === 'none' → render <HeroFallback />
 //   otherwise                          → render <canvas> + <ThreeScene>
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { motionAllowed } from '../../animations/reducedMotion'
 import { HeroFallback } from './HeroFallback'
 import { useHeroCapability } from './useHeroCapability'

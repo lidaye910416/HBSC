@@ -31,7 +31,7 @@ export function buildCluster(count: number, opts: {
   yMin?: number
   yMax?: number
 } = {}): ClusterNode[] {
-  const { radiusMin = 3, radiusMax = 8, yMin = 0, yMax = 5 } = opts
+  const { radiusMax = 8, yMin = 0, yMax = 5 } = opts
   const nodes: ClusterNode[] = []
   for (let i = 0; i < count; i++) {
     // Spherical Fibonacci on upper hemisphere
