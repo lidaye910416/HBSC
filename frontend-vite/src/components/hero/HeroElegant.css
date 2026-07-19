@@ -1,0 +1,96 @@
+/* ============================================================================
+   HeroElegant — 克制优雅型 Hero 样式
+   ────────────────────────────────────────────────────────────────────────────
+   这个文件不重定义整个 .hero 规则,只在现有 Home.css 基础上追加 .hero--elegant
+   修饰符,避免冲突。颜色全部走 CSS 变量,不写裸 hex。
+   ============================================================================ */
+
+.hero--elegant {
+  position: relative;
+  padding: 120px 0 100px;
+  background:
+    radial-gradient(
+      ellipse 60% 80% at
+        calc(50% + (var(--mx, 0) * 24px))
+        calc(50% + (var(--my, 0) * 24px)),
+      rgba(201, 168, 76, 0.10),
+      transparent 70%
+    ),
+    linear-gradient(135deg, var(--color-primary) 0%, #16213E 100%);
+  overflow: hidden;
+  /* will-change 留给内部 transform 元素;容器本身不动 */
+}
+
+.hero--elegant .hero__content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  will-change: transform, opacity;
+}
+
+/* ── Title 字符级 hover 命中区 ─────────────────────────────────────────────── */
+
+.hero--elegant .hero__title-line,
+.hero--elegant .hero__title-accent {
+  display: block;
+}
+
+/* SplitText 注入的字符 span —— 这里只设 CSS 级 fallback,JS 会覆盖 */
+.hero--elegant .hero__title .char {
+  display: inline-block;
+  /* 在动画未初始化时,字符默认可见;一旦 gsap.from 触发,会临时 hidden 然后 reveal */
+  will-change: transform;
+}
+
+/* SplitText 注入的 line wrapper —— mask 模式用 */
+.hero--elegant .hero__title .line {
+  overflow: hidden;
+  display: inline-block;
+}
+
+/* ── 标题 hover 反馈(纯 CSS 兜底,GSAP 接管后会覆盖) ─────────────────────── */
+
+.hero--elegant .hero__title .char {
+  transition: color 0.25s ease, transform 0.25s ease;
+  cursor: default;
+}
+.hero--elegant .hero__title .char:hover {
+  color: var(--color-accent-on-dark);
+  transform: translateY(-2px);
+}
+
+/* ── 按钮 magnetic 命中区 ─────────────────────────────────────────────────── */
+
+.hero--elegant .hero__actions .btn {
+  /* 给 transform-origin 一个明显中心点,elastic 回弹才好看 */
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 移动端 / coarse pointer 不显示 hover 视觉反馈(避免粘滞态) */
+@media (pointer: coarse) {
+  .hero--elegant .hero__title .char:hover {
+    color: inherit;
+    transform: none;
+  }
+}
+
+/* ── prefers-reduced-motion 兜底:任何过渡都收掉 ───────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .hero--elegant,
+  .hero--elegant .hero__content,
+  .hero--elegant .hero__title .char,
+  .hero--elegant .hero__actions .btn {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ── 移动端字号(沿用 Home.css 的 clamp 思路) ─────────────────────────────── */
+
+@media (max-width: 768px) {
+  .hero--elegant {
+    padding: 80px 0 64px;
+  }
+}
