@@ -62,7 +62,7 @@ export interface ThreeSceneProps {
 }
 
 const TIER_INSTANCE_COUNT: Record<GpuTier, number> = {
-  high: 4,
+  high: 3,
   mid: 3,
   low: 2,
   none: 0,
@@ -188,10 +188,10 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     const hemi = new THREE.HemisphereLight(0x1a2e5a, 0x0f172a, 0.45)
     scene.add(key, hemi)
 
-    // 4. Geometries + materials — three InstancedMesh instances by type.
+    // 4. Geometries + materials — two InstancedMesh instances by type.
     //    Restyled as "celestial planets in a starfield" — dark body with gold
     //    rim light + soft emissive inner glow, NOT metallic gold clusters.
-    //    icosa + torus: warm dark planet (deep umber body + amber emissive core
+    //    icosa: warm dark planet (deep umber body + amber emissive core
     //    + Fresnel gold rim). dodec: cold gas giant (deep navy body + cool blue
     //    emissive + silver rim). Shader injection adds the Fresnel rim and a
     //    subtle horizontal "atmosphere band" via emissive modulation.
@@ -205,8 +205,123 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     // round silhouette regardless of viewport size.
     const icosaGeometry = new THREE.SphereGeometry(1, 96, 64)
     const dodecGeometry = new THREE.SphereGeometry(1, 64, 48)
-    // Saturn-style ring accent — slightly larger radius + more tube segments.
-    const torusGeometry = new THREE.TorusGeometry(0.55, 0.06, 6, 16)
+    // Saturn ring (annulus) geometry — flat ring in the XZ plane. One geometry
+    // is shared by ALL planet ring instances; the per-planet tilt is baked
+    // into the InstancedMesh's per-instance matrix so every planet ends up
+    // with the same 25-degree ring tilt (Saturn-style).
+    //   innerRadius 1.30 → just outside the planet's 1.0 surface
+    //   outerRadius 1.85 → ~85% of the body, never overlaps neighbors
+    //   thetaSegments 96 → smooth circular silhouette (3.75deg / segment)
+    //   phiSegments  1   → open ring (no radial subdivision — just
+    //                       one quad between inner and outer radius)
+    // NOTE: RingGeometry's parameter order is (inner, outer, theta, phi).
+    // Earlier (1, 96) was misordered; theta=1 is bumped to 3 by
+    // Math.max(3, theta), producing a 4-vertex polygon instead of a
+    // smooth ring.
+    // Two ring geometries with deliberately different tilts so the two
+    // Saturns in the scene don't look like clones of each other.  The
+    // icosa ring tilts +25° around X (back of ring goes up, front goes
+    // down — the classic Saturn silhouette). The dodec ring is viewed almost
+    // edge-on at +78° around X so its projected ellipse stays near horizontal,
+    // with a subtle +3° rotation around Z to avoid a mechanically flat line.
+    const icosaRingGeometry = new THREE.RingGeometry(1.30, 1.85, 96, 1)
+    icosaRingGeometry.rotateX(Math.PI * 25 / 180)
+    const dodecRingGeometry = new THREE.RingGeometry(1.30, 1.85, 96, 1)
+    dodecRingGeometry.rotateX(Math.PI * 78 / 180)
+    dodecRingGeometry.rotateZ(Math.PI * 3 / 180)
+    // After the tilt, RingGeometry's UVs are no longer (radius, angle) — they
+    // are (x, y) in object space, which is what we need for radial alpha
+    // falloff and angular banded shading. We compute radius from the local
+    // position attribute so the shader can ignore the baked rotation.
+
+    // Saturn ring material factory — one material per planet family so warm
+    // icosa planets get tan/gold rings and cool dodec planets get pale silver
+    // rings. Custom ShaderMaterial (not MeshStandardMaterial) because the
+    // ring's appearance is dominated by its own radial alpha + banded
+    // shading, and we want a single, predictable result without lighting
+    // calculations getting in the way.
+    //   - transparent + depthWrite false + DoubleSide: front half of the
+    //     ring draws on top of the planet (renderOrder puts it after the
+    //     InstancedMesh planets), back half is occluded by the planet's
+    //     depth because depthTest stays enabled. Result: ring appears to
+    //     pass behind the planet on the far side, in front on the near
+    //     side — exactly the Saturn silhouette.
+    //   - The alpha curve is shaped by uv (post-tilt x is the radial axis,
+    //     y is angular). Smoothstep on |uv.x| gives a soft inner/outer edge
+    //     so the ring doesn't read as a hard plastic annulus.
+    const makeRingMaterial = (tint: THREE.Color, tiltX: number, tiltZ: number) => new THREE.ShaderMaterial({
+      uniforms: {
+        uTint: { value: tint.clone() },
+        uTiltX: { value: tiltX },
+        uTiltZ: { value: tiltZ },
+      },
+      vertexShader: /* glsl */ `
+        varying vec3 vLocalPos;
+        void main() {
+        vLocalPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        varying vec3 vLocalPos;
+        uniform vec3 uTint;
+        uniform float uTiltX;
+        uniform float uTiltZ;
+        void main() {
+        // RingGeometry is built in the XY plane (z=0), so a rotation
+        // around X preserves every point's distance from the origin —
+        // that distance is the radial coordinate we want. Using
+        // length(vLocalPos) keeps the bands/cassini-gap math correct
+        // regardless of where on the ring the fragment is.
+        float r = length(vLocalPos);
+        // Recover the original XY-plane coordinates by undoing the baked
+        // Z rotation first, then the X rotation.
+        float cosX = cos(uTiltX);
+        float sinX = sin(uTiltX);
+        float cosZ = cos(uTiltZ);
+        float sinZ = sin(uTiltZ);
+        float xAfterZ = vLocalPos.x * cosZ + vLocalPos.y * sinZ;
+        float yAfterZ = -vLocalPos.x * sinZ + vLocalPos.y * cosZ;
+        float yOrig = yAfterZ * cosX + vLocalPos.z * sinX;
+        float xOrig = xAfterZ;
+        float angle = atan(yOrig, xOrig);
+        // Map r to [0..1] across the ring width.
+        float rNorm = clamp((r - 1.30) / (1.85 - 1.30), 0.0, 1.0);
+        // Soft alpha falloff at inner and outer edges.
+        float edgeFade = smoothstep(0.0, 0.15, rNorm) * smoothstep(1.0, 0.85, rNorm);
+        // Cassini-style dark gap at ~55% radius (the famous Saturn division).
+        float gap = smoothstep(0.06, 0.0, abs(rNorm - 0.55));
+        // Concentric micro-bands: subtle sin in radius gives a "dusty
+        // ring" texture without requiring an image asset.
+        float microBand = 0.5 + 0.5 * sin(rNorm * 70.0);
+        float micro = mix(0.82, 1.05, microBand);
+        // Slight angular variation so the ring isn't a perfect cylinder.
+        float angular = 0.5 + 0.5 * sin(angle * 16.0);
+        float bandStrength = mix(0.88, 1.06, angular) * micro;
+        vec3 col = uTint * bandStrength;
+        // Slight blue cast in the gap for a cooler dark band.
+        col = mix(col, uTint * 0.45, gap * 0.6);
+         float alpha = edgeFade * (1.0 - gap * 0.85) * 0.85;
+          // Slight emissive boost so the brightest ring zones cross the
+          // bloom threshold (0.4) and pick up a soft glow.
+          col *= 1.15;
+        gl_FragColor = vec4(col, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+    })
+    // Warm ring: tan/gold, matches icosa rim (#C9A84C, slightly desaturated).
+    const icosaRingMaterial = makeRingMaterial(new THREE.Color(0xd4b06a), Math.PI * 25 / 180, 0)
+    // Cool ring: pale silver/icy, matches dodec rim (#93C5FD, desaturated).
+    const dodecRingMaterial = makeRingMaterial(
+      new THREE.Color(0xb8c8e0),
+      Math.PI * 78 / 180,
+      Math.PI * 3 / 180,
+    )
 
     // Warm planet: dark umber body, modest emissive — let the directional
     // light do the day/night terminator. Bumped emissive so the planet body
@@ -253,8 +368,7 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     // what gives a planet its characteristic glowing rim against a dark sky.
     // Saturn banding option: when opts.banded is true, add a horizontal-stripe
     // modulation to diffuseColor (via a second fragment replacement at
-    // #include <map_fragment>). Default false so the torus / dodec shaders
-    // stay lean and the strip math never runs on them.
+    // #include <map_fragment>). Default false so unbanded shaders stay lean.
     const injectShader = (mat: THREE.Material, rimColor: THREE.Vector3, opts: { banded?: boolean } = {}) => {
       ;(mat as unknown as { uniforms: typeof uniforms }).uniforms = uniforms
       mat.onBeforeCompile = (shader) => {
@@ -328,16 +442,27 @@ ${fragmentCommonInjection}
         // space normal y; mix(0.78, 1.05) keeps the dark band clearly darker
         // without blowing out the bright zone. x term breaks perfect symmetry.
         const planetBandInjection = /* glsl */ `
-  float band = 0.5 + 0.5 * sin(vWorldNormal.y * 9.0 + vWorldNormal.x * 1.5);
-  diffuseColor.rgb *= mix(0.78, 1.05, band);
+  float lat = vWorldNormal.y;
+  float absLat = abs(lat);
+  float band1 = 0.5 + 0.5 * sin(lat * 14.0);
+  float band2 = 0.5 + 0.5 * sin(lat * 4.0 + 1.3);
+  float band3 = 0.5 + 0.5 * sin(lat * 28.0 + vWorldNormal.x * 0.6);
+  float bands = band1 * 0.55 + band2 * 0.30 + band3 * 0.15;
+  float bandStrength = mix(0.74, 1.10, bands);
+  // Cassini-belt-style dark streak near the equator.
+  float equator = smoothstep(0.06, 0.0, absLat);
+  bandStrength *= mix(1.0, 0.62, equator);
+  // Polar zones.
+  bandStrength *= mix(1.0, 0.72, smoothstep(0.55, 0.92, absLat));
+  diffuseColor.rgb *= bandStrength;
 `
         shader.fragmentShader = shader.fragmentShader
           .replace(
             '#include <common>',
             `#include <common>\n${planetFragmentInjection}`,
           )
-        // Band injection is conditional so the shared goldMaterial program
-        // (used by the torus) doesn't pay for the sin call at every fragment.
+        // Band injection is conditional so unbanded materials don't pay for
+        // the sin call at every fragment.
         if (opts.banded) {
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <map_fragment>',
@@ -354,11 +479,13 @@ ${fragmentCommonInjection}
     // Warm planet: amber body, gold rim (#C9A84C).
     injectShader(goldMaterial, new THREE.Vector3(0xc9 / 255, 0xa8 / 255, 0x4c / 255))
     // Cold gas giant: navy body, cool blue-silver rim (#93C5FD).
-    injectShader(dodecMaterial, new THREE.Vector3(0x93 / 255, 0xc5 / 255, 0xfd / 255))
+    // Banded so the dodec reads as a Saturn-style gas giant with horizontal
+    // atmospheric bands rather than a smooth blue marble. Same shader path
+    // as the warm icosa; the band colors are driven by the material's
+    // diffuse color, so the cool tint naturally produces cool bands.
+    injectShader(dodecMaterial, new THREE.Vector3(0x93 / 255, 0xc5 / 255, 0xfd / 255), { banded: true })
 
-    // Saturn-band clone for warm icosa planets. Clone (not re-inject) keeps
-    // goldMaterial as the shared solid shader for the torus ring accent — we
-    // only want stripes on the body, not on the ring. Re-injecting onBeforeCompile
+    // Saturn-band clone for warm icosa planets. Re-injecting onBeforeCompile
     // on the clone overrides whatever the clone inherited from goldMaterial.
     const icosaMaterial = goldMaterial.clone()
     injectShader(
@@ -386,7 +513,7 @@ ${fragmentCommonInjection}
       [ 3.4,  2.0, -2.5],   // [0] hero gold icosa (upper-right)
       [-3.4,  1.8, -3.4],   // [1] cool blue dodec (upper-left)
       [ 2.6, -1.6, -3.0],   // [2] mid gold icosa (lower-right)
-      [-2.6, -1.7, -2.5],   // [3] torus accent (lower-left)
+      [-2.6, -1.7, -2.5],   // [3] secondary gold planet (lower-left)
     ]
     nodes.forEach((n, i) => {
       if (i < HERO_POSITIONS.length) {
@@ -403,24 +530,40 @@ ${fragmentCommonInjection}
     const geoByKind: Record<GeometryKind, THREE.BufferGeometry> = {
       icosa: icosaGeometry,
       dodec: dodecGeometry,
-      torus: torusGeometry,
     }
     const matByKind: Record<GeometryKind, THREE.Material> = {
       icosa: icosaMaterial,
       dodec: dodecMaterial,
-      torus: goldMaterial,
     }
 
     // Per-kind instance counts + one InstancedMesh each.
-    const kindCounts: Record<GeometryKind, number> = { icosa: 0, dodec: 0, torus: 0 }
+    const kindCounts: Record<GeometryKind, number> = { icosa: 0, dodec: 0 }
     for (const n of nodes) kindCounts[n.type]++
     const meshByKind = {} as Record<GeometryKind, THREE.InstancedMesh>
-    ;(['icosa', 'dodec', 'torus'] as const).forEach((k) => {
+    ;(['icosa', 'dodec'] as const).forEach((k) => {
       const m = new THREE.InstancedMesh(geoByKind[k], matByKind[k], kindCounts[k])
       meshByKind[k] = m
       scene.add(m)
     })
-    const meshes = [meshByKind.icosa, meshByKind.dodec, meshByKind.torus]
+    const meshes = [meshByKind.icosa, meshByKind.dodec]
+
+    // Saturn ring InstancedMeshes — one per planet family (icosa, dodec).
+    // Each ring instance tracks its corresponding spherical planet's local
+    // index so the RAF tick can update both matrices in
+    // lockstep (same position, same scale, no rotation since the tilt is
+    // baked into the geometry).
+    // renderOrder = 1 ensures the rings draw AFTER the planet InstancedMesh
+    // so the front half of the ring appears on top of the planet's face.
+    // depthWrite is false on the material so the back half of the ring is
+    // still occluded by the planet's depth (the planet was written first).
+    const icosaRingMesh = new THREE.InstancedMesh(icosaRingGeometry, icosaRingMaterial, 1)
+    icosaRingMesh.renderOrder = 1
+    icosaRingMesh.frustumCulled = false
+    scene.add(icosaRingMesh)
+    const dodecRingMesh = new THREE.InstancedMesh(dodecRingGeometry, dodecRingMaterial, 1)
+    dodecRingMesh.renderOrder = 1
+    dodecRingMesh.frustumCulled = false
+    scene.add(dodecRingMesh)
 
     // T9: per-instance pulse phase + speed for the geometry twinkle. Each
     // mesh gets its own arrays of length kindCounts[k]; pulse math in the
@@ -431,16 +574,14 @@ ${fragmentCommonInjection}
     const phasesPerMesh: Record<GeometryKind, Float32Array> = {
       icosa: new Float32Array(kindCounts.icosa),
       dodec: new Float32Array(kindCounts.dodec),
-      torus: new Float32Array(kindCounts.torus),
     }
     const speedsPerMesh: Record<GeometryKind, Float32Array> = {
       icosa: new Float32Array(kindCounts.icosa),
       dodec: new Float32Array(kindCounts.dodec),
-      torus: new Float32Array(kindCounts.torus),
     }
     {
       const rng = pulseRng(123)
-      for (const k of ['icosa', 'dodec', 'torus'] as const) {
+      for (const k of ['icosa', 'dodec'] as const) {
         const phases = phasesPerMesh[k]
         const speeds = speedsPerMesh[k]
         const n = kindCounts[k]
@@ -453,7 +594,7 @@ ${fragmentCommonInjection}
 
     // Map each node → its local instance index within the per-kind mesh.
     const localIndex = new Array<number>(nodes.length)
-    const cursor: Record<GeometryKind, number> = { icosa: 0, dodec: 0, torus: 0 }
+    const cursor: Record<GeometryKind, number> = { icosa: 0, dodec: 0 }
     for (let i = 0; i < nodes.length; i++) {
       localIndex[i] = cursor[nodes[i]!.type]++
     }
@@ -479,6 +620,23 @@ ${fragmentCommonInjection}
       // (setColorAt lazily creates a zero-filled = black buffer otherwise).
       meshByKind[n.type].setColorAt(localIndex[i]!, _white)
     }
+    // Seed each planet's ring with the same matrix as its body. The RAF
+    // tick will rewrite this every frame to track the planet's animated
+    // position and hover scale. Tilt is baked into the geometry; the ring
+    // matrix only carries position + uniform scale.
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i]!
+      if (localIndex[i] !== 0) continue
+      const ringMesh = n.type === 'icosa' ? icosaRingMesh : dodecRingMesh
+      const s = i === 0 ? n.scale : n.scale * n.sizeFactor
+      dummy.position.set(n.basePos.x, n.basePos.y, n.basePos.z)
+      dummy.scale.set(s, s, s)
+      dummy.rotation.set(0, 0, 0)
+      dummy.updateMatrix()
+      ringMesh.setMatrixAt(0, dummy.matrix)
+    }
+    icosaRingMesh.instanceMatrix.needsUpdate = true
+    dodecRingMesh.instanceMatrix.needsUpdate = true
     for (const m of meshes) {
       m.instanceMatrix.needsUpdate = true
       if (m.instanceColor) m.instanceColor.needsUpdate = true
@@ -582,7 +740,6 @@ ${fragmentCommonInjection}
     const HOVER_COLOR: Record<GeometryKind, THREE.Color> = {
       icosa: new THREE.Color(0xffd89b),
       dodec: new THREE.Color(0x7aa0e8),
-      torus: new THREE.Color(0xffd89b),
     }
     // T9: per-instance twinkle. Lerp the base color (WHITE / HOVER_COLOR)
     // toward a brighter warm tint at a node's pulse peak. Lerp factor is
@@ -592,7 +749,6 @@ ${fragmentCommonInjection}
     const PULSE_COLOR: Record<GeometryKind, THREE.Color> = {
       icosa: new THREE.Color(0xfff4cc),
       dodec: new THREE.Color(0xa8c8ff),
-      torus: new THREE.Color(0xfff4cc),
     }
     const _pulseMix = new THREE.Color()
 
@@ -680,6 +836,30 @@ ${fragmentCommonInjection}
         _pulseMix.copy(baseColor).lerp(PULSE_COLOR[n.type], flash)
         mesh.setColorAt(li, _pulseMix)
       }
+      // Saturn ring matrix write — each planet (icosa/dodec) has a ring
+      // instance sharing its local index. We mirror the planet's position
+      // and hover-scaled size so the ring tracks the body exactly. No
+      // rotation in the matrix because the 25deg tilt is baked into the
+      // ring geometry. Rings DON'T pulse (only the body does) — keeping
+      // them steady reads as a stable accretion ring around an active
+      // planet.
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i]!
+        if (localIndex[i] !== 0) continue
+        const ringMesh = n.type === 'icosa' ? icosaRingMesh : dodecRingMesh
+        const s = i === 0 ? n.scale : n.scale * n.sizeFactor
+        const isRingHovered =
+          hoveredKey !== null &&
+          hoveredKey === `${meshByKind[n.type].uuid}:${localIndex[i]!}`
+        const rs = isRingHovered ? s * 1.06 : s
+        dummy.position.set(n.basePos.x, n.basePos.y, n.basePos.z)
+        dummy.scale.set(rs, rs, rs)
+        dummy.rotation.set(0, 0, 0)
+        dummy.updateMatrix()
+        ringMesh.setMatrixAt(0, dummy.matrix)
+      }
+      icosaRingMesh.instanceMatrix.needsUpdate = true
+      dodecRingMesh.instanceMatrix.needsUpdate = true
       for (const m of meshes) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
@@ -719,7 +899,7 @@ ${fragmentCommonInjection}
     sceneStateRef.current.camera = camera
     sceneStateRef.current.meshes = meshes
     sceneStateRef.current.materials = [goldMaterial, dodecMaterial, icosaMaterial]
-    sceneStateRef.current.geometries = [icosaGeometry, dodecGeometry, torusGeometry]
+    sceneStateRef.current.geometries = [icosaGeometry, dodecGeometry]
     sceneStateRef.current.nodes = nodes
     sceneStateRef.current.running = true
     sceneStateRef.current.scrollExitT = scrollExitT
@@ -747,10 +927,13 @@ ${fragmentCommonInjection}
       // GL state in some Chromium versions, breaking subsequent mounts.)
       icosaGeometry.dispose()
       dodecGeometry.dispose()
-      torusGeometry.dispose()
+      icosaRingGeometry.dispose()
+      dodecRingGeometry.dispose()
       goldMaterial.dispose()
       dodecMaterial.dispose()
       icosaMaterial.dispose()
+      icosaRingMaterial.dispose()
+      dodecRingMaterial.dispose()
       // T3: particle-cloud GPU resources
       particles.geometry.dispose()
       particles.material.dispose()

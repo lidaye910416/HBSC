@@ -9,7 +9,7 @@ export interface Vec3Like {
   z: number
 }
 
-export type GeometryKind = 'icosa' | 'dodec' | 'torus'
+export type GeometryKind = 'icosa' | 'dodec'
 
 export interface ClusterNode {
   index: number
@@ -23,25 +23,22 @@ export interface ClusterNode {
 }
 
 /**
- * Assign geometry kinds per tier count so the cluster mixes icosahedrons,
- * dodecahedrons and tori in fixed proportions.
- *   high (6) → 4 icosa + 1 dodec + 1 torus
- *   mid  (4) → 2 icosa + 1 dodec + 1 torus
- *   low  (2) → 1 icosa + 1 dodec
+ * Assign geometry kinds per tier count so the cluster mixes icosahedrons
+ * and dodecahedrons in fixed proportions.
  */
 export function assignGeometryTypes(count: number): GeometryKind[] {
   // Order matches HERO_POSITIONS in ThreeScene.tsx:
-  //   [0] icosa (hero gold), [1] dodec (blue), [2] icosa (mid gold), [3] torus
+  //   [0] icosa (hero gold), [1] dodec (blue), [2+] icosa (secondary gold)
   if (count === 4) return [
     'icosa' as const,
     'dodec' as const,
     'icosa' as const,
-    'torus' as const,
+    'icosa' as const,
   ]
   if (count === 3) return [
     'icosa' as const,
     'dodec' as const,
-    'torus' as const,
+    'icosa' as const,
   ]
   if (count === 2) return [
     'icosa' as const,
