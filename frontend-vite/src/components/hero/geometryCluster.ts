@@ -25,25 +25,27 @@ export interface ClusterNode {
 /**
  * Assign geometry kinds per tier count so the cluster mixes icosahedrons,
  * dodecahedrons and tori in fixed proportions.
- *   high (24) → 14 icosa + 6 dodec + 4 torus
- *   mid  (18) → 11 icosa + 4 dodec + 3 torus
- *   low  (12) →  7 icosa + 3 dodec + 2 torus
+ *   high (6) → 4 icosa + 1 dodec + 1 torus
+ *   mid  (4) → 2 icosa + 1 dodec + 1 torus
+ *   low  (2) → 1 icosa + 1 dodec
  */
 export function assignGeometryTypes(count: number): GeometryKind[] {
-  if (count === 24) return [
-    ...Array(14).fill('icosa' as const),
-    ...Array(6).fill('dodec' as const),
-    ...Array(4).fill('torus' as const),
+  // Order matches HERO_POSITIONS in ThreeScene.tsx:
+  //   [0] icosa (hero gold), [1] dodec (blue), [2] icosa (mid gold), [3] torus
+  if (count === 4) return [
+    'icosa' as const,
+    'dodec' as const,
+    'icosa' as const,
+    'torus' as const,
   ]
-  if (count === 18) return [
-    ...Array(11).fill('icosa' as const),
-    ...Array(4).fill('dodec' as const),
-    ...Array(3).fill('torus' as const),
+  if (count === 3) return [
+    'icosa' as const,
+    'dodec' as const,
+    'torus' as const,
   ]
-  if (count === 12) return [
-    ...Array(7).fill('icosa' as const),
-    ...Array(3).fill('dodec' as const),
-    ...Array(2).fill('torus' as const),
+  if (count === 2) return [
+    'icosa' as const,
+    'dodec' as const,
   ]
   // Default fallback
   return Array(count).fill('icosa' as const)
@@ -62,20 +64,25 @@ export function buildCluster(count: number, opts: {
   yMin?: number
   yMax?: number
 } = {}): ClusterNode[] {
-  const { radiusMax = 8, yMin = 0, yMax = 5 } = opts
+  // Hero redesign (2026-07): planets are sparse backdrop, not foreground props.
+  //   radiusMax 3.5 → keep planets inside the visible frustum
+  //   yMin -2.0, yMax 2.5 → distribution covers vertical viewport (was 0..5 = upper half)
+  //   z pushed to [-2, -4] → all in front of camera (z=6), distant enough to feel atmospheric
+  const { radiusMax = 3.5, yMin = -2.0, yMax = 2.5 } = opts
   const nodes: ClusterNode[] = []
   for (let i = 0; i < count; i++) {
-    // Spherical Fibonacci on upper hemisphere
+    // Spherical Fibonacci on full sphere (not just upper hemisphere).
     const y01 = 1 - i / Math.max(1, count - 1) // 1 → 0
     const radius01 = Math.sqrt(1 - y01 * y01)
     const theta = GOLDEN * i
     const x = Math.cos(theta) * radius01
     const z = Math.sin(theta) * radius01
-    // Map to world box: x∈[-rMax,rMax], y∈[yMin,yMax], z∈[-rMax/2,rMax/2]
+    // Map to world box. Z is forced negative via abs() + offset so every
+    // planet sits in front of the camera, not behind it.
     const pos = {
       x: x * radiusMax,
       y: yMin + y01 * (yMax - yMin),
-      z: z * (radiusMax / 2),
+      z: -(Math.abs(z) * 1.0 + 2.5),  // [-2.5, -3.5]
     }
     nodes.push({
       index: i,
@@ -86,7 +93,10 @@ export function buildCluster(count: number, opts: {
         y: (Math.random() - 0.5) * TAU * 0.0015,
         z: (Math.random() - 0.5) * TAU * 0.0015,
       },
-      scale: 0.6 + Math.random() * 0.6,
+      // Hero redesign: scales 0.50-0.80 = 10-17% screen height. Big enough
+      // to read as planets, small enough to feel like distant bodies and
+      // never overlap the title text.
+      scale: 0.50 + Math.random() * 0.30,
       // Preserve the old A=1.0 / B=0.7 size spread independently of geom kind.
       sizeFactor: i % 3 === 0 ? 1.0 : 0.7,
       type: 'icosa',

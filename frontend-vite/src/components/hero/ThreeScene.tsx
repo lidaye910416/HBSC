@@ -62,9 +62,9 @@ export interface ThreeSceneProps {
 }
 
 const TIER_INSTANCE_COUNT: Record<GpuTier, number> = {
-  high: 24,
-  mid: 18,
-  low: 12,
+  high: 4,
+  mid: 3,
+  low: 2,
   none: 0,
 }
 
@@ -75,12 +75,12 @@ const TIER_DPR_CAP: Record<GpuTier, number> = {
   none: 1,
 }
 
-// Bloom post-processing config (T1: Bloom + Composer).
-// Active on 'high' and 'mid' tiers. 'low' tier skips the composer entirely
-// and relies on material emissive + CSS halo for the bloom illusion.
-const BLOOM_STRENGTH = 0.55
-const BLOOM_RADIUS = 0.65
-const BLOOM_THRESHOLD = 0.75
+// Bloom post-processing config.
+// Subtle bloom: only the brightest 3% of HDR hero stars reach threshold 0.4.
+// Strength 0.5 keeps the dark navy sky intact instead of washing it out.
+const BLOOM_STRENGTH = 0.5
+const BLOOM_RADIUS = 0.40
+const BLOOM_THRESHOLD = 0.40
 const BLOOM_RES_SCALE = 0.5 // composer renders at half-resolution
 
 // T5: center attraction — only the hero node (index 0) is pulled toward the
@@ -181,37 +181,56 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
     camera.position.set(0, 0, 6)
 
-    // 3. Lights — warm gold key + cool blue hemi
-    const key = new THREE.DirectionalLight(0xffd89b, 0.6)
+    // 3. Lights — warm gold key + cool blue hemi. Key intensity bumped so
+    //    the day/night terminator reads clearly on the planet bodies.
+    const key = new THREE.DirectionalLight(0xffd89b, 1.8)
     key.position.set(3, 4, 4)
-    const hemi = new THREE.HemisphereLight(0x1a2e5a, 0x0f172a, 0.4)
+    const hemi = new THREE.HemisphereLight(0x1a2e5a, 0x0f172a, 0.45)
     scene.add(key, hemi)
 
     // 4. Geometries + materials — three InstancedMesh instances by type.
-    //    icosa + torus share one gold MeshStandardMaterial; dodec uses a
-    //    dark-blue MeshPhysicalMaterial with low transmission + clearcoat.
-    const icosaGeometry = new THREE.IcosahedronGeometry(1, 0)
-    const dodecGeometry = new THREE.DodecahedronGeometry(1, 0)
-    const torusGeometry = new THREE.TorusGeometry(0.4, 0.05, 4, 8)
+    //    Restyled as "celestial planets in a starfield" — dark body with gold
+    //    rim light + soft emissive inner glow, NOT metallic gold clusters.
+    //    icosa + torus: warm dark planet (deep umber body + amber emissive core
+    //    + Fresnel gold rim). dodec: cold gas giant (deep navy body + cool blue
+    //    emissive + silver rim). Shader injection adds the Fresnel rim and a
+    //    subtle horizontal "atmosphere band" via emissive modulation.
+    // Planet geometry: SphereGeometry with high segment counts gives a
+    // perfectly round silhouette at hero scale.
+    //   - icosaSphere: 96×64 segments = 12,288 quads → silky-smooth hero body
+    //   - dodecSphere: 64×48 segments = 6,144 quads → smooth gas giant
+    // Earlier (320-face IcosahedronGeometry(1,2) + 80-face DodecahedronGeometry(1,1))
+    // showed visible facets on the blue dodec at upper-left, which read as a
+    // faceted gem instead of a celestial body. SphereGeometry guarantees a
+    // round silhouette regardless of viewport size.
+    const icosaGeometry = new THREE.SphereGeometry(1, 96, 64)
+    const dodecGeometry = new THREE.SphereGeometry(1, 64, 48)
+    // Saturn-style ring accent — slightly larger radius + more tube segments.
+    const torusGeometry = new THREE.TorusGeometry(0.55, 0.06, 6, 16)
 
+    // Warm planet: dark umber body, modest emissive — let the directional
+    // light do the day/night terminator. Bumped emissive so the planet body
+    // is clearly visible against the dark navy background.
     const goldMaterial = new THREE.MeshStandardMaterial({
-      color: 0xc9a84c,
-      emissive: 0x3a2e14,
-      metalness: 0.85,
-      roughness: 0.25,
+      color: 0x3a2820,             // dark warm umber body (was 0x2a1f15, slightly lifted)
+      emissive: 0x6a4220,          // amber inner glow (was 0x4a2f12)
+      emissiveIntensity: 0.35,     // was 0.18 — too dim against navy bg
+      metalness: 0.02,
+      roughness: 0.92,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.95,
     })
+    // Cold gas-giant planet: deep navy body, cool blue emissive.
     const dodecMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x16213e,
-      emissive: 0x0a1428,
-      metalness: 0.6,
-      roughness: 0.3,
-      transmission: 0.1,
-      clearcoat: 0.3,
-      clearcoatRoughness: 0.2,
+      color: 0x182840,             // lifted slightly from 0x0e1828 for visibility
+      emissive: 0x254280,          // stronger blue inner glow (was 0x15264a)
+      emissiveIntensity: 0.32,     // was 0.16
+      metalness: 0.02,
+      roughness: 0.92,
+      transmission: 0.0,
+      clearcoat: 0.0,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.95,
     })
 
     // Shader uniforms (shared across materials so all update from one RAF write).
@@ -227,7 +246,16 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     // Apply the GLSL vertex-displacement + emissive-modulation injection to a
     // material, wiring the shared uniforms. Attaching to `material.uniforms`
     // makes the WebGLProgram cache a uniform location for these names.
-    const injectShader = (mat: THREE.Material) => {
+    //
+    // The planet "rim light" effect: in the fragment shader we add Fresnel-
+    // based emissive on top of Three.js's standard physical material output.
+    // Fresnel ≈ 1 at silhouette edges, ≈ 0 facing camera, which is exactly
+    // what gives a planet its characteristic glowing rim against a dark sky.
+    // Saturn banding option: when opts.banded is true, add a horizontal-stripe
+    // modulation to diffuseColor (via a second fragment replacement at
+    // #include <map_fragment>). Default false so the torus / dodec shaders
+    // stay lean and the strip math never runs on them.
+    const injectShader = (mat: THREE.Material, rimColor: THREE.Vector3, opts: { banded?: boolean } = {}) => {
       ;(mat as unknown as { uniforms: typeof uniforms }).uniforms = uniforms
       mat.onBeforeCompile = (shader) => {
         shader.uniforms.uTime = uniforms.uTime
@@ -237,33 +265,107 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
         // Vertex: declare varying + uniforms at the top, displace `transformed`
         // by hooking into <begin_vertex> (Three.js declares `vec3 transformed`
         // inside <begin_vertex> — we override the chunk to assign our own).
+        // Also write viewDir + worldNormal varyings so the fragment shader
+        // can compute Fresnel. Use the input `normal` attribute directly to
+        // avoid depending on Three's intermediate `objectNormal` variable
+        // (which only exists inside the original begin_vertex chunk).
+        const planetVertexInjection = /* glsl */ `
+varying vec3 vWorldNormal;
+varying vec3 vViewDir;
+${vertexCommonInjection}
+`
+        const planetBeginVertex = /* glsl */ `
+vec3 transformed = vec3(position);
+// Subtle surface wobble (was 0.04 — produced visible bumps that distorted the
+// planet silhouette into a non-spherical shape). At 0.012 the wobble is just
+// a hint of breathing motion; the sphere geometry reads as a planet.
+float wave = sin(transformed.x * 3.0 + uTime * 0.6)
+           + cos(transformed.y * 2.5 - uTime * 0.5);
+transformed += normal * wave * 0.012;
+vec2 toMouse = uMouse - transformed.xy;
+float dist = length(toMouse);
+// Mouse-attraction bump reduced from 0.08 to 0.035 — still responsive to the
+// cursor but the silhouette no longer distorts when the cursor is near.
+float bump = smoothstep(0.6, 0.0, dist) * 0.035;
+transformed += normal * bump;
+vDisplace = wave + bump;
+vWorldNormal = normalize(mat3(modelMatrix) * normal);
+vec4 worldPos = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+vViewDir = normalize(cameraPosition - worldPos.xyz);
+`
         shader.vertexShader = shader.vertexShader
           .replace(
             '#include <common>',
-            `#include <common>\n${vertexCommonInjection}`,
+            `#include <common>\n${planetVertexInjection}`,
           )
           .replace(
             '#include <begin_vertex>',
-            beginVertexInjection,
+            planetBeginVertex,
           )
 
-        // Fragment: declare varying at top, modulate totalEmissiveRadiance
-        // after Three.js has computed it (it's declared in <lights_physical_fragment>
-        // and assigned in <lights_fragment_begin>/<lights_fragment_end>).
+        // Fragment: declare varyings + apply Fresnel rim light + emissive modulation.
+        // Order matters: emissivemap_fragment sets totalEmissiveRadiance; we
+        // ADD the rim contribution after that point so it benefits from
+        // bloom (the rim is what makes the planet "glow").
+        const planetFragmentInjection = /* glsl */ `
+varying vec3 vWorldNormal;
+varying vec3 vViewDir;
+${fragmentCommonInjection}
+`
+        const planetEmissiveInjection = /* glsl */ `
+  // Standard emissive modulation (subtle displacement-driven wobble).
+  totalEmissiveRadiance *= ( 1.0 + vDisplace * 0.25 );
+
+  // Atmosphere ring: thin Fresnel rim that only fires at silhouette edges,
+  // not on the body face. Power 5 keeps it crisp; multiplier 0.85 makes
+  // the glow clearly visible against the dark hero background.
+  float ndotv = max(dot(normalize(vWorldNormal), normalize(vViewDir)), 0.0);
+  float fresnel = pow(1.0 - ndotv, 5.0);
+  vec3 rimRGB = vec3(${rimColor.x.toFixed(4)}, ${rimColor.y.toFixed(4)}, ${rimColor.z.toFixed(4)});
+  totalEmissiveRadiance += rimRGB * fresnel * 0.85;
+`
+        // Saturn-style horizontal banding. ~3 stripes via sin of the world-
+        // space normal y; mix(0.78, 1.05) keeps the dark band clearly darker
+        // without blowing out the bright zone. x term breaks perfect symmetry.
+        const planetBandInjection = /* glsl */ `
+  float band = 0.5 + 0.5 * sin(vWorldNormal.y * 9.0 + vWorldNormal.x * 1.5);
+  diffuseColor.rgb *= mix(0.78, 1.05, band);
+`
         shader.fragmentShader = shader.fragmentShader
           .replace(
             '#include <common>',
-            `#include <common>\n${fragmentCommonInjection}`,
+            `#include <common>\n${planetFragmentInjection}`,
           )
-          .replace(
+        // Band injection is conditional so the shared goldMaterial program
+        // (used by the torus) doesn't pay for the sin call at every fragment.
+        if (opts.banded) {
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            `#include <map_fragment>\n${planetBandInjection}`,
+          )
+        }
+        shader.fragmentShader = shader.fragmentShader.replace(
             '#include <emissivemap_fragment>',
-            `#include <emissivemap_fragment>\n${emissiveInjection}`,
+            `#include <emissivemap_fragment>\n${planetEmissiveInjection}`,
           )
       }
       mat.needsUpdate = true
     }
-    injectShader(goldMaterial)
-    injectShader(dodecMaterial)
+    // Warm planet: amber body, gold rim (#C9A84C).
+    injectShader(goldMaterial, new THREE.Vector3(0xc9 / 255, 0xa8 / 255, 0x4c / 255))
+    // Cold gas giant: navy body, cool blue-silver rim (#93C5FD).
+    injectShader(dodecMaterial, new THREE.Vector3(0x93 / 255, 0xc5 / 255, 0xfd / 255))
+
+    // Saturn-band clone for warm icosa planets. Clone (not re-inject) keeps
+    // goldMaterial as the shared solid shader for the torus ring accent — we
+    // only want stripes on the body, not on the ring. Re-injecting onBeforeCompile
+    // on the clone overrides whatever the clone inherited from goldMaterial.
+    const icosaMaterial = goldMaterial.clone()
+    injectShader(
+      icosaMaterial,
+      new THREE.Vector3(0xc9 / 255, 0xa8 / 255, 0x4c / 255),
+      { banded: true },
+    )
 
     // 5. Cluster data — assign geometry kinds per tier, then group by kind.
     const types = assignGeometryTypes(count)
@@ -272,13 +374,39 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       n.type = types[i] ?? 'icosa'
     })
 
+    // Hero redesign (2026-07): explicitly place planets in 4 corners of the
+    // hero frame so they read as separate celestial bodies. Positions chosen
+    // to AVOID the title block (center vertical band) so text stays fully
+    // legible. Each planet sits in a different viewport corner.
+    //   - Hero gold icosa (upper-right corner) — focal body
+    //   - Cool blue dodec (upper-left corner) — cold gas giant
+    //   - Mid gold icosa (lower-right corner) — atmospheric support
+    //   - Torus accent (lower-left corner) — Saturn-style ring
+    const HERO_POSITIONS: Array<[number, number, number]> = [
+      [ 3.4,  2.0, -2.5],   // [0] hero gold icosa (upper-right)
+      [-3.4,  1.8, -3.4],   // [1] cool blue dodec (upper-left)
+      [ 2.6, -1.6, -3.0],   // [2] mid gold icosa (lower-right)
+      [-2.6, -1.7, -2.5],   // [3] torus accent (lower-left)
+    ]
+    nodes.forEach((n, i) => {
+      if (i < HERO_POSITIONS.length) {
+        const [x, y, z] = HERO_POSITIONS[i]!
+        n.basePos.x = x
+        n.basePos.y = y
+        n.basePos.z = z
+        n.originalBase.x = x
+        n.originalBase.y = y
+        n.originalBase.z = z
+      }
+    })
+
     const geoByKind: Record<GeometryKind, THREE.BufferGeometry> = {
       icosa: icosaGeometry,
       dodec: dodecGeometry,
       torus: torusGeometry,
     }
     const matByKind: Record<GeometryKind, THREE.Material> = {
-      icosa: goldMaterial,
+      icosa: icosaMaterial,
       dodec: dodecMaterial,
       torus: goldMaterial,
     }
@@ -335,8 +463,10 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i]!
       dummy.position.set(n.basePos.x, n.basePos.y, n.basePos.z)
-      // Center node (index 0) gets a fixed 1.15x hero scale regardless of type.
-      const s = i === 0 ? n.scale * 1.15 : n.scale * n.sizeFactor
+      // Center node (index 0) gets a fixed 1.0x hero scale (was 1.15x — too
+      // dominant). Other nodes get n.sizeFactor (1.0 for nodes i%3===0, 0.7
+      // otherwise) so the supporting planets read smaller than the hero.
+      const s = i === 0 ? n.scale : n.scale * n.sizeFactor
       dummy.scale.set(s, s, s)
       dummy.rotation.set(
         Math.random() * Math.PI,
@@ -527,7 +657,7 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
           hoveredKey !== null &&
           hoveredKey === `${mesh.uuid}:${li}`
         dummy.position.set(n.basePos.x, n.basePos.y, n.basePos.z)
-        const s = i === 0 ? n.scale * 1.15 : n.scale * n.sizeFactor
+        const s = i === 0 ? n.scale : n.scale * n.sizeFactor
         const fs = isHovered ? s * 1.06 : s
         dummy.scale.set(fs, fs, fs)
         dummy.rotation.x += n.spin.x
@@ -588,7 +718,7 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
     sceneStateRef.current.scene = scene
     sceneStateRef.current.camera = camera
     sceneStateRef.current.meshes = meshes
-    sceneStateRef.current.materials = [goldMaterial, dodecMaterial]
+    sceneStateRef.current.materials = [goldMaterial, dodecMaterial, icosaMaterial]
     sceneStateRef.current.geometries = [icosaGeometry, dodecGeometry, torusGeometry]
     sceneStateRef.current.nodes = nodes
     sceneStateRef.current.running = true
@@ -620,6 +750,7 @@ export function ThreeScene({ canvasRef, tier, pointer }: ThreeSceneProps) {
       torusGeometry.dispose()
       goldMaterial.dispose()
       dodecMaterial.dispose()
+      icosaMaterial.dispose()
       // T3: particle-cloud GPU resources
       particles.geometry.dispose()
       particles.material.dispose()

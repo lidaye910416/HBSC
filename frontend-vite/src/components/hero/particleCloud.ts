@@ -1,27 +1,20 @@
 // frontend-vite/src/components/hero/particleCloud.ts
 //
-// particleCloud — T3 ambient dust layer rendered as a single THREE.Points
-// cloud with a custom ShaderMaterial. Adds 300/180/80 particles per GPU tier
-// (high/mid/low) drifting slowly inside a box volume around the cluster.
+// particleCloud — starfield layer rendered as a single THREE.Points cloud.
 //
-// Design notes:
-//   - One BufferGeometry + one ShaderMaterial → one Points object per tier.
-//     (no PointsMaterial — we need per-vertex alpha, size, color mixing.)
-//   - Deterministic seed (mulberry32) so the same tier reproduces the same
-//     layout across reloads — no flicker, no jump-cut on StrictMode remount.
-//   - Soft-disc fragment via radial distance from gl_PointCoord center.
-//   - AdditiveBlending + depthWrite:false → glows over dark, doesn't occlude
-//     the InstancedMesh cluster behind it.
-//   - T9: per-particle twinkle. Each particle has its own period
-//     (aTwinklePeriod, 1.5–6 s) and phase so the field desyncs naturally;
-//     ~10 % are flagged "flashy" (shorter period, sharper brightness peaks).
+// Recipe (HBSC hero starfield, 2026-07):
+//   - 3 depth layers: 15% foreground / 35% midground / 50% background
+//   - Power-law size: 85% tiny / 12% small / 3% hero stars
+//   - Hero stars use HDR colors (>2.6) so UnrealBloomPass actually fires
+//   - Per-star twinkle on ~40% of stars; hero stars get slow gentle twinkle
+//   - Color palette honors real stellar types (warm / cool / blue / orange / red)
 
 import * as THREE from 'three'
 
 const TIER_PARTICLE_COUNT: Record<'high' | 'mid' | 'low', number> = {
-  high: 300,
-  mid: 180,
-  low: 80,
+  high: 1400,
+  mid: 800,
+  low: 400,
 }
 
 function mulberry32(seed: number) {
@@ -41,37 +34,86 @@ export function buildParticleCloud(tier: 'high' | 'mid' | 'low'): {
   update: (time: number) => void
 } {
   const count = TIER_PARTICLE_COUNT[tier]
-  const rng = mulberry32(42) // deterministic seed
+  const rng = mulberry32(42)
 
   const positions = new Float32Array(count * 3)
   const sizes = new Float32Array(count)
   const alphas = new Float32Array(count)
   const phases = new Float32Array(count)
   const depths = new Float32Array(count)
-  // T9: per-particle twinkle period and "flashy" flag. Flashy particles get
-  // shorter periods (0.6–1.4 s) and a sharper, brighter peak than the rest,
-  // giving the cloud occasional bright blinks scattered across the field.
+  // Per-star HDR multiplier (>1 for hero stars so bloom catches them).
+  const hdrs = new Float32Array(count)
+  const hueShifts = new Float32Array(count)
   const twinklePeriods = new Float32Array(count)
-  const flashy = new Float32Array(count)
+  const twinkleFlags = new Float32Array(count)
 
   for (let i = 0; i < count; i++) {
-    // Box bounds x∈[-6,6] y∈[-3,3] z∈[-2,2]
-    positions[i * 3 + 0] = (rng() - 0.5) * 12
-    positions[i * 3 + 1] = (rng() - 0.5) * 6
-    positions[i * 3 + 2] = (rng() - 0.5) * 4
+    // 3-layer depth distribution — sells parallax and atmospheric depth.
+    const layer = rng()
+    let z: number
+    let depth01: number
+    if (layer < 0.15) {
+      // Foreground (z ∈ [-1.5, -4]): close, dramatic parallax.
+      z = -1.5 - rng() * 2.5
+      depth01 = 0.15
+    } else if (layer < 0.50) {
+      // Midground (z ∈ [-4, -10]): sweet-spot readable stars.
+      z = -4 - rng() * 6
+      depth01 = 0.45
+    } else {
+      // Background (z ∈ [-10, -22]): sky frame, minimal parallax.
+      z = -10 - rng() * 12
+      depth01 = 0.85
+    }
 
-    // 80% main dust, 20% distant
-    const isDistant = rng() < 0.2
-    sizes[i] = isDistant ? 0.04 + rng() * 0.04 : 0.12 + rng() * 0.18
-    alphas[i] = isDistant ? 0.15 + rng() * 0.15 : 0.55 + rng() * 0.35
+    // Wide x/y spread for starfield feel.
+    positions[i * 3 + 0] = (rng() - 0.5) * 24
+    positions[i * 3 + 1] = (rng() - 0.5) * 13
+    positions[i * 3 + 2] = z
+
+    // Power-law size distribution.
+    //   88% tiny  (sizeRoll < 0.88)  →  0.06–0.14 (subpixel dust)
+    //   10% small (0.88 ≤ < 0.98)    →  0.18–0.32 (recognizable stars)
+    //    2% hero  (≥ 0.98)           →  0.35–0.65 (rare bright giants, HDR boost)
+    const sizeRoll = rng()
+    let starSize: number
+    let starHdr: number
+    if (sizeRoll < 0.88) {
+      starSize = 0.06 + rng() * 0.08
+      starHdr = 1.0
+    } else if (sizeRoll < 0.98) {
+      starSize = 0.18 + rng() * 0.14
+      starHdr = 1.3
+    } else {
+      starSize = 0.35 + rng() * 0.30
+      // HDR 2.5-3.5: only these rare stars cross bloom threshold 0.4.
+      starHdr = 2.5 + rng() * 1.0
+    }
+    sizes[i] = starSize
+    hdrs[i] = starHdr
+
+    // Stellar color distribution (matches real population, biased warm):
+    //   50% warm white (G / late-F)
+    //   22% cool white (A / early-F)
+    //    8% blue giants (B / O, rare, hot — bloom hardest)
+    //   12% orange (K)
+    //    8% red dwarfs (M)
+    const hueRoll = rng()
+    if (hueRoll < 0.50) hueShifts[i] = 0.0         // warm white
+    else if (hueRoll < 0.72) hueShifts[i] = 0.15   // cool white
+    else if (hueRoll < 0.80) hueShifts[i] = 0.55   // blue giant
+    else if (hueRoll < 0.92) hueShifts[i] = -0.10  // orange (K)
+    else hueShifts[i] = -0.25                      // red (M)
+
+    // Twinkle on ~40% of stars. Hero stars get slow gentle twinkle
+    // so they feel anchored rather than flickering.
+    twinkleFlags[i] = rng() < 0.40 ? 1 : 0
+    twinklePeriods[i] = starSize > 0.30 ? 4 + rng() * 4 : 0.4 + rng() * 2.1
     phases[i] = rng() * Math.PI * 2
-    depths[i] = rng()
-
-    // T9: ~10% flashy, the rest slow-twinkle. Period range differs so the
-    // two populations don't lockstep visually.
-    const isFlashy = rng() < 0.1
-    flashy[i] = isFlashy ? 1 : 0
-    twinklePeriods[i] = isFlashy ? 0.6 + rng() * 0.8 : 1.5 + rng() * 4.5
+    // Higher alpha baseline (was 0.35-0.70) so even faint stars register
+    // against the dark navy hero background.
+    alphas[i] = 0.65 + rng() * 0.30
+    depths[i] = depth01
   }
 
   const geometry = new THREE.BufferGeometry()
@@ -80,8 +122,10 @@ export function buildParticleCloud(tier: 'high' | 'mid' | 'low'): {
   geometry.setAttribute('aAlpha', new THREE.BufferAttribute(alphas, 1))
   geometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1))
   geometry.setAttribute('aDepth', new THREE.BufferAttribute(depths, 1))
+  geometry.setAttribute('aHdr', new THREE.BufferAttribute(hdrs, 1))
+  geometry.setAttribute('aHue', new THREE.BufferAttribute(hueShifts, 1))
   geometry.setAttribute('aTwinklePeriod', new THREE.BufferAttribute(twinklePeriods, 1))
-  geometry.setAttribute('aFlashy', new THREE.BufferAttribute(flashy, 1))
+  geometry.setAttribute('aTwinkleFlag', new THREE.BufferAttribute(twinkleFlags, 1))
 
   const uniforms = {
     uTime: { value: 0 },
@@ -92,70 +136,96 @@ export function buildParticleCloud(tier: 'high' | 'mid' | 'low'): {
     uniforms,
     transparent: true,
     depthWrite: false,
+    depthTest: false,  // stars are additive overlay; never occluded by planets or each other
     blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */ `
       attribute float aSize;
       attribute float aAlpha;
       attribute float aPhase;
       attribute float aDepth;
+      attribute float aHdr;
+      attribute float aHue;
       attribute float aTwinklePeriod;
-      attribute float aFlashy;
+      attribute float aTwinkleFlag;
       uniform float uTime;
       uniform float uPixelRatio;
       varying float vAlpha;
       varying float vDepth;
       varying float vTwinkle;
+      varying float vHue;
+      varying float vHdr;
       void main() {
         vec3 p = position;
-        // Slow drift
-        p.x += sin(uTime * 0.1 + aPhase) * 0.15;
-        p.y += cos(uTime * 0.08 + aPhase * 1.3) * 0.1;
+        // Per-layer parallax: foreground moves most, background barely moves.
+        p.x += sin(uTime * 0.08 + aPhase) * 0.10 * (1.0 - aDepth);
+        p.y += cos(uTime * 0.06 + aPhase * 1.3) * 0.08 * (1.0 - aDepth);
+
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         float dist = -mv.z;
 
-        // T9: per-particle twinkle. The phase scales 0→2π and modulates the
-        // shared uTime sinusoid so neighbouring particles desync. power(2.2)
-        // makes the envelope spend more time dark, more time bright peaks —
-        // i.e. sharper "blink" rather than even sine fade. Flashy particles
-        // get a soft sqrt curve (more time near peak) and a 1.4× boost so
-        // their blinks read clearly even on a tier with bloom disabled.
-        float phaseRadians = aPhase * 6.28;
-        float omega = 6.28 / max(aTwinklePeriod, 0.01);
-        float t = 0.5 + 0.5 * sin(uTime * omega + phaseRadians);
-        t = pow(t, 2.2);
-        t = mix(t, pow(t, 0.5) * 1.4, aFlashy);
+        // Twinkle only for stars with aTwinkleFlag=1.
+        float t = 1.0;
+        if (aTwinkleFlag > 0.5) {
+          float phaseRadians = aPhase * 6.28;
+          float omega = 6.28 / max(aTwinklePeriod, 0.01);
+          t = 0.5 + 0.5 * sin(uTime * omega + phaseRadians);
+          t = pow(t, 1.8);
+        }
         vTwinkle = t;
 
-        // Slight size bump during a twinkle peak (cheap depth mask by reusing vDepth).
-        float sizeMul = 1.0 + 0.25 * t * (1.0 - aDepth);
-        gl_PointSize = aSize * sizeMul * (300.0 / max(dist, 0.1)) * uPixelRatio;
+        float sizeMul = 1.0 + 0.18 * t * aTwinkleFlag;
+        gl_PointSize = aSize * sizeMul * (240.0 / max(dist, 0.1)) * uPixelRatio;
 
         vAlpha = aAlpha;
         vDepth = aDepth;
+        vHue = aHue;
+        vHdr = aHdr;
       }
     `,
     fragmentShader: /* glsl */ `
       varying float vAlpha;
       varying float vDepth;
       varying float vTwinkle;
+      varying float vHue;
+      varying float vHdr;
       void main() {
-        // soft disc via radial distance from center
-        vec2 c = gl_PointCoord - 0.5;
-        float d = length(c);
-        if (d > 0.5) discard;
-        float alpha = vAlpha * smoothstep(0.5, 0.0, d);
-        // gold for near, blue-tint for distant
-        vec3 nearColor = vec3(0.79, 0.66, 0.30); // gold #C9A84C
-        vec3 farColor = vec3(0.42, 0.55, 0.85);
-        vec3 col = mix(nearColor, farColor, vDepth);
-        // T9: brightness and alpha both modulated by the twinkle envelope.
-        // 35% baseline alpha keeps the field always present; the 65%
-        // modulated share carries the blink. Colour brightness is biased
-        // upward at peaks (0.6→1.0) so peak moments punch through bloom.
-        float alphaMul = 0.35 + 0.65 * vTwinkle;
-        col *= (0.6 + 0.4 * vTwinkle);
-        gl_FragColor = vec4(col, alpha * alphaMul);
+        // Centered UV in [-0.5, 0.5] around the point.
+        vec2 uv = gl_PointCoord - 0.5;
+        float r2 = dot(uv, uv);
+
+        // Real night-sky star: tight bright core + soft Gaussian halo.
+        // No diffraction cross.
+        float core = exp(-r2 * 220.0);
+        float halo = exp(-r2 * 14.0) * 0.22;
+        float star = core + halo;
+        if (star < 0.005) discard;
+
+        // Stellar color, picked by vHue.
+        vec3 warm   = vec3(1.00, 0.95, 0.82);  // G / late-F warm white
+        vec3 cool   = vec3(0.92, 0.96, 1.00);  // A / early-F cool white
+        vec3 blue   = vec3(0.61, 0.78, 1.00);  // B / O blue giant
+        vec3 orange = vec3(1.00, 0.78, 0.55);  // K orange
+        vec3 red    = vec3(1.00, 0.62, 0.45);  // M red dwarf
+        vec3 col;
+        if (vHue > 0.40) col = blue;
+        else if (vHue > 0.05) col = cool;
+        else if (vHue < -0.20) col = red;
+        else if (vHue < -0.05) col = orange;
+        else col = warm;
+
+        // HDR multiplier on hero stars (>1.0) so bloom catches them.
+        col *= vHdr;
+
+        // Twinkle modulation (gentle).
+        float twinkleMod = 0.55 + 0.45 * vTwinkle;
+        col *= twinkleMod;
+
+        // Background stars dim slightly to sell depth.
+        col *= mix(1.0, 0.55, vDepth);
+
+        float alpha = vAlpha * star;
+        gl_FragColor = vec4(col, alpha);
       }
     `,
   })
