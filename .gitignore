@@ -77,3 +77,14 @@ frontend-vite/playwright-report/
 release/.env
 release/hbsc-backend.tar
 release/hbsc-frontend.tar
+
+# ── Soft-copyright artifacts (regeneratable output + binaries) ────
+# Build script: scripts/build_soft_copyright_csv.py
+# Hand-written .md inputs ARE committed; binaries and the generated CSV are not.
+soft-copyright/*.csv
+soft-copyright/*.docx
+soft-copyright/*.pdf
+soft-copyright/manual-assets/
+
+# ── Claude Code local state (never commit) ─────
+.claude/
