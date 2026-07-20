@@ -10,7 +10,7 @@ export default defineConfig({
   // Playwright must NOT pick up vitest unit tests that live in tests/animations/.
   testIgnore: ['**/*.test.ts', '**/*.test.tsx'],
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://localhost:5174',
+    baseURL: process.env.BASE_URL ?? 'http://localhost:5173',
     trace: 'off',
     headless: true,
   },
