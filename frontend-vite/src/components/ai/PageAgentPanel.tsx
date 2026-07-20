@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bot, BrainCircuit, Loader2, MessageSquareText, MousePointerClick, Trash2, X } from 'lucide-react'
+import { BookOpen, Bot, BrainCircuit, Loader2, MessageSquareText, MousePointerClick, Trash2, X } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../services/api'
 import { PageAgent } from 'page-agent'
 import { acquire, disposeSession, isRecoverableDisposedError } from '../../lib/pageAgentSession'
 import { buildPageContextMessage, collectPageContext } from './pageContext'
+import { getStorageKey, migrateLegacyStorage, type AgentMode } from './modeStorage'
 import type { PageContext } from './pageContext'
 import styles from './PageAgentPanel.module.css'
 
-type UiMessage = { id: number; role: 'user' | 'assistant'; content: string; routeKey?: string }
+type UiMessage = { id: number; role: 'user' | 'assistant'; content: string; mode: AgentMode; routeKey?: string }
 
 const STORAGE_KEY = 'hbsc.page-agent.chat.history'
 
@@ -21,10 +22,14 @@ export function PageAgentPanel({
   routeKey: string
   onClose: () => void
 }) {
-  const storageKey = `${STORAGE_KEY}:${routeKey}`
+  const [mode, setMode] = useState<AgentMode>('ask')
+  const askKey = getStorageKey(routeKey, 'ask')
+  const operateKey = getStorageKey(routeKey, 'operate')
+  const storageKey = mode === 'ask' ? askKey : operateKey
   const [history, setHistory] = useState<UiMessage[]>(() => {
+    migrateLegacyStorage(routeKey)
     try {
-      const raw = sessionStorage.getItem(storageKey) ?? sessionStorage.getItem(STORAGE_KEY)
+      const raw = sessionStorage.getItem(storageKey)
       if (raw) return JSON.parse(raw) as UiMessage[]
     } catch {
       /* fall through */
@@ -87,14 +92,10 @@ export function PageAgentPanel({
     observer.observe(appContent, { childList: true, subtree: true })
     refreshContext()
     const fallback = window.setTimeout(refreshContext, 400)
+    migrateLegacyStorage(routeKey)
     let nextHistory: UiMessage[] = []
-    // Migration shim: a prior version of the panel persisted under the
-    // global `STORAGE_KEY`. If a per-route entry is empty, adopt the
-    // legacy history so a returning user does not lose their first
-    // conversation. The persist effect below will rewrite the per-route
-    // key and clear the legacy entry on the next save.
     try {
-      const raw = sessionStorage.getItem(storageKey) ?? sessionStorage.getItem(STORAGE_KEY)
+      const raw = sessionStorage.getItem(storageKey)
       if (raw) nextHistory = JSON.parse(raw) as UiMessage[]
     } catch {
       /* fall through */
@@ -113,15 +114,18 @@ export function PageAgentPanel({
     }
   }, [storageKey])
 
-  // Persist chat history.
+  // Persist chat history to the bucket matching the current mode.
   useEffect(() => {
     try {
-      sessionStorage.setItem(storageKey, JSON.stringify(history))
-      sessionStorage.removeItem(STORAGE_KEY)
+      if (mode === 'ask') {
+        sessionStorage.setItem(askKey, JSON.stringify(history))
+      } else {
+        sessionStorage.setItem(operateKey, JSON.stringify(history))
+      }
     } catch {
       /* quota / disabled */
     }
-  }, [history, storageKey])
+  }, [history, mode, askKey, operateKey])
 
   // Auto-scroll on new message.
   useEffect(() => {
@@ -264,7 +268,7 @@ export function PageAgentPanel({
         setError(reply.startsWith('⚠️') ? reply.slice(2) : null)
         setHistory((h) => [
           ...h,
-          { id: nextIdRef.current++, role: 'assistant', content: reply!, routeKey },
+          { id: nextIdRef.current++, role: 'assistant', content: reply!, mode: 'operate', routeKey },
         ])
       }
     } finally {
@@ -275,7 +279,7 @@ export function PageAgentPanel({
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      void sendAsk()
+      void send()
     }
   }
 
@@ -303,6 +307,29 @@ export function PageAgentPanel({
         <span className={styles.contextPulse} aria-hidden="true" />
         <span><small>正在理解</small><strong>{pageContext.title}</strong></span>
         <span className={styles.contextType}>{pageContext.typeLabel}</span>
+      </div>
+
+      <div className={styles.modeTabs} role="tablist" aria-label="选择模式">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'ask'}
+          className={`${styles.modeTab} ${mode === 'ask' ? styles.modeTabActive : ''}`}
+          onClick={() => setMode('ask')}
+          data-testid="page-agent-mode-ask"
+        >
+          <BookOpen size={14} /> 读懂本页
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'operate'}
+          className={`${styles.modeTab} ${mode === 'operate' ? styles.modeTabActive : ''}`}
+          onClick={() => setMode('operate')}
+          data-testid="page-agent-mode-operate"
+        >
+          <MousePointerClick size={14} /> 协助操作
+        </button>
       </div>
 
       <div className={styles.body} ref={bodyRef} data-testid="page-agent-body">
@@ -369,7 +396,7 @@ export function PageAgentPanel({
           <button
             type="button"
             className={`${styles.btn} ${styles.btnSecondary}`}
-            onClick={() => void sendAsk()}
+            onClick={() => void send()}
             disabled={!text.trim() || chatMut.isPending || operating}
             data-testid="page-agent-ask-btn"
           >

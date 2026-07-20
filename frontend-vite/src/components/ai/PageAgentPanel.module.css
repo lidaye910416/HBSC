@@ -178,3 +178,35 @@
 @media (prefers-reduced-motion: reduce) {
   .root, .emptyPrompt, .clearCard { animation: none; transition: none; }
 }
+
+.modeTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid #e2e7f0;
+}
+.modeTab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #66748d;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.modeTab:hover { color: #18233b; background: rgba(255, 255, 255, 0.7); }
+.modeTabActive {
+  background: #18233b;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(15, 29, 55, 0.12);
+}
+.modeTabActive:hover { color: #fff; background: #18233b; }
