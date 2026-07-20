@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Search, FileText, Zap, ArrowRight } from 'lucide-react'
-import { api } from '../services/api'
+import { Search, FileText, ArrowRight } from 'lucide-react'
+import { api, type SearchResponse } from '../services/api'
 import { batchReveal } from '../animations/batchReveal'
 import './Search.css'
 
@@ -16,9 +16,9 @@ export function SearchPage() {
     return () => clearTimeout(id)
   }, [query])
 
-  const { data, isLoading } = useQuery<{ total: number; articles: Array<{ id: number; title: string; slug: string; type: string }>; insights: Array<{ id: number; title: string; slug: string; type: string }> }>({
+  const { data, isLoading } = useQuery<SearchResponse>({
     queryKey: ['search', debouncedQuery],
-    queryFn: () => api.search(debouncedQuery) as Promise<{ total: number; articles: Array<{ id: number; title: string; slug: string; type: string }>; insights: Array<{ id: number; title: string; slug: string; type: string }> }>,
+    queryFn: () => api.search(debouncedQuery),
     enabled: debouncedQuery.length >= 2,
   })
 
@@ -80,44 +80,23 @@ export function SearchPage() {
                 找到 <strong>{data.total}</strong> 个结果
               </p>
 
-              {data.articles && data.articles.length > 0 && (
+              {data.items.length > 0 && (
                 <div className="search-section">
                   <h3 className="search-section__title">
                     <FileText size={16} strokeWidth={1.5} /> 研究文章
                   </h3>
                   <div className="search-results-list">
-                    {data.articles.map((item: { id: number; title: string; slug: string; type: string }) => (
+                    {data.items.map((item) => (
                       <Link key={item.id} to={`/articles/${item.slug}`} className="search-result-item" data-reveal-card>
                         <div className="search-result-item__icon">
                           <FileText size={18} strokeWidth={1.5} />
                         </div>
                         <div className="search-result-item__text">
                           <h4>{item.title}</h4>
-                          <span className="search-result-item__type">文章</span>
+                          <span className="search-result-item__type">{item.category || '研究文章'}</span>
                         </div>
                         <ArrowRight size={14} className="search-result-item__arrow" strokeWidth={1.5} />
                       </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {data.insights && data.insights.length > 0 && (
-                <div className="search-section">
-                  <h3 className="search-section__title">
-                    <Zap size={16} strokeWidth={1.5} /> 前沿资讯
-                  </h3>
-                  <div className="search-results-list">
-                    {data.insights.map((item: { id: number; title: string; type: string }) => (
-                      <div key={item.id} className="search-result-item" data-reveal-card>
-                        <div className="search-result-item__icon">
-                          <Zap size={18} strokeWidth={1.5} />
-                        </div>
-                        <div className="search-result-item__text">
-                          <h4>{item.title}</h4>
-                          <span className="search-result-item__type">资讯</span>
-                        </div>
-                      </div>
                     ))}
                   </div>
                 </div>

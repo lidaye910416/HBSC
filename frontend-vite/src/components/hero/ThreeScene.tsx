@@ -20,12 +20,10 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import {
-  beginVertexInjection,
   commonInjection as vertexCommonInjection,
 } from './shaders/vertex.glsl'
 import {
   commonInjection as fragmentCommonInjection,
-  emissiveInjection,
 } from './shaders/fragment.glsl'
 import {
   buildCluster,
@@ -865,11 +863,13 @@ ${fragmentCommonInjection}
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
 
-      // Camera parallax: gentle drift toward NDC * (0.36, 0.20)
-      const targetX = pointer.ndcRef.current.x * 0.36
-      const targetY = -pointer.ndcRef.current.y * 0.20
-      camera.position.x += (targetX - camera.position.x) * 0.08
-      camera.position.y += (targetY - camera.position.y) * 0.08
+      // Camera parallax: wider travel makes the near planets and distant
+      // particle field separate more clearly while the existing damping
+      // keeps pointer movement smooth rather than twitchy.
+      const targetX = pointer.ndcRef.current.x * 0.84
+      const targetY = -pointer.ndcRef.current.y * 0.50
+      camera.position.x += (targetX - camera.position.x) * 0.18
+      camera.position.y += (targetY - camera.position.y) * 0.18
       // Apply scroll-coupled exit transform
       camera.position.z = 6 - 1.5 * scrollExitT
       camera.lookAt(0, 0, 0)

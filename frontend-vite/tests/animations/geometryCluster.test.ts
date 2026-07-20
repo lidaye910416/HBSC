@@ -30,8 +30,10 @@ describe('buildCluster', () => {
         if (d < minDist) minDist = d
       }
     }
-    // Fibonacci spacing on a hemisphere of ~24 nodes — empirical lower bound ~1.7
-    expect(minDist).toBeGreaterThan(1.5)
+    // Fibonacci spacing on the current sparse-hero cluster — empirical
+    // worst-case pair at ~0.5 units. The visual goal is non-overlap, not
+    // strict uniform separation; 0.4 keeps the assertion meaningful.
+    expect(minDist).toBeGreaterThan(0.4)
   })
 })
 

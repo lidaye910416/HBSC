@@ -165,6 +165,19 @@ export interface PaginatedResponse<T> {
   pages: number;
 }
 
+export interface SearchResultItem {
+  id: number;
+  title: string;
+  slug: string;
+  category?: string;
+  type: 'article';
+}
+
+export interface SearchResponse {
+  items: SearchResultItem[];
+  total: number;
+}
+
 export const api = {
   issues: {
     list: (): Promise<Issue[]> => request<Issue[]>('/api/issues'),
@@ -185,7 +198,8 @@ export const api = {
       request<void>(`/api/articles/${slug}/view`, { method: 'POST' }),
   },
   team: (): Promise<Researcher[]> => request<Researcher[]>('/api/team'),
-  search: (q: string) => request(`/api/search?q=${encodeURIComponent(q)}`),
+  search: (q: string): Promise<SearchResponse> =>
+    request<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`),
   newsletter: (email: string) =>
     request(`/api/newsletter?email=${encodeURIComponent(email)}`, { method: 'POST' }),
 

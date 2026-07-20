@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Menu, X, ChevronDown, BookOpen } from 'lucide-react'
@@ -19,6 +19,7 @@ export function Navigation() {
   const location = useLocation()
   const containerRef = useRef<HTMLElement | null>(null)
   const issuesRef = useRef<HTMLDivElement | null>(null)
+  const issuesPointerClickRef = useRef(false)
 
   const { data: issues } = useQuery({
     queryKey: ['issues'],
@@ -88,15 +89,26 @@ export function Navigation() {
 
   // Drive timelines from state. contextSafe keeps handlers valid after the
   // gsap.context reverts in StrictMode.
+  const isFirstIssuesRun = useRef(true)
   useEffect(() => {
     if (!motionAllowed()) {
       if (dropdownMenuRef.current)
         gsap.set(dropdownMenuRef.current, { autoAlpha: issuesOpen ? 1 : 0, y: 0 })
       return
     }
+    // First render after a useGSAP dependency flip: the timeline is being
+    // rebuilt with `gsap.set(..., autoAlpha: 0)` on the still-open panel.
+    // If we then play, the GSAP timeline starts from the freshly-pinned 0
+    // and animates back to 1, restoring the open state. Without this,
+    // an open dropdown that lost its source data would be stuck invisible.
+    if (isFirstIssuesRun.current) {
+      isFirstIssuesRun.current = false
+      if (issuesOpen) dropdownTlRef.current?.play()
+      return
+    }
     if (issuesOpen) dropdownTlRef.current?.play()
     else dropdownTlRef.current?.reverse()
-  }, [issuesOpen])
+  }, [issuesOpen, sortedIssues])
 
   useEffect(() => {
     if (!motionAllowed()) {
@@ -108,22 +120,34 @@ export function Navigation() {
     else mobileTlRef.current?.reverse()
   }, [mobileOpen])
 
-  // Close menus on route change so we never carry a half-open panel across
-  // navigation. Reverse runs naturally; no setTimeout involved.
-  useEffect(() => {
+  // Close menus on any route change. The link-level onClick handlers
+  // cover the common case; this effect is the safety net for browser
+  // history, programmatic navigation, and any other non-link trigger.
+  const closeMenus = useCallback(() => {
+    issuesPointerClickRef.current = false
     setMobileOpen(false)
     setIssuesOpen(false)
-  }, [location.pathname])
+  }, [])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    closeMenus()
+  }, [location.pathname, closeMenus])
 
   // Outside click + Escape close. Both panels share the same logic.
   useEffect(() => {
     if (!issuesOpen) return
     const onMouseDown = (e: MouseEvent) => {
       if (!issuesRef.current) return
-      if (!issuesRef.current.contains(e.target as Node)) setIssuesOpen(false)
+      if (!issuesRef.current.contains(e.target as Node)) {
+        issuesPointerClickRef.current = false
+        setIssuesOpen(false)
+      }
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIssuesOpen(false)
+      if (e.key === 'Escape') {
+        issuesPointerClickRef.current = false
+        setIssuesOpen(false)
+      }
     }
     document.addEventListener('mousedown', onMouseDown)
     document.addEventListener('keydown', onKey)
@@ -143,6 +167,17 @@ export function Navigation() {
   const formatIssueDate = (d?: string) =>
     d ? new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' }) : ''
 
+  const handleIssuesTriggerClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (event.detail === 0) {
+      issuesPointerClickRef.current = false
+      setIssuesOpen((open) => !open)
+      return
+    }
+    const shouldClose = issuesPointerClickRef.current
+    issuesPointerClickRef.current = !shouldClose
+    setIssuesOpen(!shouldClose)
+  }
+
   return (
     <nav className="nav" ref={containerRef}>
       <div className="nav__inner container">
@@ -161,6 +196,7 @@ export function Navigation() {
               key={link.path}
               to={link.path}
               className={`nav__link ${location.pathname === link.path ? 'nav__link--active' : ''}`}
+              onClick={() => setIssuesOpen(false)}
             >
               {link.label}
             </Link>
@@ -170,7 +206,10 @@ export function Navigation() {
             ref={issuesRef}
             className={`nav__dropdown ${isIssuesActive || issuesOpen ? 'nav__dropdown--open' : ''}`}
             onMouseEnter={() => setIssuesOpen(true)}
-            onMouseLeave={() => setIssuesOpen(false)}
+            onMouseLeave={() => {
+              issuesPointerClickRef.current = false
+              setIssuesOpen(false)
+            }}
           >
             <button
               type="button"
@@ -179,7 +218,7 @@ export function Navigation() {
               aria-haspopup="true"
               aria-controls="nav-issues-menu"
               aria-label="期刊 — 显示最新两期可跳转"
-              onClick={() => setIssuesOpen(v => !v)}
+              onClick={handleIssuesTriggerClick}
             >
               期刊 <ChevronDown size={14} strokeWidth={1.75} className={`nav__caret ${issuesOpen ? 'is-open' : ''}`} />
             </button>
@@ -254,6 +293,7 @@ export function Navigation() {
           <Link
             to="/articles"
             className={`nav__link ${isArticlesActive ? 'nav__link--active' : ''}`}
+            onClick={() => setIssuesOpen(false)}
           >
             所有文章
           </Link>
@@ -261,13 +301,14 @@ export function Navigation() {
           <Link
             to="/labs"
             className={`nav__link ${isLabsActive ? 'nav__link--active' : ''}`}
+            onClick={() => setIssuesOpen(false)}
           >
             数创实验室
           </Link>
         </div>
 
         <div className="nav__actions">
-          <Link to="/search" className="nav__icon-btn" aria-label="搜索">
+          <Link to="/search" className="nav__icon-btn" aria-label="搜索" onClick={() => setIssuesOpen(false)}>
             <Search size={18} strokeWidth={1.5} />
           </Link>
           <button
@@ -297,6 +338,7 @@ export function Navigation() {
             data-nav-mobile-item
             className={`nav__mobile-link ${location.pathname === link.path ? 'active' : ''}`}
             tabIndex={mobileOpen ? 0 : -1}
+            onClick={() => setMobileOpen(false)}
           >
             {link.label}
           </Link>
@@ -306,6 +348,7 @@ export function Navigation() {
           data-nav-mobile-item
           className={`nav__mobile-link ${isIssuesActive ? 'active' : ''}`}
           tabIndex={mobileOpen ? 0 : -1}
+          onClick={() => setMobileOpen(false)}
         >
           期刊
         </Link>
@@ -316,6 +359,7 @@ export function Navigation() {
             data-nav-mobile-item
             className="nav__mobile-link nav__mobile-sublink"
             tabIndex={mobileOpen ? 0 : -1}
+            onClick={() => setMobileOpen(false)}
           >
             · {issue.title}
           </Link>
@@ -325,6 +369,7 @@ export function Navigation() {
           data-nav-mobile-item
           className={`nav__mobile-link ${isArticlesActive ? 'active' : ''}`}
           tabIndex={mobileOpen ? 0 : -1}
+          onClick={() => setMobileOpen(false)}
         >
           所有文章
         </Link>
@@ -333,6 +378,7 @@ export function Navigation() {
           data-nav-mobile-item
           className={`nav__mobile-link ${isLabsActive ? 'active' : ''}`}
           tabIndex={mobileOpen ? 0 : -1}
+          onClick={() => setMobileOpen(false)}
         >
           数创实验室
         </Link>

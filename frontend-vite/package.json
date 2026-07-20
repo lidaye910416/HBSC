@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:ui-regressions": "playwright test tests/e2e/visibility-fixes.spec.ts tests/search-page.spec.ts tests/public-page-agent.spec.ts --grep 'nav dropdown|mobile navigation closes|renders backend items|requires at least two|empty state|loading placeholders|clicking FAB shows dual-mode panel|clear confirmation stays compact|chat-mode submit posts|current article context|late page content refreshes|route change refreshes|slow chat response|consecutive actions|empty-prompt'",
+    "lint:public-ui": "eslint src/components/Navigation.tsx src/components/PublicPageAgentMount.tsx src/components/ai/PageAgentFab.tsx src/components/ai/PageAgentPanel.tsx src/components/ai/pageContext.ts src/components/hero/ThreeScene.tsx src/pages/Search.tsx tests/e2e/visibility-fixes.spec.ts tests/search-page.spec.ts tests/public-page-agent.spec.ts tests/animations/pageContext.test.ts",
     "test:tokens": "bash scripts/test-admin-tokens.sh"
   },
   "dependencies": {

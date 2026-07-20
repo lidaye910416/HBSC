@@ -1,0 +1,70 @@
+name: Frontend CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend-vite/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    paths:
+      - 'frontend-vite/**'
+      - '.github/workflows/frontend-ci.yml'
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-ui-regressions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-vite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-vite/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Lint public UI paths
+        run: npm run lint:public-ui
+      - name: Run stable unit tests
+        run: npx vitest run tests/animations/pageContext.test.ts tests/animations/batchReveal.test.ts tests/animations/reducedMotion.test.ts
+      - name: Start Vite and run public UI regressions
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5174 > /tmp/hbsc-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID' EXIT
+          for attempt in {1..40}; do
+            curl --fail --silent http://127.0.0.1:5174 >/dev/null && break
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:5174 >/dev/null
+          npm run test:ui-regressions
+
+  full-quality-report:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-vite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-vite/package-lock.json
+      - run: npm ci
+      - name: Full lint debt report
+        continue-on-error: true
+        run: npm run lint
+      - name: Full type/build gate
+        run: npm run build
+      - name: Full unit-test debt report
+        continue-on-error: true
+        run: npm test

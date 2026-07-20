@@ -86,12 +86,10 @@ test.describe('visibility regression fixes', () => {
     // arrive.
     await page.waitForTimeout(200)
 
-    // The dropdown wrapper also has onMouseEnter/onMouseLeave handlers that
-    // toggle `issuesOpen`. A real `click()` first moves the mouse over the
-    // wrapper (mouseenter -> issuesOpen=true), then dispatches click which
-    // toggles to false. We sidestep that by dispatching the click event
-    // directly so the state starts at false and ends at true.
-    await trigger.dispatchEvent('click')
+    // Use a real pointer click. This intentionally covers the hover + click
+    // sequence that previously opened on mouseenter and immediately toggled
+    // closed in the click handler.
+    await trigger.click()
 
     // GSAP timeline duration is ~0.22 s plus the small stagger for items.
     // 700 ms is comfortably enough margin.
@@ -107,5 +105,96 @@ test.describe('visibility regression fixes', () => {
     expect(state, 'dropdown menu element').not.toBeNull()
     expect(state!.opacity, 'dropdown opacity').toBeGreaterThan(0.9)
     expect(state!.visibility, 'dropdown visibility').not.toBe('hidden')
+  })
+
+  test('nav dropdown closes after pointer leaves the trigger and menu area', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' })
+    const trigger = page.locator('button.nav__dropdown-trigger')
+    const menu = page.locator('[data-nav-dropdown]')
+
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await page.locator('main').hover({ position: { x: 20, y: 300 } })
+
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await expect(menu).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  test('open nav dropdown stays visible when issue data finishes loading', async ({ page }) => {
+    let releaseIssues: (() => void) | undefined
+    await page.route('**/api/issues', async (route) => {
+      await new Promise<void>((resolve) => { releaseIssues = resolve })
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          id: 1,
+          title: '2026 年第二期',
+          slug: '2026-q2',
+          article_count: 4,
+        }]),
+      })
+    })
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    const trigger = page.locator('button.nav__dropdown-trigger')
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await expect.poll(() => Boolean(releaseIssues)).toBe(true)
+    releaseIssues?.()
+    await expect(page.locator('[data-nav-dropdown-item]')).toHaveCount(1)
+
+    const menu = page.locator('[data-nav-dropdown]')
+    await expect.poll(async () => Number(await menu.evaluate((element) => getComputedStyle(element).opacity)))
+      .toBeGreaterThan(0.9)
+  })
+
+  test('nav dropdown trigger toggles closed for keyboard users', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' })
+    const trigger = page.locator('button.nav__dropdown-trigger')
+
+    await trigger.focus()
+    await page.keyboard.press('Space')
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press('Space')
+
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('nav dropdown trigger closes on a second pointer click', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' })
+    const trigger = page.locator('button.nav__dropdown-trigger')
+
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await trigger.click()
+
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('mobile navigation closes when selecting the current articles route', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/articles', { waitUntil: 'networkidle' })
+    const toggle = page.locator('button.nav__mobile-toggle')
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await page.getByRole('link', { name: '所有文章', exact: true }).click()
+
+    await expect(page).toHaveURL('/articles')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('mobile navigation closes after following the articles link', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/', { waitUntil: 'networkidle' })
+    const toggle = page.locator('button.nav__mobile-toggle')
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await page.getByRole('link', { name: '所有文章', exact: true }).click()
+
+    await expect(page).toHaveURL('/articles')
+    await expect(page.locator('button.nav__mobile-toggle')).toHaveAttribute('aria-expanded', 'false')
   })
 })
