@@ -48,11 +48,20 @@ export function PageAgentPanel({
   const [pageContext, setPageContext] = useState<PageContext>(() =>
     collectPageContext(document, window.location),
   )
-  const emptyPrompts = pageContext.type === 'technical-article'
+  // Empty-state prompts are split by mode: ask gives comprehension
+  // prompts; operate gives action prompts. Both still respect the
+  // page type (technical article gets a mind-map hint, etc.).
+  const askPromptsByType = pageContext.type === 'technical-article'
     ? ['概括这篇文章的核心观点', '解释文章中的关键技术', '为这篇文章整理思维导图']
     : pageContext.type === 'article'
       ? ['概括这篇文章', '提炼文章的主要观点', '解释本页的重要内容']
       : ['这个页面主要提供什么内容？', '帮我找到本页的重点', '带我浏览当前页面']
+  const operatePromptsByType = pageContext.type === 'technical-article'
+    ? ['跳到下一篇文章', '帮我搜索相关技术资料', '滚动到下一篇推荐']
+    : pageContext.type === 'article'
+      ? ['回到文章列表', '打开这篇文章的下一篇', '搜索类似主题']
+      : ['跳到首页', '打开搜索页', '带我浏览最新一期的文章列表']
+  const emptyPrompts = mode === 'ask' ? askPromptsByType : operatePromptsByType
   // Seed nextId from the restored history. Without this, a fresh mount
   // (page reload / new tab) would restart the counter at 1 even when
   // sessionStorage already contains messages with ids 1..N, causing
