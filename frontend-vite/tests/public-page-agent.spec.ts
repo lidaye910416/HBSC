@@ -762,3 +762,48 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByText(/PageAgent has been disposed/)).toHaveCount(0)
   })
 })
+
+  test('operate-mode: translates "No tool_call" library error into Chinese hint', async ({ page }) => {
+    // Regression: page-agent's execute() returns { success: false, data: <error> }
+    // when the LLM returns no tool_call. Our catch path only fires when execute()
+    // throws, so the upstream error message reached users verbatim. Now we
+    // intercept result.success=false and translate common messages.
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+          system_prompt: '',
+        }),
+      }),
+    )
+    await page.route('**/api/public/agent/llm', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        // Response has no tool_call and message.content is plain text (not JSON),
+        // which triggers normalizeResponse's throw path inside the library.
+        body: JSON.stringify({
+          choices: [{
+            message: { content: '我没法处理这个任务', tool_calls: undefined },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      }),
+    )
+
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.getByTestId('page-agent-input').fill('随便看看')
+    await page.getByTestId('page-agent-mode-operate').click()
+    await page.getByTestId('page-agent-submit-btn').click()
+
+    // The translated Chinese hint should appear.
+    await expect(
+      page.getByText('页面助手暂时无法理解当前任务，请换种描述重试').first(),
+    ).toBeVisible({ timeout: 15_000 })
+  })

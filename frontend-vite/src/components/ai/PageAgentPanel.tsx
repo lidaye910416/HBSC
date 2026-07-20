@@ -283,9 +283,23 @@ export function PageAgentPanel({
         }
       }
       if (reply === null && result) {
-        reply = result.success
-          ? `✅ 已完成：${result.data || '(无详细描述)'}`
-          : `⚠️ 未能完成：${result.data || '任务中断'}`
+        if (result.success) {
+          reply = `✅ 已完成：${result.data || '(无详细描述)'}`
+        } else {
+          // Translate common upstream library errors into user-friendly
+          // Chinese hints. page-agent's `execute()` does NOT throw on
+          // LLM tool_call parse failures — it returns { success: false,
+          // data: <error message> }, so the catch path never fires for
+          // these. We must intercept here.
+          const dataMsg = String(result.data ?? '')
+          if (dataMsg.includes('No tool_call') && dataMsg.includes('valid JSON')) {
+            reply = '⚠️ 页面助手暂时无法理解当前任务，请换种描述重试'
+          } else if (dataMsg.includes('Step count exceeded')) {
+            reply = '⚠️ 页面助手操作步骤过多，已自动中止。请简化任务或分步执行'
+          } else {
+            reply = `⚠️ 未能完成：${result.data || '任务中断'}`
+          }
+        }
       }
       if (reply) {
         if (mySeq !== requestSeqRef.current) {
