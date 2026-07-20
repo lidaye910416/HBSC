@@ -114,7 +114,11 @@ export function PageAgentPanel({
       cancelAnimationFrame(frame)
       window.clearTimeout(fallback)
     }
-  }, [storageKey])
+    // Re-key on routeKey, not on storageKey. Mode switches should preserve
+    // the user's draft input (otherwise typing in ask then switching tabs
+    // wipes the textarea mid-flow). See "operate-mode forwards a URL" e2e.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey])
 
   // Persist chat history to the bucket matching the current mode.
   useEffect(() => {
@@ -183,6 +187,11 @@ export function PageAgentPanel({
     },
   })
 
+  async function send() {
+    if (mode === 'ask') return sendAsk()
+    return sendOperate()
+  }
+
   async function sendAsk() {
     const userText = text.trim()
     if (!userText || chatMut.isPending || operating) return
@@ -190,18 +199,18 @@ export function PageAgentPanel({
     setText('')
     const userId = nextIdRef.current++
     const mySeq = ++requestSeqRef.current
-    setHistory((h) => [...h, { id: userId, role: 'user', content: userText, routeKey }])
+    setHistory((h) => [...h, { id: userId, role: 'user', content: userText, mode: 'ask', routeKey }])
     try {
       const reply = await chatMut.mutateAsync(userText)
       if (mySeq !== requestSeqRef.current) return
-      setHistory((h) => [...h, { id: nextIdRef.current++, role: 'assistant', content: reply, routeKey }])
+      setHistory((h) => [...h, { id: nextIdRef.current++, role: 'assistant', content: reply, mode: 'ask', routeKey }])
     } catch (e) {
       if (mySeq !== requestSeqRef.current) return
       const msg = e instanceof ApiError ? e.message : '调用失败，请稍后重试'
       setError(msg)
       setHistory((h) => [
         ...h,
-        { id: nextIdRef.current++, role: 'assistant', content: '⚠️ ' + msg, routeKey },
+        { id: nextIdRef.current++, role: 'assistant', content: '⚠️ ' + msg, mode: 'ask', routeKey },
       ])
     }
   }
@@ -214,7 +223,7 @@ export function PageAgentPanel({
     setOperating(true)
     const userId = nextIdRef.current++
     const mySeq = ++requestSeqRef.current
-    setHistory((h) => [...h, { id: userId, role: 'user', content: userText, routeKey }])
+    setHistory((h) => [...h, { id: userId, role: 'user', content: userText, mode: 'operate', routeKey }])
     let reply: string | null = null
     try {
       let result

@@ -161,7 +161,7 @@ test.describe('public page-agent FAB', () => {
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('期刊是关于什么的')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
 
     await expect(page.getByText('你好，这里是湖北数创期刊。')).toBeVisible({ timeout: 5_000 })
     expect(executeCalled).toBe(1)
@@ -212,7 +212,7 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByTestId('page-agent-mindmap-hint')).toContainText('思维导图')
     await page.getByTestId('page-agent-input').fill('这篇文章主要讲了什么？')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText('这篇文章介绍了智能体架构。')).toBeVisible()
 
     expect(postedMessages[0]?.role).toBe('system')
@@ -273,7 +273,7 @@ test.describe('public page-agent FAB', () => {
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('旧页面问题')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText('已回答。')).toBeVisible()
 
     await page.getByRole('link', { name: '首页', exact: true }).click()
@@ -281,7 +281,7 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByTestId('page-agent-context')).toContainText('智领AI荆楚新程')
     await page.getByTestId('page-agent-input').fill('新页面问题')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect.poll(() => requests.length).toBe(2)
 
     expect(requests[1]?.[0]?.content).toContain('智领AI荆楚新程')
@@ -312,7 +312,7 @@ test.describe('public page-agent FAB', () => {
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('旧页面慢请求')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect.poll(() => Boolean(releaseResponse)).toBe(true)
 
     await page.getByRole('link', { name: '首页', exact: true }).click()
@@ -352,7 +352,7 @@ test.describe('public page-agent FAB', () => {
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('hi')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText(/请求过于频繁/).first()).toBeVisible({ timeout: 5_000 })
   })
 
@@ -377,7 +377,7 @@ test.describe('public page-agent FAB', () => {
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('hi')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await page.waitForTimeout(2_000)
     expect(foundKeyLeak).toBe(false)
   })
@@ -489,7 +489,7 @@ test.describe('public page-agent FAB', () => {
     // Now send a brand-new message — it must get id=5, not 1.
     await page.getByTestId('page-agent-input').fill('新一轮问题')
     await page.getByTestId('page-agent-mode-ask').click()
-    page.getByTestId('page-agent-submit-btn').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText('新回复。')).toBeVisible({ timeout: 5_000 })
 
     // Drain the event loop so any React warnings surface before we assert.
