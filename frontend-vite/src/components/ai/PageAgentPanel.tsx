@@ -40,6 +40,8 @@ export function PageAgentPanel({
   const [error, setError] = useState<string | null>(null)
   const [operating, setOperating] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
+  const [clearAsk, setClearAsk] = useState(true)
+  const [clearOperate, setClearOperate] = useState(true)
   const bodyRef = useRef<HTMLDivElement>(null)
   const clearCancelRef = useRef<HTMLButtonElement>(null)
   const clearTriggerRef = useRef<HTMLButtonElement>(null)
@@ -144,14 +146,21 @@ export function PageAgentPanel({
   }, [clearOpen, closeClearConfirm])
 
   function handleClearConfirm() {
-    setHistory([])
-    setText('')
-    setError(null)
-    setOperating(false)
+    const cleared: AgentMode[] = []
+    if (clearAsk) cleared.push('ask')
+    if (clearOperate) cleared.push('operate')
+    if (cleared.length === 0) return
     try {
-      sessionStorage.removeItem(storageKey)
+      for (const m of cleared) sessionStorage.removeItem(getStorageKey(routeKey, m))
     } catch {
       /* quota / disabled */
+    }
+    // If current view's bucket was cleared, drop in-memory history too.
+    if (cleared.includes(mode)) {
+      setHistory([])
+      setText('')
+      setError(null)
+      setOperating(false)
     }
     disposeSession()
     // PublicPageAgentMount's auto-recover effect re-creates a fresh agent on
@@ -442,7 +451,25 @@ export function PageAgentPanel({
             <span className={styles.clearIcon} aria-hidden="true"><Trash2 size={17} /></span>
             <div className={styles.clearCopy}>
               <strong id="page-agent-clear-title">清空本次对话？</strong>
-              <p id="page-agent-clear-description">只会删除当前聊天记录，并重置页面助手会话。</p>
+              <p id="page-agent-clear-description">选择要清空的桶；当前模式下的桶被清空时会重置页面助手会话。</p>
+              <label className={styles.clearOption}>
+                <input
+                  type="checkbox"
+                  checked={clearAsk}
+                  onChange={e => setClearAsk(e.target.checked)}
+                  data-testid="page-agent-clear-ask"
+                />
+                清空问答（{history.filter(m => m.mode === 'ask').length} 条）
+              </label>
+              <label className={styles.clearOption}>
+                <input
+                  type="checkbox"
+                  checked={clearOperate}
+                  onChange={e => setClearOperate(e.target.checked)}
+                  data-testid="page-agent-clear-operate"
+                />
+                清空操作（{history.filter(m => m.mode === 'operate').length} 条）
+              </label>
             </div>
             <div className={styles.clearActions}>
               <button ref={clearCancelRef} type="button" className={styles.clearCancel} onClick={closeClearConfirm}>
@@ -452,6 +479,7 @@ export function PageAgentPanel({
                 type="button"
                 className={styles.clearConfirm}
                 onClick={handleClearConfirm}
+                disabled={!clearAsk && !clearOperate}
                 data-testid="page-agent-clear-confirm"
               >
                 清空

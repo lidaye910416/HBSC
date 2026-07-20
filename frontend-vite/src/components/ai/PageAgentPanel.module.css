@@ -210,3 +210,18 @@
   box-shadow: 0 2px 6px rgba(15, 29, 55, 0.12);
 }
 .modeTabActive:hover { color: #fff; background: #18233b; }
+
+.clearOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid #e0e4eb;
+  border-radius: 9px;
+  background: #fafbfd;
+  color: #4a5874;
+  font-size: 12px;
+  cursor: pointer;
+}
+.clearOption input { margin: 0; cursor: pointer; }
