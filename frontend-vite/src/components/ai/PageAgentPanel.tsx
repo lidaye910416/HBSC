@@ -422,7 +422,7 @@ export function PageAgentPanel({
         <div className={styles.actions}>
           <button
             type="button"
-            className={`${styles.btn} ${mode === 'operate' ? styles.btnPrimary : styles.btnSecondary}`}
+            className={`${styles.btn} ${styles.btnGrow} ${mode === 'operate' ? styles.btnPrimary : styles.btnSecondary}`}
             onClick={() => void send()}
             disabled={!text.trim() || chatMut.isPending || operating}
             data-testid="page-agent-submit-btn"
