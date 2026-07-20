@@ -63,7 +63,7 @@ test.describe('public page-agent FAB', () => {
     await expect(fab).toBeVisible({ timeout: 5_000 })
   })
 
-  test('clicking FAB shows dual-mode panel with two buttons', async ({ page }) => {
+  test('clicking FAB shows panel with mode tabs and single submit', async ({ page }) => {
     await page.route('**/api/public/agent/config', (route) =>
       route.fulfill({
         status: 200,
@@ -78,8 +78,11 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await expect(page.getByTestId('page-agent-panel')).toBeVisible()
-    await expect(page.getByTestId('page-agent-ask-btn')).toBeVisible()
-    await expect(page.getByTestId('page-agent-operate-btn')).toBeVisible()
+    await expect(page.getByTestId('page-agent-mode-ask')).toBeVisible()
+    await expect(page.getByTestId('page-agent-mode-operate')).toBeVisible()
+    await expect(page.getByTestId('page-agent-mode-ask')).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByTestId('page-agent-mode-operate')).toHaveAttribute('aria-selected', 'false')
+    await expect(page.getByTestId('page-agent-submit-btn')).toBeVisible()
   })
 
   test('clear confirmation stays compact inside the assistant panel', async ({ page }) => {
@@ -117,7 +120,7 @@ test.describe('public page-agent FAB', () => {
     await expect(clearButton).toBeFocused()
   })
 
-  test('chat-mode submit posts to /api/public/agent/execute', async ({ page }) => {
+  test('chat-mode submit (ask tab) posts to /api/public/agent/execute', async ({ page }) => {
     let executeCalled = 0
     let llmCalled = 0
 
@@ -157,7 +160,8 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('期刊是关于什么的')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
 
     await expect(page.getByText('你好，这里是湖北数创期刊。')).toBeVisible({ timeout: 5_000 })
     expect(executeCalled).toBe(1)
@@ -207,7 +211,8 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByTestId('page-agent-context')).toContainText('智能体系统架构解析')
     await expect(page.getByTestId('page-agent-mindmap-hint')).toContainText('思维导图')
     await page.getByTestId('page-agent-input').fill('这篇文章主要讲了什么？')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText('这篇文章介绍了智能体架构。')).toBeVisible()
 
     expect(postedMessages[0]?.role).toBe('system')
@@ -267,14 +272,16 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/about')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('旧页面问题')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText('已回答。')).toBeVisible()
 
     await page.getByRole('link', { name: '首页', exact: true }).click()
     await expect(page).toHaveURL('/')
     await expect(page.getByTestId('page-agent-context')).toContainText('智领AI荆楚新程')
     await page.getByTestId('page-agent-input').fill('新页面问题')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await expect.poll(() => requests.length).toBe(2)
 
     expect(requests[1]?.[0]?.content).toContain('智领AI荆楚新程')
@@ -304,7 +311,8 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/about')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('旧页面慢请求')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await expect.poll(() => Boolean(releaseResponse)).toBe(true)
 
     await page.getByRole('link', { name: '首页', exact: true }).click()
@@ -343,7 +351,8 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('hi')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText(/请求过于频繁/).first()).toBeVisible({ timeout: 5_000 })
   })
 
@@ -367,7 +376,8 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('hi')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await page.waitForTimeout(2_000)
     expect(foundKeyLeak).toBe(false)
   })
@@ -417,7 +427,8 @@ test.describe('public page-agent FAB', () => {
     await page.goto('/')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-input').fill('随便看看')
-    await page.getByTestId('page-agent-operate-btn').click()
+    await page.getByTestId('page-agent-mode-operate').click()
+    await page.getByTestId('page-agent-submit-btn').click()
 
     await expect.poll(() => capturedUrl, { timeout: 5_000 }).not.toBeNull()
     expect(capturedUrl).toBe('https://api.deepseek.com/v1/chat/completions')
@@ -477,7 +488,8 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByText('旧答 2')).toBeVisible()
     // Now send a brand-new message — it must get id=5, not 1.
     await page.getByTestId('page-agent-input').fill('新一轮问题')
-    await page.getByTestId('page-agent-ask-btn').click()
+    await page.getByTestId('page-agent-mode-ask').click()
+    page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText('新回复。')).toBeVisible({ timeout: 5_000 })
 
     // Drain the event loop so any React warnings surface before we assert.
@@ -543,7 +555,8 @@ test.describe('public page-agent FAB', () => {
     // With the FIX, the agent is the same instance across refetches.
     for (let i = 1; i <= 2; i++) {
       await page.getByTestId('page-agent-input').fill(`第${i}条任务`)
-      await page.getByTestId('page-agent-operate-btn').click()
+      await page.getByTestId('page-agent-mode-operate').click()
+    await page.getByTestId('page-agent-submit-btn').click()
       // Wait for the agent to settle (LLM round-trips, retries, chat write).
       await page.waitForTimeout(2_500)
 
@@ -627,7 +640,8 @@ test.describe('public page-agent FAB', () => {
 
     // First operate: should succeed
     await page.getByTestId('page-agent-input').fill('第一轮')
-    await page.getByTestId('page-agent-operate-btn').click()
+    await page.getByTestId('page-agent-mode-operate').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText(/已完成/).first()).toBeVisible({ timeout: 8_000 })
 
     // Force the dispose — this is what HMR / component remount would do.
@@ -651,7 +665,8 @@ test.describe('public page-agent FAB', () => {
     // sendOperate catches the disposed error, polls acquire() a few
     // times to ride out transient races, and retries — so it succeeds.
     await page.getByTestId('page-agent-input').fill('第二轮')
-    await page.getByTestId('page-agent-operate-btn').click()
+    await page.getByTestId('page-agent-mode-operate').click()
+    await page.getByTestId('page-agent-submit-btn').click()
     await expect(page.getByText(/已完成/).first()).toBeVisible({ timeout: 8_000 })
     // Two "已完成" messages should now exist in the chat history
     await expect(page.getByText(/已完成/)).toHaveCount(2, { timeout: 5_000 })
@@ -737,7 +752,8 @@ test.describe('public page-agent FAB', () => {
       .or(page.getByRole('button', { name: '这个页面主要提供什么内容？' }))
       .first()
       .click()
-    await page.getByTestId('page-agent-operate-btn').click()
+    await page.getByTestId('page-agent-mode-operate').click()
+    await page.getByTestId('page-agent-submit-btn').click()
 
     // The panel must show a success bubble, not a misleading refresh
     // toast. (Page-agent may take a few seconds for the LLM round-trip.)
