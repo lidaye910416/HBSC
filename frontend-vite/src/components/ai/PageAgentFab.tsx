@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react'
+import { ArrowUpRight, Bot } from 'lucide-react'
 import styles from './PageAgentFab.module.css'
 
 export function PageAgentFab({ onClick }: { onClick: () => void }) {
@@ -8,16 +8,18 @@ export function PageAgentFab({ onClick }: { onClick: () => void }) {
       className={styles.fab}
       onClick={onClick}
       aria-label="打开 page-agent AI 助手"
-      title="AI 导航 · 问我或让他操作页面"
+      title="数创智伴 · 读懂本页或协助操作"
       data-testid="page-agent-fab"
     >
       <span className={styles.iconWrap} aria-hidden="true">
-        <Sparkles size={18} />
+        <Bot size={18} />
+        <span className={styles.statusDot} />
       </span>
       <span className={styles.text}>
-        <span className={styles.textMain}>AI 导航</span>
-        <span className={styles.textSub}>问我 · 让他操作</span>
+        <span className={styles.textMain}>数创智伴</span>
+        <span className={styles.textSub}>读懂本页 · 协助操作</span>
       </span>
+      <ArrowUpRight size={15} className={styles.arrow} aria-hidden="true" />
     </button>
   )
 }

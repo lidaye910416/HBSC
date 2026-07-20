@@ -123,3 +123,11 @@ export default function App() {
     </QueryClientProvider>
   )
 }
+
+// Test-only handle for the E2E suite to trigger an explicit refetch. The
+// `__hbsc_query` key matches the one used in public-page-agent.spec.ts; the
+// hook is a no-op in production builds because no production code reads it.
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ;(globalThis as unknown as { __hbsc_query?: QueryClient }).__hbsc_query = queryClient
+}

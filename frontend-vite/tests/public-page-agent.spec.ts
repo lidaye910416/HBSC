@@ -1,15 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('public page-agent FAB', () => {
-  test('FAB uses page-coordinated light glassy style', async ({ page }) => {
-    // Regression: the FAB used to be a heavy dark-ink gradient that broke
-    // visual continuity with the warm-white content pages. After the style
-    // refresh it must:
-    //  - have a translucent (alpha < 1) background — glassy, not solid
-    //  - sit on top of `backdrop-filter: blur(...)` — verified by reading
-    //    the computed style on the FAB element itself
-    //  - show the gold-accent border with high enough alpha to be visible
-    //    on the warm-white page background
+  test('FAB uses page-capability dark glass style', async ({ page }) => {
     await page.route('**/api/public/agent/config', (route) =>
       route.fulfill({
         status: 200,
@@ -35,24 +27,22 @@ test.describe('public page-agent FAB', () => {
       }
     })
 
-    // Translucent background: alpha channel < 1
+    // Dark translucent navy surface: glassy, but visually tied to the site hero.
     const bg = styles.backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1]?.split(',').map((s) => s.trim()) ?? []
     const alpha = bg.length === 4 ? parseFloat(bg[3]) : 1
     expect(alpha, 'FAB background must be translucent').toBeLessThan(1)
+    expect(Number(bg[2]), 'FAB blue channel should dominate its dark navy surface').toBeGreaterThan(Number(bg[0]))
 
     // Backdrop blur must be present (24px in the spec)
     expect(styles.backdropFilter, 'FAB must use backdrop-filter blur').toMatch(/blur\(/)
 
-    // Gold border (#C9A84C) must be present — RGB ≈ 201, 168, 76
-    const border = styles.borderColor.match(/rgba?\(([^)]+)\)/)?.[1]?.split(',').map((s) => s.trim()) ?? []
-    expect(border[0]).toBe('201')
-    expect(border[1]).toBe('168')
-
-    // Text colour must be deep ink (#1A1A2E = 26, 26, 46), not warm-white
+    // Text stays light against the dark surface.
     const text = styles.color.match(/rgba?\(([^)]+)\)/)?.[1]?.split(',').map((s) => s.trim()) ?? []
-    expect(text[0]).toBe('26')
-    expect(text[1]).toBe('26')
-    expect(text[2]).toBe('46')
+    expect(Number(text[0])).toBeGreaterThan(230)
+    expect(Number(text[1])).toBeGreaterThan(230)
+    expect(Number(text[2])).toBeGreaterThan(230)
+    await expect(fab).toContainText('数创智伴')
+    await expect(fab).toContainText('读懂本页 · 协助操作')
   })
 
   test('FAB appears on homepage after admin enables + key is set', async ({ page }) => {
@@ -90,6 +80,41 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByTestId('page-agent-panel')).toBeVisible()
     await expect(page.getByTestId('page-agent-ask-btn')).toBeVisible()
     await expect(page.getByTestId('page-agent-operate-btn')).toBeVisible()
+  })
+
+  test('clear confirmation stays compact inside the assistant panel', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+        }),
+      }),
+    )
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.getByTestId('page-agent-clear-btn').click()
+
+    const panel = page.getByTestId('page-agent-panel')
+    const clearButton = page.getByTestId('page-agent-clear-btn')
+    const confirm = page.getByTestId('page-agent-clear-confirm-card')
+    await expect(confirm).toBeVisible()
+    await expect(confirm).toContainText('清空本次对话？')
+    await expect(confirm).toHaveAttribute('aria-modal', 'true')
+    await expect(page.getByRole('button', { name: '取消' })).toBeFocused()
+    expect(await panel.locator('[data-testid="page-agent-clear-confirm-card"]').count()).toBe(1)
+
+    const panelBox = await panel.boundingBox()
+    const confirmBox = await confirm.boundingBox()
+    expect(confirmBox?.width).toBeLessThan(panelBox?.width ?? 0)
+    await expect(page.locator('[role="dialog"][aria-label="清空上下文"]')).toHaveCount(0)
+
+    await page.keyboard.press('Escape')
+    await expect(confirm).toHaveCount(0)
+    await expect(clearButton).toBeFocused()
   })
 
   test('chat-mode submit posts to /api/public/agent/execute', async ({ page }) => {
@@ -137,6 +162,161 @@ test.describe('public page-agent FAB', () => {
     await expect(page.getByText('你好，这里是湖北数创期刊。')).toBeVisible({ timeout: 5_000 })
     expect(executeCalled).toBe(1)
     expect(llmCalled).toBe(0)   // chat path must NOT call /agent/llm
+  })
+
+  test('current article context is sent with chat and suggests a mind map', async ({ page }) => {
+    let postedMessages: Array<{ role: string; content: string }> = []
+
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+        }),
+      }),
+    )
+    await page.route('**/api/public/agent/execute', async (route) => {
+      postedMessages = (await route.request().postDataJSON()).messages
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ content: '这篇文章介绍了智能体架构。' }),
+      })
+    })
+
+    await page.goto('/')
+    await page.evaluate(() => {
+      document.title = '智能体系统架构解析 | 湖北数创'
+      history.replaceState({}, '', '/articles/agent-architecture')
+      const main = document.querySelector('main') ?? document.body
+      main.innerHTML = `
+        <article class="article-detail__main">
+          <h1>智能体系统架构解析</h1>
+          <div class="article-detail__content">
+            <h2>多智能体协作机制</h2>
+            <p>本文分析规划器、执行器、工具调用与长期记忆之间的数据流和关键技术实现。</p>
+          </div>
+        </article>
+      `
+    })
+
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await expect(page.getByTestId('page-agent-context')).toContainText('智能体系统架构解析')
+    await expect(page.getByTestId('page-agent-mindmap-hint')).toContainText('思维导图')
+    await page.getByTestId('page-agent-input').fill('这篇文章主要讲了什么？')
+    await page.getByTestId('page-agent-ask-btn').click()
+    await expect(page.getByText('这篇文章介绍了智能体架构。')).toBeVisible()
+
+    expect(postedMessages[0]?.role).toBe('system')
+    expect(postedMessages[0]?.content).toContain('当前页面类型：技术文章')
+    expect(postedMessages[0]?.content).toContain('智能体系统架构解析')
+    expect(postedMessages[0]?.content).toContain('/articles/agent-architecture')
+    expect(postedMessages[0]?.content).toContain('规划器、执行器、工具调用与长期记忆')
+    expect(postedMessages[0]?.content).toContain('主动提示可绘制思维导图')
+  })
+
+  test('late page content refreshes the assistant context', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com/v1' }),
+      }),
+    )
+
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await expect(page.getByTestId('page-agent-context')).toContainText('智领AI荆楚新程')
+    await page.waitForTimeout(500)
+
+    await page.evaluate(() => {
+      const main = document.querySelector('main') ?? document.body
+      main.innerHTML = `
+        <article>
+          <h1>异步加载的智能体技术文章</h1>
+          <div class="article-detail__content">正文在页面助手打开后才完成加载。</div>
+        </article>
+      `
+    })
+
+    await expect(page.getByTestId('page-agent-context')).toContainText('异步加载的智能体技术文章')
+    await expect(page.getByTestId('page-agent-mindmap-hint')).toBeVisible()
+  })
+
+  test('route change refreshes page context and excludes previous-page history', async ({ page }) => {
+    const requests: Array<Array<{ role: string; content: string }>> = []
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com/v1' }),
+      }),
+    )
+    await page.route('**/api/public/agent/execute', async (route) => {
+      requests.push((await route.request().postDataJSON()).messages)
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ content: '已回答。' }),
+      })
+    })
+
+    await page.goto('/about')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.getByTestId('page-agent-input').fill('旧页面问题')
+    await page.getByTestId('page-agent-ask-btn').click()
+    await expect(page.getByText('已回答。')).toBeVisible()
+
+    await page.getByRole('link', { name: '首页', exact: true }).click()
+    await expect(page).toHaveURL('/')
+    await expect(page.getByTestId('page-agent-context')).toContainText('智领AI荆楚新程')
+    await page.getByTestId('page-agent-input').fill('新页面问题')
+    await page.getByTestId('page-agent-ask-btn').click()
+    await expect.poll(() => requests.length).toBe(2)
+
+    expect(requests[1]?.[0]?.content).toContain('智领AI荆楚新程')
+    expect(requests[1]?.some((message) => message.content.includes('旧页面问题'))).toBe(false)
+  })
+
+  test('slow chat response does not leak into the next route', async ({ page }) => {
+    let releaseResponse: (() => void) | undefined
+    let responseSent = false
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com/v1' }),
+      }),
+    )
+    await page.route('**/api/public/agent/execute', async (route) => {
+      await new Promise<void>((resolve) => { releaseResponse = resolve })
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ content: '旧页面回复' }),
+      })
+      responseSent = true
+    })
+
+    await page.goto('/about')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.getByTestId('page-agent-input').fill('旧页面慢请求')
+    await page.getByTestId('page-agent-ask-btn').click()
+    await expect.poll(() => Boolean(releaseResponse)).toBe(true)
+
+    await page.getByRole('link', { name: '首页', exact: true }).click()
+    await expect(page).toHaveURL('/')
+    releaseResponse?.()
+    await expect.poll(() => responseSent).toBe(true)
+
+    await expect(page.getByText('旧页面回复')).toHaveCount(0)
+    const currentHistory = await page.evaluate(() =>
+      sessionStorage.getItem('hbsc.page-agent.chat.history:/') ?? '',
+    )
+    expect(currentHistory).not.toContain('旧页面回复')
   })
 
   test('chat-mode failure surfaces inline error toast', async ({ page }) => {
@@ -552,7 +732,11 @@ test.describe('public page-agent FAB', () => {
 
     // Click the empty-prompt chip — this is the exact path the user
     // took when they reported the bug.
-    await page.getByRole('button', { name: '帮我跳到最新一期的文章列表' }).click()
+    await page
+      .getByRole('button', { name: '带我浏览当前页面' })
+      .or(page.getByRole('button', { name: '这个页面主要提供什么内容？' }))
+      .first()
+      .click()
     await page.getByTestId('page-agent-operate-btn').click()
 
     // The panel must show a success bubble, not a misleading refresh

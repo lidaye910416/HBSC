@@ -1,32 +1,30 @@
-import { useEffect, useRef, useState } from 'react'
-import { Loader2, MessageSquare, Sparkles, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Bot, BrainCircuit, Loader2, MessageSquareText, MousePointerClick, Trash2, X } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../services/api'
 import { PageAgent } from 'page-agent'
 import { acquire, disposeSession, isRecoverableDisposedError } from '../../lib/pageAgentSession'
-import { Modal } from '../ui/Modal'
+import { buildPageContextMessage, collectPageContext } from './pageContext'
+import type { PageContext } from './pageContext'
 import styles from './PageAgentPanel.module.css'
 
-type UiMessage = { id: number; role: 'user' | 'assistant'; content: string }
+type UiMessage = { id: number; role: 'user' | 'assistant'; content: string; routeKey?: string }
 
 const STORAGE_KEY = 'hbsc.page-agent.chat.history'
 
-const EMPTY_PROMPTS: string[] = [
-  '介绍一下湖北数创期刊',
-  '帮我跳到最新一期的文章列表',
-  '搜索关键词 "复杂系统"',
-]
-
 export function PageAgentPanel({
   agent,
+  routeKey,
   onClose,
 }: {
   agent: PageAgent
+  routeKey: string
   onClose: () => void
 }) {
+  const storageKey = `${STORAGE_KEY}:${routeKey}`
   const [history, setHistory] = useState<UiMessage[]>(() => {
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY)
+      const raw = sessionStorage.getItem(storageKey) ?? sessionStorage.getItem(STORAGE_KEY)
       if (raw) return JSON.parse(raw) as UiMessage[]
     } catch {
       /* fall through */
@@ -36,7 +34,18 @@ export function PageAgentPanel({
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [operating, setOperating] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const clearCancelRef = useRef<HTMLButtonElement>(null)
+  const clearTriggerRef = useRef<HTMLButtonElement>(null)
+  const [pageContext, setPageContext] = useState<PageContext>(() =>
+    collectPageContext(document, window.location),
+  )
+  const emptyPrompts = pageContext.type === 'technical-article'
+    ? ['概括这篇文章的核心观点', '解释文章中的关键技术', '为这篇文章整理思维导图']
+    : pageContext.type === 'article'
+      ? ['概括这篇文章', '提炼文章的主要观点', '解释本页的重要内容']
+      : ['这个页面主要提供什么内容？', '帮我找到本页的重点', '带我浏览当前页面']
   // Seed nextId from the restored history. Without this, a fresh mount
   // (page reload / new tab) would restart the counter at 1 even when
   // sessionStorage already contains messages with ids 1..N, causing
@@ -49,22 +58,86 @@ export function PageAgentPanel({
       : 1
   )
 
+  const closeClearConfirm = useCallback(() => {
+    setClearOpen(false)
+    clearTriggerRef.current?.focus()
+  }, [])
+
+  // In-flight request guard. A slow chat/operate response must never appear
+  // on a route the user has since navigated away from. routeKey acts as a
+  // generation counter; the latest in-flight captures it and the completion
+  // callbacks ignore updates that no longer match.
+  const requestSeqRef = useRef(0)
+
+  useEffect(() => {
+    // Bump the request generation so any in-flight chat/operate response
+    // from a previous route is dropped. We do this here, in the same effect
+    // that re-keys history, so route changes and re-key happen together.
+    requestSeqRef.current++
+    let observer: MutationObserver | null = null
+    let frame = 0
+    const refreshContext = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        setPageContext(collectPageContext(document, window.location))
+      })
+    }
+    observer = new MutationObserver(refreshContext)
+    const appContent = document.querySelector<HTMLElement>('main') ?? document.body
+    observer.observe(appContent, { childList: true, subtree: true })
+    refreshContext()
+    const fallback = window.setTimeout(refreshContext, 400)
+    let nextHistory: UiMessage[] = []
+    // Migration shim: a prior version of the panel persisted under the
+    // global `STORAGE_KEY`. If a per-route entry is empty, adopt the
+    // legacy history so a returning user does not lose their first
+    // conversation. The persist effect below will rewrite the per-route
+    // key and clear the legacy entry on the next save.
+    try {
+      const raw = sessionStorage.getItem(storageKey) ?? sessionStorage.getItem(STORAGE_KEY)
+      if (raw) nextHistory = JSON.parse(raw) as UiMessage[]
+    } catch {
+      /* fall through */
+    }
+    setHistory(nextHistory)
+    nextIdRef.current = nextHistory.length > 0
+      ? nextHistory.reduce((max, message) => Math.max(max, message.id), 0) + 1
+      : 1
+    setText('')
+    setError(null)
+    setClearOpen(false)
+    return () => {
+      observer?.disconnect()
+      cancelAnimationFrame(frame)
+      window.clearTimeout(fallback)
+    }
+  }, [storageKey])
+
   // Persist chat history.
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(history))
+      sessionStorage.setItem(storageKey, JSON.stringify(history))
+      sessionStorage.removeItem(STORAGE_KEY)
     } catch {
       /* quota / disabled */
     }
-  }, [history])
+  }, [history, storageKey])
 
   // Auto-scroll on new message.
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [history, operating])
 
-  // Clear-context confirmation modal.
-  const [clearOpen, setClearOpen] = useState(false)
+  // Keep the compact in-panel confirmation keyboard-accessible.
+  useEffect(() => {
+    if (!clearOpen) return
+    clearCancelRef.current?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeClearConfirm()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [clearOpen, closeClearConfirm])
 
   function handleClearConfirm() {
     setHistory([])
@@ -72,7 +145,7 @@ export function PageAgentPanel({
     setError(null)
     setOperating(false)
     try {
-      sessionStorage.removeItem(STORAGE_KEY)
+      sessionStorage.removeItem(storageKey)
     } catch {
       /* quota / disabled */
     }
@@ -85,8 +158,11 @@ export function PageAgentPanel({
   // Chat-mode mutation: hits /api/public/agent/execute.
   const chatMut = useMutation({
     mutationFn: async (userText: string): Promise<string> => {
-      const priorMessages = history.map((m) => ({ role: m.role, content: m.content }))
+      const priorMessages = history
+        .filter((message) => !message.routeKey || message.routeKey === routeKey)
+        .map((message) => ({ role: message.role, content: message.content }))
       const r = await api.public.agent.execute([
+        { role: 'system', content: buildPageContextMessage(pageContext) },
         ...priorMessages,
         { role: 'user', content: userText },
       ])
@@ -100,16 +176,19 @@ export function PageAgentPanel({
     setError(null)
     setText('')
     const userId = nextIdRef.current++
-    setHistory((h) => [...h, { id: userId, role: 'user', content: userText }])
+    const mySeq = ++requestSeqRef.current
+    setHistory((h) => [...h, { id: userId, role: 'user', content: userText, routeKey }])
     try {
       const reply = await chatMut.mutateAsync(userText)
-      setHistory((h) => [...h, { id: nextIdRef.current++, role: 'assistant', content: reply }])
+      if (mySeq !== requestSeqRef.current) return
+      setHistory((h) => [...h, { id: nextIdRef.current++, role: 'assistant', content: reply, routeKey }])
     } catch (e) {
+      if (mySeq !== requestSeqRef.current) return
       const msg = e instanceof ApiError ? e.message : '调用失败，请稍后重试'
       setError(msg)
       setHistory((h) => [
         ...h,
-        { id: nextIdRef.current++, role: 'assistant', content: '⚠️ ' + msg },
+        { id: nextIdRef.current++, role: 'assistant', content: '⚠️ ' + msg, routeKey },
       ])
     }
   }
@@ -121,7 +200,8 @@ export function PageAgentPanel({
     setText('')
     setOperating(true)
     const userId = nextIdRef.current++
-    setHistory((h) => [...h, { id: userId, role: 'user', content: userText }])
+    const mySeq = ++requestSeqRef.current
+    setHistory((h) => [...h, { id: userId, role: 'user', content: userText, routeKey }])
     let reply: string | null = null
     try {
       let result
@@ -177,10 +257,14 @@ export function PageAgentPanel({
           : `⚠️ 未能完成：${result.data || '任务中断'}`
       }
       if (reply) {
+        if (mySeq !== requestSeqRef.current) {
+          setOperating(false)
+          return
+        }
         setError(reply.startsWith('⚠️') ? reply.slice(2) : null)
         setHistory((h) => [
           ...h,
-          { id: nextIdRef.current++, role: 'assistant', content: reply! },
+          { id: nextIdRef.current++, role: 'assistant', content: reply!, routeKey },
         ])
       }
     } finally {
@@ -199,9 +283,11 @@ export function PageAgentPanel({
     <div className={styles.root} role="dialog" aria-label="AI 助手" data-testid="page-agent-panel">
       <div className={styles.header}>
         <div className={styles.brand}>
-          <Sparkles size={16} color="#C9A84C" aria-hidden="true" />
-          <span className={styles.brandDot} aria-hidden="true" />
-          AI 助手 · 湖北数创
+          <span className={styles.brandIcon} aria-hidden="true"><Bot size={17} /></span>
+          <span>
+            <strong>数创智伴</strong>
+            <small>读懂本页 · 协助操作</small>
+          </span>
         </div>
         <button
           type="button"
@@ -213,13 +299,26 @@ export function PageAgentPanel({
         </button>
       </div>
 
+      <div className={styles.contextBar} data-testid="page-agent-context">
+        <span className={styles.contextPulse} aria-hidden="true" />
+        <span><small>正在理解</small><strong>{pageContext.title}</strong></span>
+        <span className={styles.contextType}>{pageContext.typeLabel}</span>
+      </div>
+
       <div className={styles.body} ref={bodyRef} data-testid="page-agent-body">
         {history.length === 0 && !operating && (
           <div className={styles.empty}>
-            <Sparkles size={28} color="#C9A84C" aria-hidden="true" />
-            <div>你好，我是 Hubei Guide。可以直接问我问题，或让我帮你操作页面。</div>
+            <span className={styles.emptyIcon} aria-hidden="true"><BrainCircuit size={26} /></span>
+            <strong>我是数创智伴，已读完当前页面</strong>
+            <div>你可以直接询问本页内容，也可以让我点击、搜索或跳转页面。</div>
+            {pageContext.isTechnicalArticle && (
+              <div className={styles.mindmapHint} data-testid="page-agent-mindmap-hint">
+                <BrainCircuit size={15} aria-hidden="true" />
+                技术内容较多，我也可以为你绘制思维导图，帮助梳理结构。
+              </div>
+            )}
             <div className={styles.emptyPrompts}>
-              {EMPTY_PROMPTS.map((p) => (
+              {emptyPrompts.map((p) => (
                 <button
                   type="button"
                   key={p}
@@ -258,7 +357,7 @@ export function PageAgentPanel({
       <div className={styles.footer}>
         <textarea
           className={styles.textarea}
-          placeholder="问我一个问题，或描述你想在页面上做的事……"
+          placeholder="问当前页面，或描述想执行的操作…"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
@@ -274,8 +373,8 @@ export function PageAgentPanel({
             disabled={!text.trim() || chatMut.isPending || operating}
             data-testid="page-agent-ask-btn"
           >
-            <MessageSquare size={14} />
-            问他
+            <MessageSquareText size={15} />
+            问当前页
           </button>
           <button
             type="button"
@@ -284,50 +383,56 @@ export function PageAgentPanel({
             disabled={!text.trim() || chatMut.isPending || operating}
             data-testid="page-agent-operate-btn"
           >
-            <Sparkles size={14} />
-            让他操作
+            <MousePointerClick size={15} />
+            执行操作
           </button>
           <button
+            ref={clearTriggerRef}
             type="button"
             className={`${styles.btn} ${styles.btnGhost}`}
             onClick={() => setClearOpen(true)}
             disabled={operating || chatMut.isPending}
             aria-label="清空上下文"
+            title="清空本次对话"
             data-testid="page-agent-clear-btn"
           >
             <Trash2 size={14} />
-            清空
           </button>
         </div>
       </div>
 
-      <Modal
-        open={clearOpen}
-        onClose={() => setClearOpen(false)}
-        title="清空上下文"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnSecondary}`}
-              onClick={() => setClearOpen(false)}
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={handleClearConfirm}
-              data-testid="page-agent-clear-confirm"
-            >
-              确认清空
-            </button>
-          </>
-        }
-      >
-        <p>确定要清空上下文吗？这将清除当前对话和 LLM 的记忆，无法撤销。</p>
-      </Modal>
+      {clearOpen && (
+        <div className={styles.clearLayer} onClick={closeClearConfirm}>
+          <section
+            className={styles.clearCard}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="page-agent-clear-title"
+            aria-describedby="page-agent-clear-description"
+            data-testid="page-agent-clear-confirm-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className={styles.clearIcon} aria-hidden="true"><Trash2 size={17} /></span>
+            <div className={styles.clearCopy}>
+              <strong id="page-agent-clear-title">清空本次对话？</strong>
+              <p id="page-agent-clear-description">只会删除当前聊天记录，并重置页面助手会话。</p>
+            </div>
+            <div className={styles.clearActions}>
+              <button ref={clearCancelRef} type="button" className={styles.clearCancel} onClick={closeClearConfirm}>
+                取消
+              </button>
+              <button
+                type="button"
+                className={styles.clearConfirm}
+                onClick={handleClearConfirm}
+                data-testid="page-agent-clear-confirm"
+              >
+                清空
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

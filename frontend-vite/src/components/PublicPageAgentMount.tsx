@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { PageAgent } from 'page-agent'
+import { useLocation } from 'react-router-dom'
 
 import { api } from '../services/api'
 import {
@@ -15,6 +16,7 @@ import { PageAgentFab } from './ai/PageAgentFab'
 import { PageAgentPanel } from './ai/PageAgentPanel'
 
 export function PublicPageAgentMount() {
+  const location = useLocation()
   const configQ = useQuery({
     queryKey: ['public', 'agent', 'config'],
     queryFn: () => api.public.agent.config(),
@@ -41,16 +43,19 @@ export function PublicPageAgentMount() {
   // Re-render when the session changes (e.g., dispose + recreate).
   const liveAgent = useSyncExternalStore(subscribe, getCurrent, () => null)
   const [panelOpen, setPanelOpen] = useState(false)
-  // Keep the last-known live agent in a ref so the panel can keep
+  // Keep the last-known live agent in state so the panel can keep
   // rendering across the brief window where the session was disposed
   // and a new one is being constructed. The panel's own sendOperate
   // catch-block handles the "disposed" error and requests a fresh
   // agent via acquire() if the held prop is stale.
-  const lastAgentRef = useRef<PageAgent | null>(null)
+  const [lastAgent, setLastAgent] = useState<PageAgent | null>(null)
   useEffect(() => {
-    if (liveAgent) lastAgentRef.current = liveAgent
+    if (liveAgent) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastAgent(liveAgent)
+    }
   }, [liveAgent])
-  const renderAgent = liveAgent ?? lastAgentRef.current
+  const renderAgent = liveAgent ?? lastAgent
 
   // Auto-recover: if the session was disposed while the FAB/panel is
   // still mounted (HMR reload, dev hot update, explicit reset), kick
@@ -69,6 +74,7 @@ export function PublicPageAgentMount() {
       {panelOpen && (
         <PageAgentPanel
           agent={renderAgent}
+          routeKey={`${location.pathname}${location.search}`}
           onClose={() => setPanelOpen(false)}
         />
       )}
@@ -76,6 +82,6 @@ export function PublicPageAgentMount() {
   )
 }
 
-// Re-export disposeSession for any future "close FAB for good" UI
-// (not currently wired; the FAB stays available until beforeunload).
-export { disposeSession }
+// Re-export disposeSession for any future "close FAB for good" UI.
+// (Not currently wired; the FAB stays available until beforeunload.)
+void disposeSession
