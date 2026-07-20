@@ -393,7 +393,7 @@ export function PageAgentPanel({
       <div className={styles.footer}>
         <textarea
           className={styles.textarea}
-          placeholder="问当前页面，或描述想执行的操作…"
+          placeholder={mode === 'ask' ? '问一个关于本页的问题…' : '描述想让我做的事，如「跳到搜索页」…'}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
@@ -404,23 +404,14 @@ export function PageAgentPanel({
         <div className={styles.actions}>
           <button
             type="button"
-            className={`${styles.btn} ${styles.btnSecondary}`}
+            className={`${styles.btn} ${mode === 'operate' ? styles.btnPrimary : styles.btnSecondary}`}
             onClick={() => void send()}
             disabled={!text.trim() || chatMut.isPending || operating}
-            data-testid="page-agent-ask-btn"
+            data-testid="page-agent-submit-btn"
           >
-            <MessageSquareText size={15} />
-            问当前页
-          </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => void sendOperate()}
-            disabled={!text.trim() || chatMut.isPending || operating}
-            data-testid="page-agent-operate-btn"
-          >
-            <MousePointerClick size={15} />
-            执行操作
+            {mode === 'ask'
+              ? <><BookOpen size={15} /> 提问</>
+              : <><MousePointerClick size={15} /> 执行</>}
           </button>
           <button
             ref={clearTriggerRef}
