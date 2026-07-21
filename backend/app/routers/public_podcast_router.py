@@ -1,52 +1,72 @@
 """Public podcast proxy for the 数创智伴 FAB 「播一下」 tab.
 
-NO admin auth — this router is intended for anonymous visitors of the public
-site. It proxies three MiniCast endpoints (extract / generate-script /
-synthesize / jobs/{id}/download) behind a single hbsc-friendly API and
-exposes a /config endpoint that the frontend FAB uses as a visibility gate.
+Routes anonymous visitors through a single hbsc-friendly API and
+exposes a /config endpoint that the frontend FAB uses as a visibility
+gate.
+
+Two operating modes — chosen via the ``HBSC_PODCAST_ISOLATED`` env var
+(default ``true``):
+
+* **Isolated (default)** — hbsc never talks to the upstream MiniCast
+  service. The full pipeline runs locally: extract → LLM-rewrite script
+  → edge-tts per-segment mp3 → ffmpeg concat → SRT. This is the mode
+  required by the project's "physical isolation from MiniCast" rule.
+
+* **Upstream** — preserves the original MiniCast proxy behaviour for
+  deployments that want hbsc to delegate to a MiniCast instance on a
+  trusted network. Off by default; enable with
+  ``HBSC_PODCAST_ISOLATED=false``.
 
 Design contract — see
   docs/superpowers/specs/2026-07-20-fab-podcast-mode-design.md
 
 Why a separate router (and not just adding to public_agent_router)?
-- Different upstream (MiniCast) and different failure modes (network timeout
-  vs LLM error) deserve their own error envelopes and rate-limit buckets.
-- MiniCast is OPTIONAL infrastructure — the FAB degrades gracefully when
-  this router returns 503 minicast_unavailable, but the page-agent tab
-  still works because it has its own router.
+- Different upstream (MiniCast) and different failure modes (network
+  timeout vs LLM error) deserve their own error envelopes and rate-limit
+  buckets.
+- MiniCast is OPTIONAL infrastructure — when isolated, the FAB works
+  fully on hbsc's own compute. The page-agent tab still uses its own
+  router.
 
 Security guards (mirror public_agent_router):
 - Never log or echo API keys / Authorization headers from upstream.
 - Body cap (256 KB) at raw request layer.
-- URL allow-list on /extract — only hbsc own URLs may be ingested via the
-  FAB (SSRF guard). Other URLs are refused with 403 not_allowed_url.
-- Rate limit: 12 / minute per IP (each /generate = 3 MiniCast calls; this
+- URL allow-list on /extract — only hbsc own URLs may be ingested via
+  the FAB (SSRF guard). Other URLs are refused with 403
+  not_allowed_url.
+- Rate limit: 12 / minute per IP (each /generate = 3 upstream calls;
   leaves room for ~4 consecutive attempts before throttling).
-- MiniCast unreachable → 503 minicast_unavailable with a hint pointing to
-  the full /labs/minicast/?embed=1 workbench as fallback.
 
 Admin-managed settings (read here, written via /api/admin/settings):
-- podcast.enabled               (boolean: FAB visibility gate)
-- podcast.minicast_base_url     (default: http://127.0.0.1:8000)
+- podcast.enabled                (boolean: FAB visibility gate)
+- podcast.minicast_base_url      (upstream mode only; ignored when
+                                  isolated — kept for back-compat)
 """
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Optional
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.admin_setting import AdminSetting
 from ..services.crypto import decrypt_value
-from ..services.admin_setting_defaults import (
-    KNOWN_KEYS_DEFAULTS,
-    default_for,
+from ..services.admin_setting_defaults import default_for
+from ..services.llm_client import LLMUnavailable
+from ..services.podcast_script import (
+    generate_script as llm_generate_script,
+)
+from ..services.podcast_tts import (
+    PodcastTTSError,
+    job_dir,
+    synthesize as local_synthesize,
 )
 from ..middleware.rate_limit import rate_limit
 
@@ -59,13 +79,12 @@ _log = logging.getLogger(__name__)
 # payloads are tiny (URL + voice ids).
 MAX_PUBLIC_PODCAST_BYTES = 256 * 1024  # 256 KB
 
-# Rate-limit: 12 / minute / IP. Each /generate = 3 MiniCast calls so this
+# Rate-limit: 12 / minute / IP. Each /generate = 3 upstream calls so this
 # leaves ~4 back-to-back retries before throttling.
 RATE_LIMIT_MAX_CALLS = 12
 RATE_LIMIT_WINDOW_SECONDS = 60
 
-# MiniCast upstream can take a while: script + synthesize + 6 voice TTS
-# calls = 30-90 s on a typical 6000-char article.
+# Upstream timeouts — only relevant when HBSC_PODCAST_ISOLATED=false.
 MINICAST_HTTP_TIMEOUT = httpx.Timeout(180.0, connect=10.0)
 
 # Default voices pinned for 数创智伴 「播一下」 — see spec §2.4.
@@ -73,7 +92,7 @@ DEFAULT_VOICE_A = "midnight_male"   # 小数 (男 · 磁性低沉)
 DEFAULT_VOICE_B = "warm_female"     # 小创 (女 · 温暖热情)
 
 # Voice display labels exposed to the frontend for the podcast role cards.
-# Intentionally hardcoded: hbsc 命名（"小数" / "小创"）是产品级 persona，
+# Intentionally hardcoded: hbsc 命名（"小数" / "小创"）是产品级 persona,
 # 不允许 admin 通过设置项改写 — 否则会破坏 FAB 上写死的 "男（数）女（创）"
 # 文案契约。
 VOICE_CATALOG = {
@@ -92,14 +111,28 @@ VOICE_CATALOG = {
 }
 
 
-async def _extract_from_hbsc(url: str, request: Request) -> tuple[str, str]:
-    """Fallback extract: read content directly from hbsc's own article/issue
-    endpoints when MiniCast /api/extract is unavailable or returns empty.
+def _is_isolated() -> bool:
+    """True unless the operator explicitly opts into upstream mode.
 
-    This is what makes the FAB useful in environments where the upstream
-    MiniCast service isn't deployed (e.g. local dev / preview deploys).
-    The caller passes the original Request so we can resolve relative
-    "host" URLs to the same host the client used.
+    Env var reads are intentionally minimal: this is a deployment-time
+    decision, not a per-request switch. The default honours the project's
+    "physical isolation from MiniCast" rule.
+    """
+    raw = os.getenv("HBSC_PODCAST_ISOLATED", "true").strip().lower()
+    return raw not in ("false", "0", "no", "off")
+
+
+# ---------------------------------------------------------------------------
+# Local extract (always available — independent of isolation mode)
+# ---------------------------------------------------------------------------
+
+async def _extract_from_hbsc(url: str, request: Request) -> tuple[str, str]:
+    """Read content directly from hbsc's own article/issue endpoints.
+
+    This is what makes the FAB useful in environments where no upstream
+    service is reachable (isolated mode, or upstream offline). The caller
+    passes the original Request so we can resolve relative "host" URLs
+    to the same host the client used.
 
     Returns (content, title). Raises ValueError when the URL doesn't map
     to a known hbsc route or the local endpoint returns empty content.
@@ -146,20 +179,27 @@ async def _extract_from_hbsc(url: str, request: Request) -> tuple[str, str]:
     return content, title
 
 
-def _generate_local_script(
+# ---------------------------------------------------------------------------
+# Local script (deterministic fallback when LLM is unavailable)
+# ---------------------------------------------------------------------------
+
+def _generate_deterministic_script(
     content: str,
     title: str,
     voice_a_label: str,
     voice_b_label: str,
     mode: str,
 ) -> tuple[list[dict], str]:
-    """Deterministic script generation when MiniCast /api/generate-script
-    is unavailable (dev / preview deploys).
+    """Last-resort script generator when LLM is unavailable or fails.
 
-    Splits the article content into ~6 short segments alternating between
-    the two voice personas so the frontend has a meaningful script to
-    render even when no real LLM is in the loop. The output mirrors the
-    MiniCast script segment contract: [{speaker, text}, ...].
+    Used by both operating modes: isolated mode when no LLM credentials
+    are configured, and upstream mode when the upstream MiniCast
+    /generate-script call falls through. Splits the article content
+    into ~6 short segments alternating between the two personas so the
+    frontend still has a meaningful script to render.
+
+    Output mirrors the MiniCast script segment contract:
+    ``[{speaker, text}, ...]``.
     """
     import re
 
@@ -167,13 +207,11 @@ def _generate_local_script(
     if not text:
         raise ValueError("cannot generate script from empty content")
 
-    # Split into sentences (Chinese: 。！？；; English: . ! ? ;).
     raw = re.split(r"(?<=[。！？；!?;.])", text)
     parts = [p.strip() for p in raw if p.strip()]
     if not parts:
         parts = [text[:200]]
 
-    # Aim for 6 segments; if we have fewer, repeat; if more, sample evenly.
     target = 6
     if len(parts) > target:
         step = len(parts) / target
@@ -188,10 +226,8 @@ def _generate_local_script(
     voice_a_turns = (mode != "solo")
     segments: list[dict] = []
     for i, segment in enumerate(sampled[:target]):
-        # Trim long lines so the script preview stays readable on mobile.
         snippet = segment if len(segment) <= 90 else segment[:87] + "…"
         speaker = voice_a_label if (i % 2 == 0 or not voice_a_turns) else voice_b_label
-        # First turn is a host intro that names the article.
         if i == 0:
             speaker = voice_b_label
             intro = f"欢迎收听本期播客，今天我们来聊聊《{title}》。{snippet}"
@@ -207,6 +243,72 @@ def _generate_local_script(
         f"{(seg['speaker'] or 'A').upper()}: {seg['text']}" for seg in segments
     )
     return segments, script_text
+
+
+async def _generate_script_via_llm(
+    content: str,
+    title: str,
+    db: Session,
+) -> tuple[list[dict], str]:
+    """Rewrite the article as a 2-speaker dialogue via the page-agent
+    LLM preset (deepseek). Falls back to the deterministic generator on
+    any LLMUnavailable so the FAB never surfaces a hard failure.
+
+    Returns (segments, script_text).
+    """
+    api_key = _get_or_default(db, "page_agent.api_key") or ""
+    base_url = _get_or_default(db, "page_agent.base_url") or ""
+    model = _get_or_default(db, "page_agent.model") or "deepseek-v4-flash"
+
+    voice_a_meta = VOICE_CATALOG[DEFAULT_VOICE_A]
+    voice_b_meta = VOICE_CATALOG[DEFAULT_VOICE_B]
+
+    if not api_key or not base_url:
+        _log.info("podcast script: no LLM configured, using deterministic")
+        return _generate_deterministic_script(
+            content=content,
+            title=title,
+            voice_a_label=voice_a_meta["label"],
+            voice_b_label=voice_b_meta["label"],
+            mode="duo",
+        )
+
+    try:
+        llm_segments = await llm_generate_script(
+            content=content,
+            title=title,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+        )
+    except LLMUnavailable as e:
+        _log.warning("podcast script LLM failed, falling back: %s", e)
+        return _generate_deterministic_script(
+            content=content,
+            title=title,
+            voice_a_label=voice_a_meta["label"],
+            voice_b_label=voice_b_meta["label"],
+            mode="duo",
+        )
+
+    # Translate the LLM's "A"/"B" speakers into hbsc persona labels so
+    # the on-screen 「对谈脚本」 preview matches what the frontend FAB
+    # shows under each role card.
+    translated = [
+        {
+            "speaker": (
+                voice_b_meta["label"]
+                if seg["speaker"] == "B"
+                else voice_a_meta["label"]
+            ),
+            "text": seg["text"],
+        }
+        for seg in llm_segments
+    ]
+    script_text = "\n".join(
+        f"{seg['speaker']}: {seg['text']}" for seg in translated
+    )
+    return translated, script_text
 
 
 # ---------------------------------------------------------------------------
@@ -267,13 +369,6 @@ def _is_allowed_hbsc_url(url: str) -> bool:
         return False
     if not u.netloc:
         return False
-    # Allow only hbsc public routes that have meaningful content.
-    # Two-part check: hostname must look like hbsc's own deploy OR
-    # the localhost dev port; path must be a content-bearing hbsc route.
-    # Without the hostname gate, an attacker could submit
-    # `https://evil.com/articles/foo` and our MiniCast upstream would
-    # happily fetch + ingest arbitrary content (SSRF + prompt
-    # injection via 3rd-party article).
     path = u.path.rstrip("/")
     path_ok = (
         path.startswith("/articles/")
@@ -285,9 +380,7 @@ def _is_allowed_hbsc_url(url: str) -> bool:
         return False
     host = (u.hostname or "").lower()
     host_ok = (
-        # localhost / loopback dev
         host in ("localhost", "127.0.0.1", "::1")
-        # Any private-network address (192.168.* / 10.* / 172.16-31.*)
         or host.startswith("192.168.")
         or host.startswith("10.")
         or (
@@ -295,8 +388,6 @@ def _is_allowed_hbsc_url(url: str) -> bool:
             and host.split(".", 1)[0] == "172"
             and 16 <= int(host.split(".")[1]) <= 31
         )
-        # Deployed hbsc domains — admin can override via
-        # settings.ALLOWED_ORIGINS if needed.
         or host.endswith(".hbsc.cn")
         or host == "hbsc.cn"
     )
@@ -304,7 +395,7 @@ def _is_allowed_hbsc_url(url: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Upstream helpers
+# Upstream helpers (only used in non-isolated mode)
 # ---------------------------------------------------------------------------
 
 async def _minicast_get(path: str, base_url: str, params: Optional[dict] = None) -> tuple[int, Any]:
@@ -349,7 +440,6 @@ async def _minicast_post(path: str, base_url: str, payload: dict) -> tuple[int, 
             hint="你也可以打开 /labs/minicast 完整工作台手动生成",
         )
     if r.status_code >= 500:
-        # Try to forward MiniCast's structured error envelope if any.
         try:
             detail = r.json().get("detail") or r.json().get("error")
         except ValueError:
@@ -420,9 +510,11 @@ class GenerateRequest(BaseModel):
 def get_podcast_config(db: Session = Depends(get_db)) -> dict:
     """Public read of the podcast config — no auth, no leakage.
 
-    Returns voice catalog (hbsc product naming) and FAB visibility gate.
+    Returns voice catalog (hbsc product naming), FAB visibility gate, and
+    the current operating mode so the frontend FAB can show the correct
+    fallback copy ("本地生成" vs "完整工作台").
 
-    The frontend FAB uses `enabled` to decide whether to show the
+    The frontend FAB uses ``enabled`` to decide whether to show the
     「播一下」 tab; when False the panel never surfaces the entry, so
     no user input is wasted on a broken feature.
     """
@@ -433,6 +525,7 @@ def get_podcast_config(db: Session = Depends(get_db)) -> dict:
     )
     return {
         "enabled": _is_enabled(enabled_raw),
+        "mode": "isolated" if _is_isolated() else "upstream",
         "minicast_base_url": minicast_base,
         "voices": VOICE_CATALOG,
         "default_voice_a": DEFAULT_VOICE_A,
@@ -451,22 +544,57 @@ async def extract(
     body: ExtractRequest,
     db: Session = Depends(get_db),
 ):
-    """Step 1: MiniCast 内容提取 (proxy to /api/extract)."""
+    """Step 1: 内容提取. In isolated mode this always reads from
+    hbsc's own article/issue endpoint (no upstream call). In upstream
+    mode it proxies to MiniCast's /api/extract and falls back to local
+    if MiniCast returns empty.
+    """
     raw = await request.body()
     if len(raw) > MAX_PUBLIC_PODCAST_BYTES:
         _send("payload_too_large", "请求体超过 256KB 限制", 413)
 
+    if _is_isolated():
+        try:
+            content, title = await _extract_from_hbsc(body.url, request)
+        except ValueError as e:
+            _send(
+                "extract_empty",
+                "未能从当前页提取到正文",
+                404,
+                hint=f"{e}",
+            )
+        return {
+            "title": title,
+            "content": content,
+            "char_count": len(content),
+            "source_url": body.url,
+            "mode": "isolated",
+        }
+
+    # Upstream mode.
     base_url = _get_or_default(db, "podcast.minicast_base_url") or "http://127.0.0.1:8000"
     _, data = await _minicast_post(
         "/api/extract", base_url, {"source": body.url, "source_type": "url"}
     )
-    # MiniCast returns { title, content, char_count, source_url, ... }
     return {
         "title": data.get("title"),
         "content": data.get("content", ""),
         "char_count": data.get("char_count", 0),
         "source_url": data.get("source_url", body.url),
+        "mode": "upstream",
     }
+
+
+def _new_job_id(url: str, title: str, segment_count: int) -> str:
+    """Stable, deterministic job id derived from inputs.
+
+    Same article + same segment count ⇒ same id. This makes the FAB
+    idempotent across retries (refresh, network blip, etc.) without
+    needing a persistent job store.
+    """
+    import hashlib
+    seed = f"{url}|{title}|{segment_count}".encode("utf-8")
+    return "local-" + hashlib.sha1(seed).hexdigest()[:16]
 
 
 @router.post("/generate")
@@ -482,18 +610,18 @@ async def generate(
 ):
     """All-in-one: extract → script → synthesize. Returns ready-to-play job.
 
-    This is the FAB's primary endpoint. We chain MiniCast calls server-side
-    so the client only sees a single round trip; failures surface as
-    `minicast_unavailable` so the FAB can degrade gracefully.
+    In isolated mode (default) the full pipeline runs on hbsc. In
+    upstream mode the three MiniCast calls are chained server-side and
+    the response is forwarded verbatim.
 
     Errors:
         403 not_allowed_url         — URL fails the SSRF allow-list
-        404 upstream_extract_empty  — MiniCast could not extract content
+        404 upstream_extract_empty  — no content extractable
         409 not_enabled             — admin disabled podcast.enabled
         413 payload_too_large       — raw body > 256 KB
         429 rate_limited            — 13th call within 60s for the same IP
-        502 minicast_upstream_error — MiniCast returned >= 500
-        503 minicast_unavailable    — network timeout / connection refused
+        502 tts_failed              — local TTS pipeline failed
+        503 minicast_unavailable    — upstream mode + MiniCast offline
     """
     raw = await request.body()
     if len(raw) > MAX_PUBLIC_PODCAST_BYTES:
@@ -502,15 +630,80 @@ async def generate(
     if not _is_enabled(_get_or_default(db, "podcast.enabled") or "false"):
         _send("not_enabled", "播客功能未启用", 409)
 
+    if _is_isolated():
+        return await _generate_isolated(body, request, db)
+    return await _generate_upstream(body, request, db)
+
+
+async def _generate_isolated(
+    body: GenerateRequest,
+    request: Request,
+    db: Session,
+) -> dict:
+    """Full local pipeline: extract → LLM-rewrite script → TTS."""
+    # 1. Extract content directly from hbsc's own API.
+    try:
+        content, local_title = await _extract_from_hbsc(body.url, request)
+    except ValueError as e:
+        _send(
+            "extract_empty",
+            "未能从当前页提取到正文",
+            404,
+            hint=f"{e}",
+        )
+    title_hint = body.title_hint or local_title
+
+    # 2. Generate script (LLM if configured, deterministic fallback
+    # otherwise). The LLM call is allowed to fail without aborting the
+    # whole request — the deterministic generator keeps the FAB usable.
+    segments, script_text = await _generate_script_via_llm(
+        content=content, title=title_hint, db=db,
+    )
+    segment_count = len(segments)
+
+    # 3. Synthesize audio locally via edge-tts + ffmpeg.
+    job_id = _new_job_id(body.url, title_hint, segment_count)
+    try:
+        synth = await local_synthesize(
+            segments,
+            voice_a=body.voice_a or DEFAULT_VOICE_A,
+            voice_b=body.voice_b or DEFAULT_VOICE_B,
+            job_id=job_id,
+            output_dir=job_dir(job_id),
+        )
+    except PodcastTTSError as e:
+        _log.warning("podcast local TTS failed for %s: %s", body.url, e)
+        _send(
+            "tts_failed",
+            "本地音频合成失败，请稍后重试",
+            502,
+            hint="确认 edge-tts / ffmpeg 已安装；或打开 /labs/minicast 工作台手动生成",
+        )
+
+    total_chars = sum(len(seg.get("text", "")) for seg in segments)
+    return {
+        "job_id": job_id,
+        "mp3_url": f"/api/public/podcast/download/{job_id}",
+        "srt_url": f"/api/public/podcast/subtitle/{job_id}" if synth.srt_path else "",
+        "duration_seconds": synth.duration_seconds,
+        "total_chars": total_chars,
+        "segment_count": segment_count,
+        "script_text": script_text,
+        "mode": "isolated",
+        "fallback_url": (
+            f"/labs/minicast/?embed=1&source={body.url}"
+        ),
+    }
+
+
+async def _generate_upstream(
+    body: GenerateRequest,
+    request: Request,
+    db: Session,
+) -> dict:
+    """Original MiniCast-proxy pipeline (preserved for upstream mode)."""
     base_url = _get_or_default(db, "podcast.minicast_base_url") or "http://127.0.0.1:8000"
 
-    # Step 1: extract content (MiniCast uses internal rewrite rules; we
-    # pass through the hbsc URL directly and let MiniCast's source mapping
-    # auto-config handle the host rewriting via /labs/minicast embed mode).
-    # When MiniCast is unavailable / returns no content, fall back to reading
-    # directly from hbsc's own /api/articles/{slug} or /api/issues/{slug}
-    # so the FAB still works in environments where MiniCast isn't deployed
-    # (e.g. local dev / preview deploys).
     content = ""
     title_hint = body.title_hint or ""
     minicast_status, extracted = await _minicast_post(
@@ -525,10 +718,6 @@ async def generate(
             content, local_title = await _extract_from_hbsc(body.url, request)
             if not title_hint:
                 title_hint = local_title
-            _log.info(
-                "podcast extract: fell back to local hbsc content for %s",
-                body.url,
-            )
         except ValueError as e:
             _send(
                 "upstream_extract_empty",
@@ -537,13 +726,6 @@ async def generate(
                 hint=f"{e}；或打开 /labs/minicast 完整工作台手动生成",
             )
 
-    # Step 2: generate duo-mode script with the pinned voices. We pass
-    # MiniMax API key as None — MiniCast reads it from MINIMAX_API_KEY env
-    # in dev mode (MINICAST_API_KEY_DEV_PREFILL=true) or expects it via the
-    # Settings UI in prod. hbsc NEVER forwards the LLM key here.
-    # When MiniCast /api/generate-script is unavailable, fall back to a
-    # deterministic local script so the FAB still shows a usable result
-    # in dev / preview deploys.
     segments: list[dict] = []
     script_text = ""
     script_status, script_resp = await _minicast_post(
@@ -553,7 +735,7 @@ async def generate(
             "content": content,
             "mode": body.mode,
             "title_hint": title_hint,
-            "model": "MiniMax-M3",
+            "model": "deepseek-v4-flash",
             "language": "zh-CN",
         },
     )
@@ -567,20 +749,15 @@ async def generate(
             script_text_lines.append(f"{speaker}: {text}")
         script_text = "\n".join(script_text_lines)
     else:
-        # Local fallback: deterministic 6-segment script.
         voice_a_meta = VOICE_CATALOG.get(body.voice_a or DEFAULT_VOICE_A, {})
         voice_b_meta = VOICE_CATALOG.get(body.voice_b or DEFAULT_VOICE_B, {})
         try:
-            segments, script_text = _generate_local_script(
+            segments, script_text = _generate_deterministic_script(
                 content=content,
                 title=title_hint or "本期话题",
                 voice_a_label=voice_a_meta.get("label", "A"),
                 voice_b_label=voice_b_meta.get("label", "B"),
                 mode=body.mode,
-            )
-            _log.info(
-                "podcast script: fell back to local generator for %s (%d segments)",
-                body.url, len(segments),
             )
         except ValueError as e:
             _send(
@@ -590,15 +767,6 @@ async def generate(
                 hint=f"{e}；或打开 /labs/minicast 手动调整脚本",
             )
 
-    # Step 3: synthesize the audio. voice_a is the script's A: speaker,
-    # voice_b is B:. We pass hbsc's product-naming voice ids through to
-    # MiniCast, which has them in its CURATED_VOICES table.
-    # When MiniCast /api/synthesize is unavailable, we return a "dev"
-    # job_id so the FAB can still render the ready state with the script
-    # preview + workbench fallback link. The audio element will simply
-    # 404 on /download/{job_id}, which is the expected behaviour in this
-    # mode (the user is told via the hint to use /labs/minicast for real
-    # audio).
     synth_status, synth_resp = await _minicast_post(
         "/api/synthesize",
         base_url,
@@ -629,20 +797,27 @@ async def generate(
         total_chars = synth_resp.get("total_chars", total_chars) or total_chars
         segment_count = synth_resp.get("segment_count", segment_count) or segment_count
     if not job_id:
-        # Local stub: synthesizable id that the download endpoint can
-        # recognise and return a 404 for (frontend still renders the
-        # ready UI; user clicks fallback to /labs/minicast for real audio).
-        import hashlib
-        seed = f"{body.url}|{title_hint}|{segment_count}".encode("utf-8")
-        job_id = "dev-" + hashlib.sha1(seed).hexdigest()[:12]
-        mp3_url = ""
-        srt_url = ""
-        # Estimate ~4 chars/sec at neutral speed for the dev stub.
-        duration_seconds = max(1, total_chars // 4)
-        _log.info(
-            "podcast synthesize: MiniCast unavailable, returning dev stub job %s",
-            job_id,
-        )
+        # Fallback to local synth so the FAB stays usable even when
+        # upstream synthesize returned nothing usable.
+        job_id = _new_job_id(body.url, title_hint, segment_count)
+        try:
+            synth = await local_synthesize(
+                segments,
+                voice_a=body.voice_a or DEFAULT_VOICE_A,
+                voice_b=body.voice_b or DEFAULT_VOICE_B,
+                job_id=job_id,
+                output_dir=job_dir(job_id),
+            )
+            mp3_url = f"/api/public/podcast/download/{job_id}"
+            srt_url = (
+                f"/api/public/podcast/subtitle/{job_id}" if synth.srt_path else ""
+            )
+            duration_seconds = synth.duration_seconds
+        except PodcastTTSError as e:
+            _log.warning(
+                "upstream mode + local TTS fallback failed for %s: %s",
+                body.url, e,
+            )
 
     return {
         "job_id": job_id,
@@ -652,6 +827,7 @@ async def generate(
         "total_chars": total_chars,
         "segment_count": segment_count,
         "script_text": script_text,
+        "mode": "upstream",
         "fallback_url": (
             f"/labs/minicast/?embed=1&source={body.url}"
         ),
@@ -665,14 +841,33 @@ async def generate(
     key="public_podcast_download",
 )
 async def download(job_id: str, request: Request, db: Session = Depends(get_db)):
-    """Stream the synthesized MP3 through hbsc — required because the
-    MiniCast server lives on a different origin (127.0.0.1:8000) than the
-    browser sees, and <audio src> cannot follow a cross-origin redirect
-    to a port the browser considers untrusted.
+    """Serve the synthesized mp3 from local storage (isolated mode) or
+    proxy from upstream (upstream mode).
 
-    We forward byte-for-byte and let the browser's <audio> handle Range
-    requests (httpx honors Range automatically).
+    In isolated mode the file lives under ``<backend>/data/podcasts/<job_id>/<job_id>.mp3``
+    and is served directly via FileResponse so the browser can stream it
+    with Range requests intact.
+
+    In upstream mode the file lives on the MiniCast origin; we proxy
+    byte-for-byte so the browser doesn't have to talk to a different
+    port directly (which may be blocked by cross-origin policies).
     """
+    if _is_isolated():
+        mp3_path = job_dir(job_id) / f"{job_id}.mp3"
+        if not mp3_path.exists():
+            _send(
+                "job_not_found",
+                "找不到对应的音频文件",
+                404,
+                hint="重新点击「开始生成」即可",
+            )
+        return FileResponse(
+            mp3_path,
+            media_type="audio/mpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    # Upstream mode: stream the file from MiniCast.
     base_url = _get_or_default(db, "podcast.minicast_base_url") or "http://127.0.0.1:8000"
     upstream_url = base_url.rstrip("/") + f"/api/jobs/{job_id}/download"
 
@@ -683,8 +878,7 @@ async def download(job_id: str, request: Request, db: Session = Depends(get_db))
                     if upstream.status_code >= 400:
                         _log.warning(
                             "minicast download %s returned %s",
-                            job_id,
-                            upstream.status_code,
+                            job_id, upstream.status_code,
                         )
                         return
                     async for chunk in upstream.aiter_bytes(chunk_size=64 * 1024):
@@ -693,7 +887,7 @@ async def download(job_id: str, request: Request, db: Session = Depends(get_db))
             _log.warning("minicast download stream failed: %s", e, exc_info=True)
             return
 
-    return StreamingResponse(
+    return Response(
         _stream(),
         media_type="audio/mpeg",
         headers={"Cache-Control": "public, max-age=3600"},
@@ -707,7 +901,22 @@ async def download(job_id: str, request: Request, db: Session = Depends(get_db))
     key="public_podcast_subtitle",
 )
 async def subtitle(job_id: str, request: Request, db: Session = Depends(get_db)):
-    """Forward MiniCast SRT subtitle for the given job."""
+    """Serve the SRT subtitle. Isolated mode reads from local disk;
+    upstream mode proxies from MiniCast."""
+    if _is_isolated():
+        srt_path = job_dir(job_id) / f"{job_id}.srt"
+        if not srt_path.exists():
+            _send(
+                "subtitle_unavailable",
+                "字幕不可用",
+                404,
+            )
+        return FileResponse(
+            srt_path,
+            media_type="application/x-subrip",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     base_url = _get_or_default(db, "podcast.minicast_base_url") or "http://127.0.0.1:8000"
     upstream_url = base_url.rstrip("/") + f"/api/jobs/{job_id}/subtitle"
     try:
@@ -735,5 +944,6 @@ __all__ = [
     "VOICE_CATALOG",
     "DEFAULT_VOICE_A",
     "DEFAULT_VOICE_B",
+    "_is_isolated",
     "_is_allowed_hbsc_url",  # exposed for tests
 ]
