@@ -52,6 +52,19 @@ _podcast_module = importlib.import_module("app.routers.public_podcast_router")
 sys.modules.setdefault("app.routers.public_podcast_router", _podcast_module)
 
 
+@pytest.fixture()
+def upstream_mode(monkeypatch):
+    """Opt the router into upstream mode for tests that mock MiniCast.
+
+    The router defaults to isolated mode (HBSC_PODCAST_ISOLATED=true) so
+    that hbsc never talks to a real MiniCast. Tests that mock the
+    ``_minicast_post`` helper need to flip the switch explicitly, which
+    this fixture does.
+    """
+    monkeypatch.setenv("HBSC_PODCAST_ISOLATED", "false")
+    return monkeypatch
+
+
 # ===========================================================================
 # Fixtures
 # ===========================================================================
@@ -180,7 +193,10 @@ class TestUrlAllowList:
 # ===========================================================================
 
 class TestGenerate:
-    """The full /generate pipeline: extract → script → synthesize."""
+    """Upstream-mode /generate pipeline: extract → script → synthesize
+    against a mocked MiniCast. Tests in this class use the
+    ``upstream_mode`` fixture so the router actually reaches the
+    mocked helpers."""
 
     def _mock_minicast_chain(self, monkeypatch):
         """Patch the router's upstream helpers so /generate runs against a
@@ -217,7 +233,7 @@ class TestGenerate:
             fake_post,
         )
 
-    def test_happy_path_returns_job_and_fallback_url(self, client, monkeypatch):
+    def test_happy_path_returns_job_and_fallback_url(self, client, monkeypatch, upstream_mode):
         """A successful chain returns job_id + the public workbench URL."""
         self._mock_minicast_chain(monkeypatch)
         with _stub_settings():
@@ -236,7 +252,7 @@ class TestGenerate:
         assert "小创:" not in body["script_text"]  # script uses upstream speaker letters
         assert "B:" in body["script_text"]
 
-    def test_uses_pinned_default_voices(self, client, monkeypatch):
+    def test_uses_pinned_default_voices(self, client, monkeypatch, upstream_mode):
         """The spec pins voice_a=midnight_male, voice_b=warm_female; the
         synthesize request must carry them even when the client omits them."""
         captured = {}
@@ -278,7 +294,7 @@ class TestGenerate:
         assert synth["voice_a"] == "midnight_male"
         assert synth["voice_b"] == "warm_female"
 
-    def test_rejects_unknown_voice(self, client):
+    def test_rejects_unknown_voice(self, client, upstream_mode):
         """Voice ids outside the curated catalog must be refused at the
         Pydantic layer — no upstream call happens."""
         with _stub_settings():
@@ -291,7 +307,7 @@ class TestGenerate:
             )
         assert r.status_code == 422
 
-    def test_empty_extract_content_is_404(self, client, monkeypatch):
+    def test_empty_extract_content_is_404(self, client, monkeypatch, upstream_mode):
         async def fake_post(path, base_url, payload):
             if path == "/api/extract":
                 return 200, {"title": "Empty", "content": "", "char_count": 0}
@@ -309,7 +325,7 @@ class TestGenerate:
         assert r.status_code == 404
         assert r.json()["detail"]["code"] == "upstream_extract_empty"
 
-    def test_minicast_unreachable_returns_503(self, client):
+    def test_minicast_unreachable_returns_503(self, client, upstream_mode):
         """When MiniCast is offline the FAB needs a clean signal so it can
         render the fallback link to /labs/minicast — not a raw 500."""
         from fastapi import HTTPException
@@ -336,7 +352,7 @@ class TestGenerate:
         assert detail["code"] == "minicast_unavailable"
         assert "labs/minicast" in detail["hint"]
 
-    def test_disabled_returns_409(self, client):
+    def test_disabled_returns_409(self, client, upstream_mode):
         """admin can flip podcast.enabled=false — /generate must refuse
         with 409 so the FAB can show a config-needed message."""
         with _stub_settings(enabled=False):
@@ -347,7 +363,7 @@ class TestGenerate:
         assert r.status_code == 409
         assert r.json()["detail"]["code"] == "not_enabled"
 
-    def test_oversized_body_is_413(self, client):
+    def test_oversized_body_is_413(self, client, upstream_mode):
         """A >256 KB request body is refused at the raw layer — defends
         against trivial payload-bombing."""
         big_url = "https://hbsc.cn/articles/" + ("a" * (300 * 1024))
@@ -385,3 +401,232 @@ def test_url_allow_list_only_hbsc_paths():
     assert not _is_allowed_hbsc_url("https://evil.com/articles/foo")
     assert not _is_allowed_hbsc_url("https://hbsc.cn/admin")
     assert not _is_allowed_hbsc_url("file:///etc/passwd")
+
+
+# ===========================================================================
+# Isolated-mode tests
+# ===========================================================================
+#
+# HBSC_PODCAST_ISOLATED=true (the default) means hbsc never talks to a
+# real MiniCast. The /generate pipeline must instead:
+#   1. Read content directly from hbsc's own /api/articles/<slug>.
+#   2. Generate a script via the page_agent LLM preset (or fall back to
+#      the deterministic slice when no key is configured).
+#   3. Synthesize audio via the local TTS service (edge-tts + ffmpeg).
+#
+# These tests mock the two I/O surfaces (the local article API and the
+# TTS pipeline) so they run hermetically without a running edge-tts /
+# ffmpeg or a live LLM.
+
+class TestConfigMode:
+    """The /config endpoint surfaces the operating mode so the FAB can
+    pick the right fallback copy."""
+
+    def test_default_is_isolated(self, client):
+        """Out of the box, hbsc never talks to MiniCast. The env var
+        default is ``true`` — see public_podcast_router._is_isolated."""
+        r = client.get("/api/public/podcast/config")
+        assert r.status_code == 200
+        assert r.json()["mode"] == "isolated"
+
+    def test_upstream_when_env_opted_in(self, client, monkeypatch):
+        """Operators who explicitly opt in via env see ``mode=upstream``."""
+        monkeypatch.setenv("HBSC_PODCAST_ISOLATED", "false")
+        r = client.get("/api/public/podcast/config")
+        assert r.json()["mode"] == "upstream"
+
+
+class TestExtractIsolated:
+    """In isolated mode /extract reads from hbsc's own API."""
+
+    def test_extract_calls_hbsc_article_api(self, client, monkeypatch):
+        """We expect exactly one httpx GET to the local /api/articles/<slug>."""
+        from app.routers import public_podcast_router as r
+        seen_urls: list[str] = []
+
+        async def fake_get(base, _db, payload):
+            raise AssertionError("must not call _minicast_post in isolated mode")
+
+        async def fake_extract_from_hbsc(url, _request):
+            seen_urls.append(url)
+            return "正文内容", "测试标题"
+
+        monkeypatch.setattr(r, "_minicast_post", fake_get)
+        monkeypatch.setattr(r, "_extract_from_hbsc", fake_extract_from_hbsc)
+        r = client.post(
+            "/api/public/podcast/extract",
+            json={"url": "https://hbsc.cn/articles/llm-trust"},
+        )
+        assert r.status_code == 200, r.json()
+        body = r.json()
+        assert body["mode"] == "isolated"
+        assert body["content"] == "正文内容"
+        assert body["title"] == "测试标题"
+        assert seen_urls == ["https://hbsc.cn/articles/llm-trust"]
+
+
+class TestGenerateIsolated:
+    """End-to-end /generate in isolated mode."""
+
+    def _patch_local_pipeline(
+        self,
+        monkeypatch,
+        *,
+        extract_return=("正文" * 200, "本期话题"),
+        script_segments=None,
+        synth_result=None,
+    ):
+        """Stub out the three I/O surfaces /generate touches."""
+        from app.routers import public_podcast_router as r
+
+        # 1. Extract → hbsc's own article API
+        async def fake_extract(url, _request):
+            return extract_return
+
+        monkeypatch.setattr(r, "_extract_from_hbsc", fake_extract)
+
+        # 2. Script → return a deterministic 6-segment list
+        if script_segments is None:
+            script_segments = [
+                {"speaker": "B", "text": f"段{i}正文"} for i in range(6)
+            ]
+
+        async def fake_script(content, title, db):
+            return script_segments, "\n".join(
+                f"{s['speaker']}: {s['text']}" for s in script_segments
+            )
+
+        monkeypatch.setattr(r, "_generate_script_via_llm", fake_script)
+
+        # 3. Synthesize → return a SynthResult-shaped dict
+        if synth_result is None:
+            from app.services.podcast_tts import SynthResult
+
+            class _FakePath:
+                def __init__(self, name="local-test.mp3"):
+                    self.name = name
+
+                def stat(self):
+                    from pathlib import Path
+                    return Path("/dev/null").stat()
+
+            synth_result = SynthResult(
+                mp3_path=_FakePath(),
+                srt_path=_FakePath("local-test.srt"),
+                duration_seconds=42.0,
+            )
+
+        async def fake_synth(segments, **_kw):
+            return synth_result
+
+        monkeypatch.setattr(r, "local_synthesize", fake_synth)
+        return r
+
+    def test_happy_path_returns_real_mp3_and_srt_urls(
+        self, client, monkeypatch
+    ):
+        self._patch_local_pipeline(monkeypatch)
+
+        r = client.post(
+            "/api/public/podcast/generate",
+            json={"url": "https://hbsc.cn/articles/llm-trust"},
+        )
+        assert r.status_code == 200, r.json()
+        body = r.json()
+        assert body["mode"] == "isolated"
+        assert body["mp3_url"] == "/api/public/podcast/download/local-test"
+        # job_id is deterministic from inputs so retries are idempotent.
+        assert body["job_id"].startswith("local-")
+        # 6 segments × "段N正文" → 12 + 5*4 = 32 chars, but each seg has
+        # 4 chars; we just assert it's non-zero and matches the script.
+        assert body["segment_count"] == 6
+        assert body["duration_seconds"] == 42.0
+        assert body["script_text"].count("段") == 6
+
+    def test_empty_extract_returns_404(self, client, monkeypatch):
+        from app.routers import public_podcast_router as r
+
+        async def fake_extract(url, _request):
+            raise ValueError("article slug is required")
+
+        monkeypatch.setattr(r, "_extract_from_hbsc", fake_extract)
+
+        r = client.post(
+            "/api/public/podcast/generate",
+            json={"url": "https://hbsc.cn/articles/missing"},
+        )
+        assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "extract_empty"
+
+    def test_tts_failure_returns_502(self, client, monkeypatch):
+        from app.routers import public_podcast_router as r
+        from app.services.podcast_tts import PodcastTTSError
+
+        async def fake_extract(url, _request):
+            return "正文", "t"
+
+        monkeypatch.setattr(r, "_extract_from_hbsc", fake_extract)
+
+        async def fake_script(content, title, db):
+            return [{"speaker": "A", "text": "x"}] * 6, "x" * 6
+
+        monkeypatch.setattr(r, "_generate_script_via_llm", fake_script)
+
+        async def fake_synth(segments, **_kw):
+            raise PodcastTTSError("edge-tts exploded")
+
+        monkeypatch.setattr(r, "local_synthesize", fake_synth)
+
+        r = client.post(
+            "/api/public/podcast/generate",
+            json={"url": "https://hbsc.cn/articles/x"},
+        )
+        assert r.status_code == 502
+        assert r.json()["detail"]["code"] == "tts_failed"
+
+    def test_does_not_call_minicast_in_isolated_mode(
+        self, client, monkeypatch
+    ):
+        """Regression guard: ensure /generate never reaches the
+        upstream helpers when the isolation env var is at its default.
+        """
+        from app.routers import public_podcast_router as r
+
+        async def explode(*_args, **_kwargs):
+            raise AssertionError(
+                "_minicast_post must not be called in isolated mode"
+            )
+
+        monkeypatch.setattr(r, "_minicast_post", explode)
+        self._patch_local_pipeline(monkeypatch)
+
+        r = client.post(
+            "/api/public/podcast/generate",
+            json={"url": "https://hbsc.cn/articles/x"},
+        )
+        assert r.status_code == 200, r.json()
+
+
+class TestDownloadIsolated:
+    """In isolated mode the download endpoint streams the local mp3."""
+
+    def test_serves_file_when_present(self, client, tmp_path, monkeypatch):
+        from app.routers import public_podcast_router as r
+
+        # Write a fake mp3 to the job_dir the router resolves.
+        fake = tmp_path / "local-xyz.mp3"
+        fake.write_bytes(b"\x00" * 64)
+        monkeypatch.setattr(r, "job_dir", lambda _job: tmp_path)
+
+        resp = client.get("/api/public/podcast/download/local-xyz")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("audio/mpeg")
+        assert resp.content == b"\x00" * 64
+
+    def test_returns_404_when_file_missing(self, client, tmp_path, monkeypatch):
+        from app.routers import public_podcast_router as r
+        monkeypatch.setattr(r, "job_dir", lambda _job: tmp_path)
+
+        resp = client.get("/api/public/podcast/download/local-missing")
+        assert resp.status_code == 404
+        assert resp.json()["detail"]["code"] == "job_not_found"
