@@ -85,5 +85,15 @@ release/hbsc-frontend.tar
 # Nothing in this directory is intended to live in git.
 soft-copyright/
 
+# ── Tooling runtime state (never commit) ─────
+# .omx/ is the omx task runner's runtime cache + logs + per-session state
+.omx/
+# Capability lock written by the omx tool
+omx-capabilities.lock.json
+# Root-level AGENTS.md is the claude-mem tool's context snapshot, not a
+# real agent-rules file — a real one should live elsewhere (e.g.
+# .codex/AGENTS.md) so it stays tracked.
+AGENTS.md
+
 # ── Claude Code local state (never commit) ─────
 .claude/
