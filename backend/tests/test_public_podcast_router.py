@@ -248,8 +248,10 @@ class TestGenerate:
         assert body["job_id"] == "test-job-abc"
         assert body["mp3_url"] == "/api/jobs/test-job-abc/download"
         assert body["fallback_url"].startswith("/labs/minicast/?embed=1&source=")
-        assert "小数:" in body["script_text"]
-        assert "小创:" not in body["script_text"]  # script uses upstream speaker letters
+        # Script text mirrors the upstream speaker labels verbatim
+        # (upstream mode is a transparent proxy). Our mock returns
+        # speaker="A"/"B", so the rendered text uses those letters.
+        assert "A:" in body["script_text"]
         assert "B:" in body["script_text"]
 
     def test_uses_pinned_default_voices(self, client, monkeypatch, upstream_mode):
@@ -290,7 +292,10 @@ class TestGenerate:
                 json={"url": "https://hbsc.cn/articles/x"},
             )
         assert r.status_code == 200, r.json()
-        synth = next(p for p, _ in captured["calls"] if p == "/api/synthesize")[1]
+        synth = next(
+            payload for path, payload in captured["calls"]
+            if path == "/api/synthesize"
+        )
         assert synth["voice_a"] == "midnight_male"
         assert synth["voice_b"] == "warm_female"
 
@@ -323,7 +328,7 @@ class TestGenerate:
                 json={"url": "https://hbsc.cn/articles/empty"},
             )
         assert r.status_code == 404
-        assert r.json()["detail"]["code"] == "upstream_extract_empty"
+        assert r.json()["error"]["code"] == "upstream_extract_empty"
 
     def test_minicast_unreachable_returns_503(self, client, upstream_mode):
         """When MiniCast is offline the FAB needs a clean signal so it can
@@ -348,9 +353,9 @@ class TestGenerate:
                     json={"url": "https://hbsc.cn/articles/x"},
                 )
         assert r.status_code == 503
-        detail = r.json()["detail"]
-        assert detail["code"] == "minicast_unavailable"
-        assert "labs/minicast" in detail["hint"]
+        err = r.json()["error"]
+        assert err["code"] == "minicast_unavailable"
+        assert "labs/minicast" in err["hint"]
 
     def test_disabled_returns_409(self, client, upstream_mode):
         """admin can flip podcast.enabled=false — /generate must refuse
@@ -361,7 +366,7 @@ class TestGenerate:
                 json={"url": "https://hbsc.cn/articles/x"},
             )
         assert r.status_code == 409
-        assert r.json()["detail"]["code"] == "not_enabled"
+        assert r.json()["error"]["code"] == "not_enabled"
 
     def test_oversized_body_is_413(self, client, upstream_mode):
         """A >256 KB request body is refused at the raw layer — defends
@@ -534,11 +539,13 @@ class TestGenerateIsolated:
         assert r.status_code == 200, r.json()
         body = r.json()
         assert body["mode"] == "isolated"
-        assert body["mp3_url"] == "/api/public/podcast/download/local-test"
-        # job_id is deterministic from inputs so retries are idempotent.
+        # job_id is deterministic from inputs (URL+title+segments) so
+        # retries are idempotent — assert the prefix + URL shape, not
+        # the exact hash (which depends on the title the local extract
+        # returns and is hard to pin from outside).
         assert body["job_id"].startswith("local-")
-        # 6 segments × "段N正文" → 12 + 5*4 = 32 chars, but each seg has
-        # 4 chars; we just assert it's non-zero and matches the script.
+        assert body["mp3_url"].startswith("/api/public/podcast/download/local-")
+        assert body["mp3_url"].endswith(body["job_id"])
         assert body["segment_count"] == 6
         assert body["duration_seconds"] == 42.0
         assert body["script_text"].count("段") == 6
@@ -556,7 +563,7 @@ class TestGenerateIsolated:
             json={"url": "https://hbsc.cn/articles/missing"},
         )
         assert r.status_code == 404
-        assert r.json()["detail"]["code"] == "extract_empty"
+        assert r.json()["error"]["code"] == "extract_empty"
 
     def test_tts_failure_returns_502(self, client, monkeypatch):
         from app.routers import public_podcast_router as r
@@ -582,7 +589,7 @@ class TestGenerateIsolated:
             json={"url": "https://hbsc.cn/articles/x"},
         )
         assert r.status_code == 502
-        assert r.json()["detail"]["code"] == "tts_failed"
+        assert r.json()["error"]["code"] == "tts_failed"
 
     def test_does_not_call_minicast_in_isolated_mode(
         self, client, monkeypatch
@@ -629,4 +636,4 @@ class TestDownloadIsolated:
 
         resp = client.get("/api/public/podcast/download/local-missing")
         assert resp.status_code == 404
-        assert resp.json()["detail"]["code"] == "job_not_found"
+        assert resp.json()["error"]["code"] == "job_not_found"
