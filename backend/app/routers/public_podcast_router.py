@@ -834,6 +834,7 @@ async def _generate_upstream(
     }
 
 
+@router.head("/download/{job_id}", include_in_schema=False)
 @router.get("/download/{job_id}")
 @rate_limit(
     max_calls=RATE_LIMIT_MAX_CALLS * 5,  # audio seek = lots of small GETs
@@ -894,6 +895,7 @@ async def download(job_id: str, request: Request, db: Session = Depends(get_db))
     )
 
 
+@router.head("/subtitle/{job_id}", include_in_schema=False)
 @router.get("/subtitle/{job_id}")
 @rate_limit(
     max_calls=RATE_LIMIT_MAX_CALLS,
