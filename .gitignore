@@ -36,6 +36,13 @@ build/
 backend/research.db
 backend/uploads/
 !backend/uploads/.gitkeep
+# Generated podcast artifacts (MiniMax TTS + ffmpeg output from
+# the 数创智伴 「播一下」 pipeline). Created on demand by
+# app/services/podcast_tts.py under backend/data/podcasts/<job_id>/.
+# The .gitkeep sibling is the only thing tracked.
+backend/data/podcasts/*/
+backend/data/podcasts/**/*
+!backend/data/podcasts/.gitkeep
 
 # ── OS / editor cruft ──────────────────────────
 .DS_Store
