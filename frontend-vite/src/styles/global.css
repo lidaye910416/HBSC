@@ -183,11 +183,14 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
   font-size: 1.0625rem;
   line-height: 1.9;
   color: var(--color-text);
+  width: 100%;
   max-width: var(--reading-width, 720px);
   margin: 0 auto;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .prose > * + * { margin-top: 1.25rem; }
@@ -436,7 +439,8 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
 }
 
 /* ---------- 图片 ---------- */
-.prose img {
+.prose img,
+.prose video {
   max-width: 100%;
   height: auto;
   display: block;
@@ -529,6 +533,37 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
 .prose-lg h3 { font-size: 1.4375rem; }
 
 .prose-lg blockquote { margin: 2.5rem 0; }
+
+/* ---------- 移动端：drop-cap + 字号缩放 ---------- */
+@media (max-width: 768px) {
+  .prose-lg {
+    font-size: 1rem;
+    line-height: 1.85;
+  }
+  .prose-lg h1 { font-size: 1.875rem; }
+  .prose-lg h2 { font-size: 1.375rem; }
+  .prose-lg h3 { font-size: 1.1875rem; }
+  /* 缩小首字下沉，避免在窄屏把段落宽度挤压到溢出 */
+  .prose-lg > p:first-of-type:not(:has(> img:first-child))::first-letter,
+  .prose-lg > p:first-child:not(:has(> img:first-child))::first-letter {
+    font-size: 2.6em;
+    line-height: 0.9;
+    margin: 0.05em 0.12em 0 0;
+  }
+}
+@media (max-width: 480px) {
+  /* 极窄屏：直接取消 drop-cap，避免和正文争宽度 */
+  .prose-lg > p:first-of-type:not(:has(> img:first-child))::first-letter,
+  .prose-lg > p:first-child:not(:has(> img:first-child))::first-letter {
+    float: none;
+    font-size: inherit;
+    line-height: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    margin: 0;
+    color: inherit;
+  }
+}
 
 /* ---------- .prose-sm：卡片摘要 / 侧栏 ---------- */
 .prose-sm {
@@ -1075,3 +1110,376 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
   animation: page-agent-spin 1s linear infinite;
 }
 
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Page-agent message rendering
+ *
+ * Markdown + Mermaid renderer is mounted inside the existing module-scoped
+ * .bubble element. Module CSS keeps the bubble's own padding/border/
+ * background; these global selectors only style the markdown subtree so
+ * child elements (h*, ul, code, table, mermaid svg) inherit the panel's
+ * font/color tokens instead of falling back to browser defaults.
+ * ──────────────────────────────────────────────────────────────────────── */
+.page-agent-markdown { font-size: 13px; line-height: 1.6; color: inherit; overflow-wrap: anywhere; word-break: break-word; }
+.page-agent-markdown > :first-child { margin-top: 0; }
+.page-agent-markdown > :last-child  { margin-bottom: 0; }
+.page-agent-markdown * { max-width: 100%; }
+.page-agent-markdown a { overflow-wrap: anywhere; word-break: break-word; }
+
+.page-agent-markdown .page-agent-heading {
+  margin: 10px 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  color: #15244a;
+}
+.page-agent-markdown p { margin: 6px 0; }
+
+.page-agent-markdown .page-agent-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.page-agent-markdown .page-agent-list li { margin: 2px 0; }
+.page-agent-markdown .page-agent-list li::marker { color: #c39d3e; }
+
+.page-agent-markdown .page-agent-quote {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 3px solid #d9c884;
+  background: rgba(201, 168, 76, .07);
+  color: #3b4a6a;
+  border-radius: 0 8px 8px 0;
+}
+
+.page-agent-markdown .page-agent-inlineCode {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(31, 56, 110, .09);
+  color: #1d3978;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.page-agent-markdown .page-agent-tableWrap {
+  margin: 8px 0;
+  overflow-x: auto;
+  border: 1px solid #dfe4ed;
+  border-radius: 8px;
+}
+.page-agent-markdown .page-agent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.page-agent-markdown .page-agent-table th,
+.page-agent-markdown .page-agent-table td {
+  padding: 6px 9px;
+  border-bottom: 1px solid #ecf0f6;
+  text-align: left;
+}
+.page-agent-markdown .page-agent-table th {
+  background: #f4f7fd;
+  font-weight: 600;
+  color: #15244a;
+}
+
+.page-agent-markdown .page-agent-codeBlock {
+  margin: 8px 0;
+  overflow: hidden;
+  border: 1px solid #dfe4ed;
+  border-radius: 9px;
+  background: #0f1a33;
+  color: #e3eaff;
+}
+.page-agent-markdown .page-agent-codeBlockHeader {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: #18264a;
+  color: #9fb3df;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.page-agent-markdown .page-agent-codeBlock pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* Mermaid diagrams: keep inline-block so wide trees don't overflow the
+ * 86% max-width bubble; mermaid's SVG carries a viewBox so it scales down
+ * cleanly. The wrapper color blends with the assistant bubble (white). */
+.page-agent-mindmap {
+  display: block;
+  margin: 8px 0;
+  padding: 10px 8px;
+  border: 1px solid #dfe4ed;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1b2943;
+  overflow-x: auto;
+}
+.page-agent-mindmap svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.page-agent-mindmap--loading,
+.page-agent-mindmap--error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.page-agent-mindmap--error {
+  flex-direction: column;
+  align-items: flex-start;
+  background: #fff5f5;
+  border-color: #f0cece;
+  color: #a33d3d;
+}
+.page-agent-mindmap--error details {
+  margin-top: 4px;
+  width: 100%;
+}
+.page-agent-mindmap--error pre {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #5a3a3a;
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Mermaid zoom modal
+ *
+ * The thumbnail is a <button> (semantically clickable) wrapping the SVG
+ * plus a small "点击放大" hint. The full-screen view uses a native
+ * <dialog> element so we get free backdrop, ESC handling, and top-layer
+ * rendering without a portal.
+ * ──────────────────────────────────────────────────────────────────────── */
+.page-agent-mindmap {
+  /* Override the block-level .page-agent-mindmap from the markdown section
+   * so the thumbnail acts as a button (block-level so the SVG can span
+   * the full bubble width). */
+  display: block;
+  position: relative;
+  margin: 8px 0;
+  padding: 14px 12px 12px;
+  border: 1px solid #dfe4ed;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1b2943;
+  font: inherit;
+  text-align: left;
+  cursor: zoom-in;
+  /* Allow the inner SVG's min-width to push the button wider than the
+   * bubble's max-width; the page is horizontally scrollable when needed. */
+  overflow-x: auto;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+@media (max-width: 520px) {
+  .page-agent-mindmap {
+    padding: 10px 10px 10px;
+    border-radius: 9px;
+  }
+  .page-agent-mindmap .page-agent-mindmap-svg {
+    /* On phones use the available width and let aspect-ratio drive height. */
+    width: 100%;
+  }
+}
+.page-agent-mindmap:hover {
+  border-color: #91abd9;
+  box-shadow: 0 6px 18px rgba(31, 56, 110, .12);
+}
+.page-agent-mindmap:focus-visible {
+  outline: none;
+  border-color: #5680cb;
+  box-shadow: 0 0 0 3px rgba(69, 112, 194, .22);
+}
+.page-agent-mindmap .page-agent-mindmap-svg {
+  display: block;
+  /* "Small thumbnail by default" per the user's preference. Wider than
+   * tall so the radial branches have room to fan out; tall enough for
+   * 4 first-level branches stacked vertically. markmap auto-fits.
+   * On phones the fixed 460px would overflow the bubble's max-width; cap
+   * via max-width so the SVG scales down while keeping aspect ratio. */
+  width: 460px;
+  max-width: 100%;
+  height: 240px;
+  aspect-ratio: 460 / 240;
+}
+/* Override markmap's CSS variables to brand colors + larger font.
+ * markmap renders nodes via <foreignObject> and reads these vars at
+ * runtime, so this is the single most effective styling knob. */
+/* Both the thumbnail and the modal use markmap; apply brand styling
+ * to every markmap instance under .page-agent-mindmap, regardless of
+ * whether it's the thumbnail or the (top-layer) dialog child. */
+.page-agent-mindmap .markmap,
+.page-agent-mindmap-dialog .markmap {
+  --markmap-max-width: 320px;
+  --markmap-circle-open-bg: var(--mindmap-node-bg, #1f386e);
+  --markmap-text-color: var(--mindmap-node-fg, #1b2943);
+  --markmap-font: 600 14px/1.4 var(--font-sans-cn, 'Noto Sans SC', system-ui, sans-serif);
+}
+/* Modal gets bigger text + wider label box since the host viewport is
+ * the full screen, not a 460px thumbnail. */
+.page-agent-mindmap-dialog .markmap {
+  --markmap-max-width: 480px;
+  --markmap-font: 600 17px/1.4 var(--font-sans-cn, 'Noto Sans SC', system-ui, sans-serif);
+}
+/* Each node is wrapped in <foreignObject> with an inline div. Add a
+ * pill-shaped background that varies by depth using CSS attribute
+ * selectors. This gives every level its own brand color without
+ * needing to inject per-node styles from JS. */
+.page-agent-mindmap .markmap-foreign > div > div {
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1.5px solid #b9c8e4;
+  color: #1b2943;
+  box-shadow: 0 2px 4px rgba(31, 56, 110, .06);
+  white-space: nowrap;
+}
+/* Depth-based colors. markmap sets data-depth on every <g.markmap-node>. */
+.page-agent-mindmap g.markmap-node[data-depth="1"] .markmap-foreign > div > div,
+.page-agent-mindmap-dialog g.markmap-node[data-depth="1"] .markmap-foreign > div > div {
+  background: #1f386e;
+  border-color: #1f386e;
+  color: #fff;
+}
+.page-agent-mindmap g.markmap-node[data-depth="2"] .markmap-foreign > div > div,
+.page-agent-mindmap-dialog g.markmap-node[data-depth="2"] .markmap-foreign > div > div {
+  background: #c9a84c;
+  border-color: #b9963f;
+  color: #15223a;
+}
+.page-agent-mindmap g.markmap-node[data-depth="3"] .markmap-foreign > div > div,
+.page-agent-mindmap-dialog g.markmap-node[data-depth="3"] .markmap-foreign > div > div {
+  background: #eaf1ff;
+  border-color: #4f7ed7;
+  color: #1f386e;
+}
+.page-agent-mindmap g.markmap-node[data-depth="4"] .markmap-foreign > div > div,
+.page-agent-mindmap-dialog g.markmap-node[data-depth="4"] .markmap-foreign > div > div {
+  background: #f4f6fb;
+  border-color: #b9c8e4;
+  color: #1b2943;
+}
+/* Hide markmap's fold-indicator circles — every node stays expanded in
+ * the thumbnail so users can see structure at a glance; the modal
+ * already shows everything. The fold affordance is irrelevant here. */
+.page-agent-mindmap g.markmap-node > circle,
+.page-agent-mindmap-dialog g.markmap-node > circle {
+  display: none;
+}
+.page-agent-mindmap-zoomHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-end;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(31, 56, 110, .08);
+  color: #315b9f;
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+
+/* Full-screen modal. <dialog> defaults to display:none, so we don't need
+ * to wire that ourselves — showModal() handles open/close states. The
+ * ::backdrop pseudo-element gives us the dim overlay for free. */
+.page-agent-mindmap-dialog {
+  /* Reset the user-agent dialog box so we can paint edge-to-edge. */
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: none;
+  max-height: none;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  color: inherit;
+}
+.page-agent-mindmap-dialog::backdrop {
+  background: rgba(15, 26, 51, .55);
+  backdrop-filter: blur(2px);
+}
+.page-agent-mindmap-dialogBody {
+  /* Inset from the viewport edges so the surrounding region is a real
+   * (clickable) backdrop rather than the body itself. The 24px margin is
+   * large enough that users can comfortably click outside the chart. */
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: calc(100vw - 48px);
+  height: calc(100vh - 48px);
+  margin: 24px;
+  padding: 24px 32px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+  cursor: zoom-out;
+}
+@media (max-width: 600px) {
+  /* On phones we shrink the inset so the chart actually fits, and trim
+   * the dialog padding so the SVG doesn't get crushed. */
+  .page-agent-mindmap-dialogBody {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    margin: 8px;
+    padding: 14px 14px;
+    border-radius: 12px;
+  }
+  .page-agent-mindmap-dialog .markmap {
+    /* Smaller node font on phones — the default 17px is too large when
+     * the viewport itself is 360px wide. */
+    --markmap-max-width: 220px;
+    --markmap-font: 600 14px/1.4 var(--font-sans-cn, 'Noto Sans SC', system-ui, sans-serif);
+  }
+  .page-agent-mindmap-close {
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+  }
+}
+.page-agent-mindmap-dialogBody > svg {
+  display: block;
+  /* Cap by viewport so very large diagrams still fit and pan instead of
+   * overflowing. Browsers preserve aspect ratio when only one of max-w/h
+   * is set. */
+  max-width: min(92vw, 1600px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+}
+.page-agent-mindmap-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 999px;
+  background: rgba(15, 26, 51, .78);
+  color: #fff;
+  cursor: pointer;
+  z-index: 1;
+}
+.page-agent-mindmap-close:hover {
+  background: rgba(15, 26, 51, .95);
+}
+.page-agent-mindmap-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .55);
+}
