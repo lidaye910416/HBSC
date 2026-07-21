@@ -7,8 +7,8 @@ export function PageAgentFab({ onClick }: { onClick: () => void }) {
       type="button"
       className={styles.fab}
       onClick={onClick}
-      aria-label="打开 page-agent AI 助手"
-      title="数创智伴 · 读懂本页或协助操作"
+      aria-label="打开数创智伴 · 读懂本页、协助操作、或生成播客"
+      title="数创智伴 · 读懂本页 · 协助操作 · 播一下"
       data-testid="page-agent-fab"
     >
       <span className={styles.iconWrap} aria-hidden="true">
@@ -17,7 +17,7 @@ export function PageAgentFab({ onClick }: { onClick: () => void }) {
       </span>
       <span className={styles.text}>
         <span className={styles.textMain}>数创智伴</span>
-        <span className={styles.textSub}>读懂本页 · 协助操作</span>
+        <span className={styles.textSub}>读懂 · 操作 · 播一下</span>
       </span>
       <ArrowUpRight size={15} className={styles.arrow} aria-hidden="true" />
     </button>

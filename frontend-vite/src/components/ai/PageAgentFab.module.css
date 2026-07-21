@@ -60,18 +60,37 @@
   box-shadow: 0 0 9px rgba(102, 210, 163, 0.85);
 }
 
-.text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1.15; }
-.textMain { font-size: 14px; font-weight: 700; letter-spacing: 0.06em; }
-.textSub { color: rgba(230, 237, 252, 0.69); font-size: 10.5px; letter-spacing: 0.035em; white-space: nowrap; }
+.text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1.15; min-width: 0; overflow: hidden; }
+.textMain { font-size: 14px; font-weight: 700; letter-spacing: 0.06em; overflow-wrap: anywhere; word-break: break-word; }
+.textSub { color: rgba(230, 237, 252, 0.69); font-size: 10.5px; letter-spacing: 0.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .arrow { color: rgba(230, 237, 252, 0.62); transition: transform 180ms ease, color 180ms ease; }
 .fab:hover .arrow { color: #e5c56e; transform: translate(2px, -2px); }
 
 @keyframes fab-enter { from { opacity: 0; transform: translateY(10px) scale(.96); } }
 
+/* Phones: collapse to an icon-only chip.
+ * - right/bottom offset respects iOS safe-area inset via env(safe-area-inset-bottom)
+ *   so the chip never sits under the home indicator on notched phones.
+ * - ≤ 340px (small Android phones) keeps the same icon but pulls slightly
+ *   inward to avoid gesture-area conflicts.
+ */
 @media (max-width: 480px) {
-  .fab { right: 14px; bottom: 14px; min-width: 0; width: 52px; height: 52px; padding: 6px; border-radius: 16px; }
+  .fab {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    min-width: 0;
+    width: 52px;
+    height: 52px;
+    padding: 6px;
+    border-radius: 16px;
+  }
   .text, .arrow { display: none; }
   .iconWrap { width: 38px; height: 38px; }
+}
+
+@media (max-width: 340px) {
+  .fab { right: 10px; bottom: 10px; width: 48px; height: 48px; border-radius: 14px; }
+  .iconWrap { width: 34px; height: 34px; border-radius: 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

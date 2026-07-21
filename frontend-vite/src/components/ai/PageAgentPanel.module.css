@@ -6,7 +6,9 @@
   display: flex;
   flex-direction: column;
   width: min(420px, calc(100vw - 32px));
-  height: min(650px, calc(100vh - 48px));
+  /* Tighter cap so the panel reads as a focused side sheet, not a
+   * full-screen modal — even on a 1080p monitor. */
+  height: min(580px, calc(100vh - 48px));
   overflow: hidden;
   border: 1px solid rgba(115, 145, 200, 0.28);
   border-radius: 24px;
@@ -69,9 +71,9 @@
   border-bottom: 1px solid #e2e7f0;
   background: #fff;
 }
-.contextBar > span:nth-child(2) { display: flex; min-width: 0; flex: 1; flex-direction: column; line-height: 1.25; }
+.contextBar > span:nth-child(2) { display: flex; min-width: 0; flex: 1; flex-direction: column; line-height: 1.25; overflow: hidden; }
 .contextBar small { color: #71809b; font-size: 10px; letter-spacing: .08em; }
-.contextBar strong { overflow: hidden; color: #203150; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.contextBar strong { overflow: hidden; color: #203150; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .contextPulse { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #4f7ed7; box-shadow: 0 0 0 4px rgba(79,126,215,.12); }
 .contextType { padding: 3px 8px; border-radius: 999px; background: #edf3ff; color: #315da9; font-size: 10px; white-space: nowrap; }
 
@@ -88,19 +90,20 @@
 }
 
 .empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 22px 12px; color: #66748d; text-align: center; }
-.empty > strong { color: #1c2c49; font-family: var(--font-serif-cn, serif); font-size: 19px; }
-.empty > div:not(.emptyPrompts):not(.mindmapHint) { max-width: 310px; font-size: 12.5px; }
+.empty > strong { color: #1c2c49; font-family: var(--font-serif-cn, serif); font-size: 19px; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
+.empty > div:not(.emptyPrompts):not(.mindmapHint) { max-width: 100%; font-size: 12.5px; overflow-wrap: anywhere; word-break: break-word; }
 .emptyIcon { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 4px; border: 1px solid rgba(201,168,76,.34); border-radius: 17px; background: linear-gradient(145deg, #132c58, #0c1b38); color: #e2c36d; box-shadow: 0 10px 24px rgba(17,43,85,.2); }
 
-.mindmapHint { display: flex; align-items: flex-start; gap: 7px; max-width: 330px; margin-top: 3px; padding: 9px 11px; border: 1px solid #d9e5fa; border-radius: 12px; background: #f0f5ff; color: #315b9f; font-size: 11.5px; text-align: left; }
+.mindmapHint { display: flex; align-items: flex-start; gap: 7px; max-width: 100%; margin-top: 3px; padding: 9px 11px; border: 1px solid #d9e5fa; border-radius: 12px; background: #f0f5ff; color: #315b9f; font-size: 11.5px; line-height: 1.55; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
+.mindmapHint > span, .mindmapHint > div { min-width: 0; flex: 1; }
 .mindmapHint svg { flex: 0 0 auto; margin-top: 2px; }
 
 .emptyPrompts { display: grid; width: 100%; gap: 7px; margin-top: 9px; }
-.emptyPrompt { padding: 9px 12px; border: 1px solid #dde3ed; border-radius: 12px; background: rgba(255,255,255,.88); color: #33435f; font: inherit; font-size: 12px; text-align: left; cursor: pointer; transition: border-color 150ms ease, transform 150ms ease, background 150ms ease; }
+.emptyPrompt { padding: 9px 12px; border: 1px solid #dde3ed; border-radius: 12px; background: rgba(255,255,255,.88); color: #33435f; font: inherit; font-size: 12px; line-height: 1.5; text-align: left; cursor: pointer; transition: border-color 150ms ease, transform 150ms ease, background 150ms ease; overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
 .emptyPrompt::before { margin-right: 7px; color: #c39d3e; content: '↗'; }
 .emptyPrompt:hover { transform: translateX(2px); border-color: #91abd9; background: #fff; }
 
-.bubble { max-width: 86%; padding: 10px 12px; border-radius: 15px; word-wrap: break-word; white-space: pre-wrap; }
+.bubble { max-width: 86%; padding: 10px 12px; border-radius: 15px; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; line-height: 1.55; }
 .bubbleUser { align-self: flex-end; border-bottom-right-radius: 5px; background: linear-gradient(135deg, #315fae, #244b91); color: #fff; box-shadow: 0 6px 16px rgba(38,81,157,.18); }
 .bubbleAssistant { align-self: flex-start; border: 1px solid #dfe4ed; border-bottom-left-radius: 5px; background: #fff; color: #263653; }
 
@@ -109,7 +112,7 @@
 .textarea::placeholder { color: #8994a8; }
 .textarea:focus { border-color: #5680cb; box-shadow: 0 0 0 3px rgba(69,112,194,.12); background: #fff; }
 .actions { display: flex; align-items: stretch; gap: 8px; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 9px 14px; border: 1px solid transparent; border-radius: 11px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 9px 14px; border: 1px solid transparent; border-radius: 11px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; min-width: 0; overflow-wrap: anywhere; word-break: break-word; white-space: nowrap; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btnGrow { flex: 1 1 auto; }
 .btnPrimary { border-color: #c7a652; background: linear-gradient(135deg, #d1b45e, #b9963f); color: #15223a; }
@@ -118,7 +121,7 @@
 .btnSecondary:hover:not(:disabled) { filter: brightness(1.07); }
 .btnGhost { flex: 0 0 auto; width: 40px; min-height: 40px; align-self: center; padding: 0; border: 1px solid #e0e4eb; border-radius: 11px; background: #fff; color: #7a8496; }
 .btnGhost:hover:not(:disabled) { border-color: #efc9c9; background: #fff3f3; color: #aa4242; }
-.error { padding: 7px 10px; border: 1px solid #f0cece; border-radius: 9px; background: #fff1f1; color: #a33d3d; font-size: 12px; }
+.error { padding: 7px 10px; border: 1px solid #f0cece; border-radius: 9px; background: #fff1f1; color: #a33d3d; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; word-break: break-word; }
 
 .clearLayer {
   position: absolute;
@@ -156,8 +159,9 @@
 }
 
 .clearCopy { min-width: 0; }
-.clearCopy strong { display: block; color: #1d2c48; font-size: 14px; }
-.clearCopy p { margin: 2px 0 0; color: #728099; font-size: 11.5px; line-height: 1.5; }
+.clearCopy strong { display: block; color: #1d2c48; font-size: 14px; overflow-wrap: anywhere; word-break: break-word; }
+.clearCopy p { margin: 2px 0 0; color: #728099; font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; word-break: break-word; }
+/* (clearCopy strong / p consolidated above for line-height + wrap) */
 .clearActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 .clearCancel,
 .clearConfirm { min-width: 68px; padding: 7px 12px; border-radius: 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -169,11 +173,109 @@
 @keyframes panel-enter { from { opacity: 0; transform: translateY(12px) scale(.98); } }
 @keyframes clear-card-enter { from { opacity: 0; transform: translateY(8px); } }
 
+/* Subtle pulse so "正在理解" feels alive instead of static. */
+@keyframes contextPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(79,126,215,.12); }
+  50%      { box-shadow: 0 0 0 7px rgba(79,126,215,.05); }
+}
+.contextPulse { animation: contextPulse 1.8s ease-in-out infinite; }
+
+/* ───── Responsive ─────
+ *
+ * Goal on phones: maximize the conversation body by shrinking the
+ * top + bottom chrome. Each section is sized to fit in 1 short line
+ * on a typical iPhone viewport so the body has room to scroll.
+ *   - ≤ 600px (phones): tighten all chrome heights, drop the brand
+ *     subtitle, drop the article title in the context bar (kept only
+ *     as a tooltip via `title=`), default the textarea to 1 row.
+ *   - ≤ 380px (small phones): further trim.
+ */
 @media (max-width: 600px) {
-  .root { right: 8px; bottom: 8px; width: calc(100vw - 16px); height: min(78vh, 680px); border-radius: 22px; }
-  .header { min-height: 64px; }
-  .contextBar { min-height: 52px; }
+  /* Cap panel height tighter so the panel reads as a compact bottom
+   * sheet rather than a near-full-screen modal. On an iPhone 14 Pro
+   * (932px viewport), 55vh = 513px; the 460px cap dominates for most
+   * phones. The body content scrolls inside when needed (e.g. the
+   * podcast tab's voice cards + 4-step timeline). */
+  .root {
+    right: 8px;
+    bottom: 14px;
+    left: 8px;
+    width: auto;
+    height: min(55vh, 460px);
+    border-radius: 18px;
+  }
+
+  /* Header: single-line brand + close, drop the subtitle entirely. */
+  .header { min-height: 46px; padding: 7px 10px; }
+  .brand { gap: 8px; }
+  .brand strong { font-size: 13.5px; }
+  .brand small { display: none; }
+  .brandIcon { width: 28px; height: 28px; border-radius: 9px; }
+  .brandIcon svg { width: 14px; height: 14px; }
+  .close { width: 28px; height: 28px; border-radius: 9px; }
+  .close svg { width: 13px; height: 13px; }
+
+  /* Context bar: just the "understanding" pulse + type tag. The full
+   * article title would crowd the row on narrow viewports and the user
+   * already sees it in the page below — hide it here, keep accessible
+   * label via aria-label/title. */
+  .contextBar { min-height: 34px; padding: 6px 10px; gap: 6px; }
+  .contextBar > span:nth-child(2) { display: none; }
+  .contextType { padding: 2px 8px; font-size: 10px; letter-spacing: .04em; }
+  .contextPulse { width: 7px; height: 7px; flex: 0 0 7px; }
+
+  /* Mode tabs: 1-line tall, smaller text. */
+  .modeTabs { padding: 4px; gap: 2px; }
+  .modeTab { padding: 6px 4px; font-size: 11.5px; gap: 3px; letter-spacing: 0; }
+  .modeTab svg { width: 13px; height: 13px; }
+
+  /* Body: tight spacing so a single message + reply fit comfortably. */
+  .body { gap: 8px; padding: 10px 12px; }
+  .empty { padding: 14px 8px; gap: 6px; }
+  .empty > strong { font-size: 15px; line-height: 1.35; }
+  .empty > div:not(.emptyPrompts):not(.mindmapHint) { font-size: 11.5px; line-height: 1.55; }
+  .emptyIcon { width: 40px; height: 40px; }
+  .emptyIcon svg { width: 19px; height: 19px; }
+  .bubble { max-width: 94%; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; }
+  .bubbleUser, .bubbleAssistant { border-radius: 13px; }
+  .bubbleUser { border-bottom-right-radius: 4px; }
+  .bubbleAssistant { border-bottom-left-radius: 4px; }
+
+  /* Footer: single-row textarea + tight buttons. The textarea grows
+   * naturally when the user pastes long text; rows=1 just sets the
+   * initial render height. */
+  .footer { gap: 6px; padding: 8px 10px 10px; }
+  .textarea { min-height: 38px; padding: 8px 11px; font-size: 13px; line-height: 1.45; }
+  .btn { min-height: 34px; padding: 7px 12px; font-size: 12px; }
   .actions { gap: 6px; }
+  .btnGhost { width: 34px; min-height: 34px; }
+  .btnGhost svg { width: 13px; height: 13px; }
+
+  .emptyPrompt { padding: 8px 11px; font-size: 11.5px; line-height: 1.45; }
+  .mindmapHint { padding: 8px 10px; font-size: 11px; line-height: 1.55; }
+  .clearCard { padding: 12px; gap: 9px 11px; border-radius: 14px; }
+  .clearIcon { width: 28px; height: 28px; border-radius: 9px; }
+  .clearCopy strong { font-size: 13px; }
+  .clearCopy p { font-size: 11px; line-height: 1.55; }
+  .clearOption { padding: 5px 7px; font-size: 11.5px; line-height: 1.4; }
+  .clearCancel, .clearConfirm { min-width: 60px; padding: 6px 10px; }
+}
+
+@media (max-width: 380px) {
+  /* iPhone SE / small Android: cap at 400px so the panel reads as a
+   * bottom sheet, not a half-screen modal. */
+  .root { border-radius: 16px; height: min(52vh, 400px); bottom: 10px; }
+  .header { min-height: 42px; padding: 6px 9px; }
+  .brand strong { font-size: 13px; letter-spacing: .04em; }
+  .brandIcon { width: 26px; height: 26px; }
+  .close { width: 26px; height: 26px; }
+  .contextBar { min-height: 30px; padding: 5px 9px; }
+  .modeTab { padding: 5px 5px; font-size: 11px; gap: 3px; }
+  .body { padding: 8px 10px; gap: 7px; }
+  .emptyPrompts { gap: 5px; }
+  .emptyPrompt { padding: 7px 10px; font-size: 11px; }
+  .footer { padding: 7px 9px 9px; }
+  .textarea { min-height: 36px; padding: 7px 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -182,7 +284,7 @@
 
 .modeTabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0;
   padding: 6px;
   background: rgba(255, 255, 255, 0.6);

@@ -258,6 +258,32 @@ export const api = {
           body: JSON.stringify({ url, init }),
         }),
     },
+
+    /**
+     * 数创智伴 「播一下」 tab backend.
+     * Mirrors the public_agent shape: no admin auth, anonymous-friendly,
+     * driven by  AdminSetting rows.
+     * See backend/app/routers/public_podcast_router.py + docs/superpowers/specs/2026-07-20-fab-podcast-mode-design.md.
+     */
+    podcast: {
+      config: (): Promise<PodcastConfig> => request<PodcastConfig>('/api/public/podcast/config'),
+
+      /**
+       * One-shot generate: extract → script → synthesize.
+       * Returns a ready-to-play job. The browser-side <audio> element
+       * points at  (or downloads through /api/public/podcast/download/{job_id}
+       * if the upstream origin is cross-origin to the page).
+       *
+       * Throws ApiError with code 'minicast_unavailable' (503) when the
+       * upstream MiniCast service is down — callers should fall back to
+       * the workbench at /labs/minicast/?embed=1&source=<URL>.
+       */
+      generate: (body: { url: string; title_hint?: string }) =>
+        request<PodcastGenerateResult>('/api/public/podcast/generate', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+    },
   },
 
   admin: {
@@ -487,3 +513,34 @@ export const api = {
     },
   },
 }
+
+/**
+ * Backend contract for /api/public/podcast/* (see backend/app/routers/public_podcast_router.py).
+ * Keep these types in sync with the router Pydantic models.
+ */
+export interface PodcastVoiceInfo {
+  label: string       // hbsc product name: 小数 / 小创
+  subtitle: string    // one-liner describing tone
+  emoji: string
+  gender: "male" | "female"
+}
+
+export interface PodcastConfig {
+  enabled: boolean
+  minicast_base_url: string
+  voices: Record<string, PodcastVoiceInfo>
+  default_voice_a: string
+  default_voice_b: string
+}
+
+export interface PodcastGenerateResult {
+  job_id: string
+  mp3_url: string
+  srt_url?: string
+  duration_seconds: number
+  total_chars: number
+  segment_count: number
+  script_text: string
+  fallback_url: string
+}
+

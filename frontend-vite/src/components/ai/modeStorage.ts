@@ -1,4 +1,22 @@
-export type AgentMode = 'ask' | 'operate'
+export type AgentMode = 'ask' | 'operate' | 'podcast'
+
+/**
+ * Modes that persist chat history in sessionStorage.
+ *
+ * `podcast` is excluded because the podcast workflow keeps its own
+ * state inside the PodcastPanel component (current job, audio element,
+ * script text). It has no chat history to persist — the panel
+ * re-renders from `idle` on every open.
+ *
+ * Keeping the list as an exported Set lets callers do membership
+ * checks (e.g. `CHAT_HISTORY_MODES.has(mode)`) without re-typing
+ * the union every place.
+ */
+export const CHAT_HISTORY_MODES: ReadonlySet<AgentMode> = new Set(['ask', 'operate'])
+
+export function isChatHistoryMode(mode: AgentMode): boolean {
+  return CHAT_HISTORY_MODES.has(mode)
+}
 
 const LEGACY_GLOBAL = 'hbsc.page-agent.chat.history'
 const KEY_PREFIX = 'hbsc.page-agent.chat.history'

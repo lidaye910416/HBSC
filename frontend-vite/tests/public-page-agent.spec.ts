@@ -42,7 +42,9 @@ test.describe('public page-agent FAB', () => {
     expect(Number(text[1])).toBeGreaterThan(230)
     expect(Number(text[2])).toBeGreaterThan(230)
     await expect(fab).toContainText('数创智伴')
-    await expect(fab).toContainText('读懂本页 · 协助操作')
+    // FAB subtitle now advertises three modes (读懂 / 操作 / 播一下) since
+    // the 2026-07-20 podcast feature shipped. Match the new copy.
+    await expect(fab).toContainText('读懂 · 操作 · 播一下')
   })
 
   test('FAB appears on homepage after admin enables + key is set', async ({ page }) => {
@@ -807,3 +809,163 @@ test.describe('public page-agent FAB', () => {
       page.getByText('页面助手暂时无法理解当前任务，请换种描述重试').first(),
     ).toBeVisible({ timeout: 15_000 })
   })
+
+test.describe('public page-agent FAB — podcast mode', () => {
+  test('podcast tab renders voice cards and starts generation', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+          system_prompt: '',
+        }),
+      }),
+    )
+    await page.route('**/api/public/podcast/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          minicast_base_url: 'http://127.0.0.1:8000',
+          voices: {
+            midnight_male: {
+              label: '小数',
+              subtitle: '男 · 磁性低沉 · 适合嘉宾身份',
+              emoji: '🎙️',
+              gender: 'male',
+            },
+            warm_female: {
+              label: '小创',
+              subtitle: '女 · 温暖热情 · 适合主持身份',
+              emoji: '🌸',
+              gender: 'female',
+            },
+          },
+          default_voice_a: 'midnight_male',
+          default_voice_b: 'warm_female',
+        }),
+      }),
+    )
+    await page.route('**/api/public/podcast/generate', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: 'test-job-1',
+          mp3_url: '/api/jobs/test-job-1/download',
+          srt_url: '/api/jobs/test-job-1/subtitle',
+          duration_seconds: 87.5,
+          total_chars: 1500,
+          segment_count: 12,
+          script_text: 'A: 欢迎收听\nB: 大家好',
+          fallback_url: '/labs/minicast/?embed=1&source=' + encodeURIComponent('/articles/foo'),
+        }),
+      }),
+    )
+
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+
+    // The third tab should be reachable.
+    const podcastTab = page.getByTestId('page-agent-mode-podcast')
+    await expect(podcastTab).toBeVisible()
+    await podcastTab.click()
+
+    // Body switches to the PodcastPanel — and shows both voice cards.
+    await expect(page.getByTestId('podcast-panel')).toBeVisible()
+    await expect(page.getByTestId('podcast-voice-a')).toContainText('小数')
+    await expect(page.getByTestId('podcast-voice-b')).toContainText('小创')
+
+    // Trigger generation; the panel progresses to `ready` and shows the
+    // proxied mp3 src + download buttons.
+    await page.getByTestId('podcast-start-btn').click()
+    const ready = page.getByTestId('podcast-ready')
+    await expect(ready).toBeVisible({ timeout: 15_000 })
+    const audio = page.getByTestId('podcast-audio')
+    await expect(audio).toHaveAttribute(
+      'src',
+      '/api/public/podcast/download/test-job-1',
+    )
+    await expect(page.getByTestId('podcast-download-mp3')).toHaveAttribute(
+      'href',
+      '/api/public/podcast/download/test-job-1',
+    )
+  })
+
+  test('podcast panel hides chat footer when in podcast mode', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: '', base_url: '', system_prompt: '' }),
+      }),
+    )
+    await page.route('**/api/public/podcast/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          minicast_base_url: 'http://127.0.0.1:8000',
+          voices: {},
+          default_voice_a: 'midnight_male',
+          default_voice_b: 'warm_female',
+        }),
+      }),
+    )
+
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.getByTestId('page-agent-mode-podcast').click()
+    await expect(page.getByTestId('page-agent-input')).toHaveCount(0)
+  })
+
+  test('minicast unavailable shows fallback link to /labs/minicast', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: '', base_url: '', system_prompt: '' }),
+      }),
+    )
+    await page.route('**/api/public/podcast/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          minicast_base_url: 'http://127.0.0.1:8000',
+          voices: {},
+          default_voice_a: 'midnight_male',
+          default_voice_b: 'warm_female',
+        }),
+      }),
+    )
+    await page.route('**/api/public/podcast/generate', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          detail: {
+            code: 'minicast_unavailable',
+            message: '播客服务暂不可用，请稍后重试',
+            hint: '你也可以打开 /labs/minicast 完整工作台手动生成',
+          },
+        }),
+      }),
+    )
+
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.getByTestId('page-agent-mode-podcast').click()
+    await page.getByTestId('podcast-start-btn').click()
+    await expect(page.getByTestId('podcast-error')).toBeVisible({ timeout: 10_000 })
+    // Fallback link targets the workbench embed with the current page as source.
+    const link = page.getByTestId('podcast-error').locator('a')
+    await expect(link).toHaveAttribute('href', /\/labs\/minicast\/\?embed=1&source=/)
+  })
+})

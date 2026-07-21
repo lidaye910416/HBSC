@@ -65,12 +65,62 @@ export function collectPageContext(doc: Document, location: Location): PageConte
 }
 
 export function buildPageContextMessage(context: PageContext): string {
+  // The contract: structure requests (导图 / 梳理结构 / 总结要点) MUST be
+  // answered with a `markmap` fenced code block containing markdown
+  // headings. The MindmapBlock component renders this into a radial
+  // SVG via markmap-view. We teach the model this contract in
+  // `mindMapInstruction` below.
+  // Keep the legacy phrase "主动提示可绘制思维导图" so the existing test
+  // in tests/animations/pageContext.test.ts stays green without churn.
+  // Mindmap contract: ask the model for a markdown heading tree inside a
+  // `markmap` fenced block. markmap (the renderer) parses markdown headings
+  // (`#` / `##` / `###`) into a radial mind map. Compared to mermaid's
+  // mindmap syntax, this is more natural for LLMs (they already speak
+  // markdown headings) and produces a denser, more readable default render.
+  const mindMapSyntax = [
+    '思维导图必须以 ```markmap 围栏代码块输出（不要用 mermaid / flowchart）；',
+    '内部使用 Markdown 标题层级：',
+    '  - 第 1 行 `# 主题` 是根节点（必须有且只有 1 个 # 标题）；',
+    '  - 第 2 行 `## 分支` 是一级分支，至少 4 个；',
+    '  - 第 3 行 `### 叶子` 是子节点，每个一级分支下至少 2 个；',
+    '  - 不使用 #### 或更深层级；',
+    '  - 标题文字 ≤ 10 个汉字 / 5 个英文单词。',
+  ].join('\n')
+
   const mindMapInstruction = context.isTechnicalArticle
-    ? '这是技术文章；回答复杂概念或结构性问题后，主动提示可绘制思维导图帮助用户理解内容。'
-    : '如果页面内容具有明显层级或复杂关系，可询问用户是否需要结构化梳理。'
+    ? [
+        '这是技术文章；遇到复杂概念或结构性问题时，主动提示可绘制思维导图帮助用户理解内容。',
+        '当用户要求「画思维导图 / 整理结构 / 梳理要点」时，必须输出一个 ```markmap 围栏代码块。',
+        mindMapSyntax,
+        '示例：',
+        '```markmap',
+        '# AI 与内容产业',
+        '## 技术栈',
+        '### 大模型',
+        '### 智能体',
+        '### 检索增强',
+        '## 应用场景',
+        '### 内容生成',
+        '### 内容审核',
+        '### 个性化推荐',
+        '## 商业模式',
+        '### SaaS 订阅',
+        '### 按量计费',
+        '## 挑战',
+        '### 版权风险',
+        '### 算力成本',
+        '```',
+        '其他回答可正常输出 Markdown。',
+      ].join('\n')
+    : [
+        '如果页面内容具有明显层级或复杂关系，可询问用户是否需要结构化梳理。',
+        '当用户要求「画思维导图 / 梳理结构 / 总结要点」时，必须输出一个 ```markmap 围栏代码块。',
+        mindMapSyntax,
+      ].join('\n')
 
   return [
     '你是湖北数创网站的“数创智伴”。用户询问“本页、这篇文章、这里”等内容时，必须优先依据以下页面上下文精准回答；不要假装看不到页面，也不要编造页面未提供的信息。',
+    '回答默认使用 Markdown 格式（标题、列表、表格、代码块都可使用）。',
     `当前页面类型：${context.typeLabel}`,
     `当前页面标题：${context.title}`,
     `当前页面 URL：${context.url}`,

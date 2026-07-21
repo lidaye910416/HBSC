@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookOpen, Bot, BrainCircuit, Loader2, MessageSquareText, MousePointerClick, Trash2, X } from 'lucide-react'
+import { BookOpen, Bot, BrainCircuit, Headphones, MousePointerClick, Trash2, X } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../services/api'
 import { PageAgent } from 'page-agent'
 import { acquire, disposeSession, isRecoverableDisposedError } from '../../lib/pageAgentSession'
 import { buildPageContextMessage, collectPageContext } from './pageContext'
-import { getStorageKey, migrateLegacyStorage, type AgentMode } from './modeStorage'
+import { getStorageKey, isChatHistoryMode, migrateLegacyStorage, type AgentMode } from './modeStorage'
 import type { PageContext } from './pageContext'
+import { MessageBubble } from './MessageBubble'
+import { PodcastPanel } from './PodcastPanel'
 import styles from './PageAgentPanel.module.css'
 
 type UiMessage = { id: number; role: 'user' | 'assistant'; content: string; mode: AgentMode; routeKey?: string }
 
-const STORAGE_KEY = 'hbsc.page-agent.chat.history'
 
 export function PageAgentPanel({
   agent,
@@ -25,9 +26,16 @@ export function PageAgentPanel({
   const [mode, setMode] = useState<AgentMode>('ask')
   const askKey = getStorageKey(routeKey, 'ask')
   const operateKey = getStorageKey(routeKey, 'operate')
-  const storageKey = mode === 'ask' ? askKey : operateKey
+  // Podcast mode does NOT have its own sessionStorage bucket — its state
+  // lives entirely in the PodcastPanel component (current job, audio
+  // element, script text). Loading the operate bucket under podcast mode
+  // would leak unrelated history into the wrong tab.
+  const storageKey = isChatHistoryMode(mode)
+    ? (mode === 'ask' ? askKey : operateKey)
+    : null
   const [history, setHistory] = useState<UiMessage[]>(() => {
     migrateLegacyStorage(routeKey)
+    if (!storageKey) return []
     try {
       const raw = sessionStorage.getItem(storageKey)
       if (raw) return JSON.parse(raw) as UiMessage[]
@@ -45,9 +53,25 @@ export function PageAgentPanel({
   const bodyRef = useRef<HTMLDivElement>(null)
   const clearCancelRef = useRef<HTMLButtonElement>(null)
   const clearTriggerRef = useRef<HTMLButtonElement>(null)
+  // Used to refocus the textarea after a send completes so users can
+  // immediately ask a follow-up without a manual click.
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Default to 1 row on phones so the footer stays compact; the user
+  // can still type multi-line input — the textarea grows with content.
+  const [textareaRows, setTextareaRows] = useState<number>(() =>
+    typeof window !== 'undefined' && window.innerWidth <= 600 ? 1 : 2
+  )
   const [pageContext, setPageContext] = useState<PageContext>(() =>
     collectPageContext(document, window.location),
   )
+  // Re-evaluate the textarea row count on viewport resize so a phone
+  // user who rotates the device gets the compact layout.
+  useEffect(() => {
+    const updateRows = () => setTextareaRows(window.innerWidth <= 600 ? 1 : 2)
+    updateRows()
+    window.addEventListener('resize', updateRows)
+    return () => window.removeEventListener('resize', updateRows)
+  }, [])
   // Empty-state prompts are split by mode: ask gives comprehension
   // prompts; operate gives action prompts. Both still respect the
   // page type (technical article gets a mind-map hint, etc.).
@@ -105,11 +129,13 @@ export function PageAgentPanel({
     const fallback = window.setTimeout(refreshContext, 400)
     migrateLegacyStorage(routeKey)
     let nextHistory: UiMessage[] = []
-    try {
-      const raw = sessionStorage.getItem(storageKey)
-      if (raw) nextHistory = JSON.parse(raw) as UiMessage[]
-    } catch {
-      /* fall through */
+    if (storageKey) {
+      try {
+        const raw = sessionStorage.getItem(storageKey)
+        if (raw) nextHistory = JSON.parse(raw) as UiMessage[]
+      } catch {
+        /* fall through */
+      }
     }
     setHistory(nextHistory)
     nextIdRef.current = nextHistory.length > 0
@@ -130,7 +156,10 @@ export function PageAgentPanel({
   }, [routeKey])
 
   // Persist chat history to the bucket matching the current mode.
+  // Podcast mode intentionally skips persistence — its state lives in
+  // PodcastPanel and re-renders from idle on every open.
   useEffect(() => {
+    if (!isChatHistoryMode(mode)) return
     try {
       if (mode === 'ask') {
         sessionStorage.setItem(askKey, JSON.stringify(history))
@@ -221,6 +250,9 @@ export function PageAgentPanel({
         ...h,
         { id: nextIdRef.current++, role: 'assistant', content: '⚠️ ' + msg, mode: 'ask', routeKey },
       ])
+    } finally {
+      // refocus so users can type the next question immediately
+      textareaRef.current?.focus()
     }
   }
 
@@ -304,6 +336,7 @@ export function PageAgentPanel({
       if (reply) {
         if (mySeq !== requestSeqRef.current) {
           setOperating(false)
+          textareaRef.current?.focus()
           return
         }
         setError(reply.startsWith('⚠️') ? reply.slice(2) : null)
@@ -314,6 +347,7 @@ export function PageAgentPanel({
       }
     } finally {
       setOperating(false)
+      textareaRef.current?.focus()
     }
   }
 
@@ -371,8 +405,25 @@ export function PageAgentPanel({
         >
           <MousePointerClick size={14} /> 协助操作
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'podcast'}
+          className={`${styles.modeTab} ${mode === 'podcast' ? styles.modeTabActive : ''}`}
+          onClick={() => setMode('podcast')}
+          data-testid="page-agent-mode-podcast"
+        >
+          <Headphones size={14} /> 播一下
+        </button>
       </div>
 
+      {mode === 'podcast' && (
+        <div className={styles.body} data-testid="page-agent-podcast-body">
+          <PodcastPanel pageContext={pageContext} />
+        </div>
+      )}
+
+      {mode !== 'podcast' && (
       <div className={styles.body} ref={bodyRef} data-testid="page-agent-body">
         {history.length === 0 && !operating && (
           <div className={styles.empty}>
@@ -401,35 +452,38 @@ export function PageAgentPanel({
         )}
 
         {history.map((m) => (
-          <div
+          <MessageBubble
             key={m.id}
+            role={m.role}
+            content={m.content}
             className={`${styles.bubble} ${m.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant}`}
-          >
-            {m.content}
-          </div>
+          />
         ))}
 
         {(chatMut.isPending || operating) && (
-          <div
+          <MessageBubble
+            role="assistant"
+            content=""
+            pending
             className={`${styles.bubble} ${styles.bubbleAssistant}`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <Loader2 size={14} className="page-agent-spin" aria-hidden="true" />
-            思考中…
-          </div>
+          />
         )}
 
         {error && <div className={styles.error}>{error}</div>}
       </div>
+      )}
 
+
+      {mode !== 'podcast' && (
       <div className={styles.footer}>
         <textarea
+          ref={textareaRef}
           className={styles.textarea}
           placeholder={mode === 'ask' ? '问一个关于本页的问题…' : '描述想让我做的事，如「跳到搜索页」…'}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
-          rows={2}
+          rows={textareaRows}
           aria-label="提问输入框"
           data-testid="page-agent-input"
         />
@@ -459,6 +513,7 @@ export function PageAgentPanel({
           </button>
         </div>
       </div>
+      )}
 
       {clearOpen && (
         <div className={styles.clearLayer} onClick={closeClearConfirm}>
