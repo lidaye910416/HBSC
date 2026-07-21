@@ -420,15 +420,102 @@ class TestSynthesize:
             ))
         assert "hex" in str(exc.value).lower()
 
-    def test_missing_audio_field_raises(self, tmp_path, fake_http, fake_ffmpeg):
-        fake_http.responses = [_FakeHttpResponse(status_code=200, body={"data": {}})]
-        with pytest.raises(pt.PodcastTTSError):
+    def test_missing_audio_field_retries_then_raises(self, tmp_path, fake_http, fake_ffmpeg):
+        """Empty ``data.audio`` is MiniMax's silent-throttle signal —
+        _minimax_tts_one must retry 3× with exponential backoff before
+        giving up."""
+        fake_http.responses = [
+            _FakeHttpResponse(status_code=200, body={"data": {}}),
+            _FakeHttpResponse(status_code=200, body={"data": {}}),
+            _FakeHttpResponse(status_code=200, body={"data": {}}),
+        ]
+        with pytest.raises(pt.PodcastTTSError) as exc:
             asyncio.run(pt.synthesize(
                 [{"speaker": "B", "text": "x"}],
                 voice_a="midnight_male", voice_b="warm_female",
                 job_id="no-audio", output_dir=tmp_path,
                 api_key="sk", base_url="https://api.minimaxi.com/v1",
             ))
+        assert "missing data.audio" in str(exc.value)
+        # Three attempts were made (initial + 2 retries).
+        assert len(fake_http.calls) == 3
+
+    def test_missing_audio_field_succeeds_after_retry(self, tmp_path, fake_http, fake_ffmpeg):
+        """If the first attempt is throttled but the second succeeds,
+        synthesize must complete normally — the retry isn't supposed to
+        make the user-visible failure worse than today."""
+        pcm = _fake_pcm_bytes(0.5)
+        fake_http.responses = [
+            _FakeHttpResponse(status_code=200, body={"data": {}}),
+            _FakeHttpResponse(
+                status_code=200,
+                body={"data": {"audio": pcm.hex()}},
+            ),
+        ]
+        asyncio.run(pt.synthesize(
+            [{"speaker": "B", "text": "hi"}],
+            voice_a="midnight_male", voice_b="warm_female",
+            job_id="retry-then-ok", output_dir=tmp_path,
+            api_key="sk", base_url="https://api.minimaxi.com/v1",
+        ))
+        # Two attempts: throttled, then success.
+        assert len(fake_http.calls) == 2
+
+    def test_429_response_retries(self, tmp_path, fake_http, fake_ffmpeg):
+        """HTTP 429 must trigger retry just like the silent-throttle path."""
+        pcm = _fake_pcm_bytes(0.5)
+        fake_http.responses = [
+            _FakeHttpResponse(status_code=429, text="rate-limited"),
+            _FakeHttpResponse(
+                status_code=200,
+                body={"data": {"audio": pcm.hex()}},
+            ),
+        ]
+        asyncio.run(pt.synthesize(
+            [{"speaker": "B", "text": "hi"}],
+            voice_a="midnight_male", voice_b="warm_female",
+            job_id="retry-429", output_dir=tmp_path,
+            api_key="sk", base_url="https://api.minimaxi.com/v1",
+        ))
+        assert len(fake_http.calls) == 2
+
+    def test_4xx_other_than_429_is_fatal(self, tmp_path, fake_http, fake_ffmpeg):
+        """401/403/400 must NOT retry — backoff won't fix auth."""
+        fake_http.responses = [_FakeHttpResponse(status_code=401, text="bad key")]
+        with pytest.raises(pt.PodcastTTSError):
+            asyncio.run(pt.synthesize(
+                [{"speaker": "B", "text": "x"}],
+                voice_a="midnight_male", voice_b="warm_female",
+                job_id="401", output_dir=tmp_path,
+                api_key="sk", base_url="https://api.minimaxi.com/v1",
+            ))
+        # Only one attempt — no retry on non-429 4xx.
+        assert len(fake_http.calls) == 1
+
+    def test_base_resp_rate_limit_signal_retries(self, tmp_path, fake_http, fake_ffmpeg):
+        """base_resp.status_code != 0 + status_msg with a rate-limit
+        keyword is a soft throttle that we must retry on."""
+        pcm = _fake_pcm_bytes(0.5)
+        fake_http.responses = [
+            _FakeHttpResponse(
+                status_code=200,
+                body={
+                    "base_resp": {"status_code": 1004, "status_msg": "rate limit exceeded"},
+                    "data": {},
+                },
+            ),
+            _FakeHttpResponse(
+                status_code=200,
+                body={"data": {"audio": pcm.hex()}},
+            ),
+        ]
+        asyncio.run(pt.synthesize(
+            [{"speaker": "B", "text": "hi"}],
+            voice_a="midnight_male", voice_b="warm_female",
+            job_id="ratelimit-signal", output_dir=tmp_path,
+            api_key="sk", base_url="https://api.minimaxi.com/v1",
+        ))
+        assert len(fake_http.calls) == 2
 
     def test_empty_segment_emits_silence(self, tmp_path, fake_http, fake_ffmpeg):
         """An empty segment text must NOT call MiniMax — it just emits

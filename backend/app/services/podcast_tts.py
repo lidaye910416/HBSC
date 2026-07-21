@@ -54,6 +54,10 @@ from pathlib import Path
 from typing import Sequence
 
 import httpx
+from tenacity import (
+    retry, stop_after_attempt, wait_exponential,
+    retry_if_exception_type,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -229,6 +233,32 @@ def resolve_tts_credentials() -> tuple[str, str]:
 # Tool wrappers
 # ---------------------------------------------------------------------------
 
+class _TTSRetryableError(Exception):
+    """Signals a TTS failure worth retrying — rate limit, transient
+    network blip, or MiniMax returning 200 with no audio payload
+    (which is how the API signals "throttled" today)."""
+
+
+class _TTSFatalError(Exception):
+    """TTS failure that won't get better by retrying — auth / 4xx /
+    malformed payload / repeated base_resp.status_code != 0."""
+
+
+# 3 retries with exponential backoff (2s → 4s → 8s, capped at 10s),
+# matching MiniCast's src/minicast/core/utils/retry.py:tts_retry.
+# We extend MiniCast's set with _TTSRetryableError because MiniMax
+# surfaces rate limits as 200 + empty data.audio rather than a 429.
+_tts_retry_decorator = retry(
+    # 3 retries, 3s -> 6s -> 12s, capped at 30s. MiniMax's RPM window
+    # is ~60s; 12+12+12=36s backoff inside the same minute means most
+    # soft-throttles clear by the time the next attempt fires.
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=3, max=30),
+    retry=retry_if_exception_type(_TTSRetryableError),
+    reraise=True,
+)
+
+
 def _pcm_duration_seconds(pcm_bytes: bytes) -> float:
     """Length of a raw s16le mono PCM stream at MiniMax's 32 kHz rate."""
     return len(pcm_bytes) / (MINIMAX_TTS_SAMPLE_RATE * MINIMAX_TTS_CHANNELS * MINIMAX_TTS_BYTES_PER_SAMPLE)
@@ -333,6 +363,17 @@ async def _minimax_tts_one(
     }
     url = base_url.rstrip("/") + MINIMAX_TTS_PATH
 
+    # Status / signal vocabulary that MiniMax uses to mean "try again":
+    #   HTTP 429, 503
+    #   base_resp.status_code != 0 with status_msg mentioning limit/quota/
+    #     rate/throttle/frequency
+    #   200 OK but data.audio missing (the API's silent throttle)
+    _RATE_LIMIT_HINTS = (
+        "rate", "limit", "quota", "throttle", "frequency",
+        "too many", "too frequent",
+    )
+
+    @_tts_retry_decorator
     def _do() -> bytes:
         try:
             resp = httpx.post(
@@ -340,29 +381,63 @@ async def _minimax_tts_one(
                 timeout=MINIMAX_TTS_TIMEOUT_S,
             )
         except httpx.HTTPError as e:
-            raise PodcastTTSError(f"MiniMax TTS network error: {e}") from e
+            # Network blip — worth retrying.
+            raise _TTSRetryableError(f"MiniMax TTS network error: {e}") from e
+
+        if resp.status_code == 429 or resp.status_code == 503:
+            snippet = resp.text[:200] if resp.text else ""
+            raise _TTSRetryableError(
+                f"MiniMax TTS HTTP {resp.status_code} (rate-limited): {snippet}"
+            )
         if resp.status_code >= 400:
+            # 4xx other than 429 is fatal — retrying won't change auth/perm.
             snippet = resp.text[:300] if resp.text else ""
-            raise PodcastTTSError(
+            raise _TTSFatalError(
                 f"MiniMax TTS HTTP {resp.status_code}: {snippet}"
             )
+
         try:
             data = resp.json()
         except ValueError as e:
-            raise PodcastTTSError(f"MiniMax TTS non-JSON response: {e}") from e
-        audio_field = data.get("data", {}).get("audio")
+            raise _TTSFatalError(f"MiniMax TTS non-JSON response: {e}") from e
+
+        # Inspect base_resp — non-zero status_code with a rate-limit hint
+        # is a soft throttle we should back off and retry.
+        base_resp = data.get("base_resp") or {}
+        status_code = base_resp.get("status_code")
+        status_msg = (base_resp.get("status_msg") or "").lower()
+        if status_code not in (None, 0):
+            if any(h in status_msg for h in _RATE_LIMIT_HINTS):
+                raise _TTSRetryableError(
+                    f"MiniMax TTS base_resp rate-limit signal: "
+                    f"status_code={status_code} status_msg={status_msg!r}"
+                )
+            raise _TTSFatalError(
+                f"MiniMax TTS base_resp error: "
+                f"status_code={status_code} status_msg={status_msg!r}"
+            )
+
+        audio_field = (data.get("data") or {}).get("audio")
         if not audio_field:
-            raise PodcastTTSError(
+            # 200 + base_resp ok + empty audio — silent throttle. Retry.
+            raise _TTSRetryableError(
                 f"MiniMax TTS response missing data.audio: keys={list(data.keys())}"
             )
         try:
             return bytes.fromhex(audio_field)
         except ValueError as e:
-            raise PodcastTTSError(
+            raise _TTSFatalError(
                 f"MiniMax TTS audio field is not valid hex: {e}"
             ) from e
 
-    return await asyncio.get_running_loop().run_in_executor(None, _do)
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, _do)
+    except _TTSRetryableError as e:
+        # Exhausted retries — convert to PodcastTTSError so the router
+        # surfaces the same error envelope callers already handle.
+        raise PodcastTTSError(str(e)) from e
+    except _TTSFatalError as e:
+        raise PodcastTTSError(str(e)) from e
 
 
 def _format_srt_timestamp(sec: float) -> str:
@@ -476,15 +551,18 @@ async def synthesize(
             p.write_bytes(pcm_bytes)
             return p, _pcm_duration_seconds(pcm_bytes)
 
-        results = await asyncio.gather(
-            *(synth_one(i, seg) for i, seg in enumerate(segments)),
-            return_exceptions=True,
-        )
-        for i, r in enumerate(results):
-            if isinstance(r, BaseException):
-                raise PodcastTTSError(f"segment {i} TTS failed: {r}") from r
-            pcm_paths.append(r[0])
-            timings.append(r[1])
+        # Sequential, not parallel — MiniMax's per-IP RPM quota is
+        # shared across segments, so 12 concurrent calls in one
+        # generate all collide and trigger 1002 rate-limit. Sequential
+        # means a 12-segment job takes ~12x longer per segment but
+        # stays inside the quota window.
+        for i, seg in enumerate(segments):
+            try:
+                p, t = await synth_one(i, seg)
+            except _TTSRetryableError as e:
+                raise PodcastTTSError(f"segment {i} TTS failed: {e}") from e
+            pcm_paths.append(p)
+            timings.append(t)
 
         # 2. Build silence PCM (one shared buffer reused in the concat).
         silence_pcm = tmp_dir / "silence.pcm"
