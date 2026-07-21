@@ -113,15 +113,25 @@ KNOWN_KEYS_DEFAULTS: dict[str, tuple[str, bool]] = {
     "page_agent.api_key":       ("", True),  # also MUST be entered by admin
     "page_agent.system_prompt": (DEFAULT_PAGE_AGENT_SYSTEM_PROMPT, False),
 
-    # ---- 数创智伴 「播一下」 tab — MiniCast proxy preset ----
+    # ---- 数创智伴 「播一下」 tab — MiniMax TTS preset ----
     # podcast.enabled gates the FAB visibility. When False, the frontend
     # never surfaces the third tab, so a half-configured deployment
-    # (no MiniCast running) doesn't break the panel for visitors.
+    # (no MiniMax key configured) doesn't break the panel for visitors.
     # See docs/superpowers/specs/2026-07-20-fab-podcast-mode-design.md §2.6.
     "podcast.enabled":           (DEFAULT_PODCAST_ENABLED, False),
-    # podcast.minicast_base_url points at the MiniCast FastAPI server.
-    # Override in production to the deployed MiniCast origin.
+    # podcast.minicast_base_url is preserved for back-compat with any
+    # tooling that still references the old MiniCast proxy. When
+    # HBSC_PODCAST_ISOLATED=true (the default) the value is ignored.
     "podcast.minicast_base_url": (DEFAULT_PODCAST_MINICAST_BASE_URL, False),
+    # podcast.tts_* — MiniMax TTS credentials for the isolated-mode
+    # pipeline. Resolution order in podcast_tts.resolve_tts_credentials:
+    # podcast.tts_* → article_typesetter.* → MINIMAX_TOKEN env.
+    # api_key MUST be entered by admin (no default; the fallback chain
+    # covers it). model defaults to speech-2.6-hd which is the same
+    # preset the local ~/Projects/MiniCast uses.
+    "podcast.tts_api_key":       ("", True),
+    "podcast.tts_base_url":      ("https://api.minimaxi.com/v1", False),
+    "podcast.tts_model":         ("speech-2.6-hd", False),
 }
 
 
