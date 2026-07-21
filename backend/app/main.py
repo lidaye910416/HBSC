@@ -20,6 +20,11 @@ from .routers import (
     admin_articles_import_router,
     admin_articles_typeset_router,
 )
+# Import the podcast router via the dotted submodule path — the
+# `__init__.py` deliberately does NOT re-export it under the same name
+# as the submodule, to avoid breaking pytest monkeypatch.setattr on
+# module-level helpers. See backend/app/routers/__init__.py comment.
+from .routers.public_podcast_router import router as public_podcast_router
 from .middleware.rate_limit import rate_limit
 from .models import Journal, Article, Researcher
 from .services.seed_data import seed_journals, seed_articles, seed_researchers
@@ -109,6 +114,7 @@ app.include_router(admin_router)
 app.include_router(settings_router)
 app.include_router(agent_router)
 app.include_router(public_agent_router)
+app.include_router(public_podcast_router)
 app.include_router(admin_articles_import_router)
 app.include_router(admin_articles_typeset_router)
 

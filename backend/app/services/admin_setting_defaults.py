@@ -24,6 +24,16 @@ DEFAULT_TYPESETTER_MODEL = "MiniMax-M3"
 DEFAULT_TYPESETTER_BASE_URL = "https://api.minimaxi.com/v1"
 
 
+# ---- 数创智伴 「播一下」 tab — MiniCast proxy defaults ----
+# Enable by default in dev so the FAB 三个 tab 一开即用. Operators can
+# flip the AdminSetting row in Settings to False to disable without a
+# code change.
+DEFAULT_PODCAST_ENABLED = "true"
+# MiniCast FastAPI 后端地址. 本机开发用 127.0.0.1:8000；部署时由
+# admin 在 Settings 页覆盖为线上 origin (e.g. https://minicast.hbsc.cn).
+DEFAULT_PODCAST_MINICAST_BASE_URL = "http://127.0.0.1:8000"
+
+
 DEFAULT_SYSTEM_PROMPT = """你是一名中文科技期刊的资深排版编辑，专精于把 pandoc 从 Word 导出的 Markdown 清洗为可直接发布的稿件。
 
 【必须做】
@@ -102,6 +112,16 @@ KNOWN_KEYS_DEFAULTS: dict[str, tuple[str, bool]] = {
     "page_agent.base_url":      (DEFAULT_PAGE_AGENT_BASE_URL, False),
     "page_agent.api_key":       ("", True),  # also MUST be entered by admin
     "page_agent.system_prompt": (DEFAULT_PAGE_AGENT_SYSTEM_PROMPT, False),
+
+    # ---- 数创智伴 「播一下」 tab — MiniCast proxy preset ----
+    # podcast.enabled gates the FAB visibility. When False, the frontend
+    # never surfaces the third tab, so a half-configured deployment
+    # (no MiniCast running) doesn't break the panel for visitors.
+    # See docs/superpowers/specs/2026-07-20-fab-podcast-mode-design.md §2.6.
+    "podcast.enabled":           (DEFAULT_PODCAST_ENABLED, False),
+    # podcast.minicast_base_url points at the MiniCast FastAPI server.
+    # Override in production to the deployed MiniCast origin.
+    "podcast.minicast_base_url": (DEFAULT_PODCAST_MINICAST_BASE_URL, False),
 }
 
 
