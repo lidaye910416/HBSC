@@ -34,12 +34,12 @@
   --accent-soft:  rgba(201, 168, 76, 0.18);
 
   /* ===== L3 · 状态/风险 · DARK ===== */
-  --status-published-bg: rgba(232, 244, 234, 0.12);
-  --status-published-fg: #A8D5AC;
-  --status-draft-bg:     rgba(244, 241, 232, 0.12);
-  --status-draft-fg:     #D4C896;
-  --status-archived-bg:  rgba(240, 239, 234, 0.10);
-  --status-archived-fg:  #C8C8D0;
+  --status-published-bg: rgba(168, 213, 172, 0.22);
+  --status-published-fg: #C8E9CB;
+  --status-draft-bg:     rgba(212, 200, 150, 0.20);
+  --status-draft-fg:     #E7D8A6;
+  --status-archived-bg:  rgba(200, 200, 208, 0.16);
+  --status-archived-fg:  #D4D4DC;
   --status-featured-fg:  #C9A84C;
   --danger:              #E07B7B;
   --danger-bg:           rgba(224, 123, 123, 0.15);

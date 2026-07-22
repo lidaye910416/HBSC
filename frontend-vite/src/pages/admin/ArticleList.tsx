@@ -230,10 +230,10 @@ export function ArticleList() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <Headphones size={14} aria-hidden="true" />
                       <span style={{
-                        color: a.podcast_status === 'ready' ? '#1f6e4a'
-                          : a.podcast_status === 'generating' ? '#a96a00'
-                          : a.podcast_status === 'failed' ? '#b93838'
-                          : 'var(--admin-text-muted)',
+                        color: a.podcast_status === 'ready' ? '#7FD49A'
+                          : a.podcast_status === 'generating' ? '#F0C168'
+                          : a.podcast_status === 'failed' ? '#F2A6A6'
+                          : 'var(--admin-text-2)',
                         fontWeight: 600,
                       }}>
                         {a.podcast_status === 'ready'
@@ -245,7 +245,7 @@ export function ArticleList() {
                       {a.podcast_status === 'failed' && a.podcast_error ? (
                         <span
                           title={a.podcast_error}
-                          style={{ fontSize: 11, color: 'var(--admin-text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          style={{ fontSize: 11, color: 'var(--admin-text-2)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         >{a.podcast_error}</span>
                       ) : null}
                       <IconButton
