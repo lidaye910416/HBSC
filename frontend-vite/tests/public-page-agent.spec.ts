@@ -968,4 +968,153 @@ test.describe('public page-agent FAB — podcast mode', () => {
     const link = page.getByTestId('podcast-error').locator('a')
     await expect(link).toHaveAttribute('href', /\/labs\/minicast\/\?embed=1&source=/)
   })
+
+  test('FAB morphs into the panel via shared bottom-right anchor', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+        }),
+      }),
+    )
+    await page.goto('/')
+    const fab = page.getByTestId('page-agent-fab')
+    await expect(fab).toBeVisible({ timeout: 5_000 })
+
+    // Both elements share the same anchor (right: 24px; bottom: 24px;)
+    // and the same transform-origin so the morph stays pinned to the
+    // bottom-right corner instead of recentring on the viewport.
+    const fabAnchor = await fab.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      // transform-origin resolves 100% 100% to pixel values relative
+      // to the element's box; just verify the position is bottom-right
+      // by checking that the right/bottom offset is small (corner-
+      // anchored) and matches the panel's anchor.
+      return { right: cs.right, bottom: cs.bottom }
+    })
+    expect(fabAnchor.right).toBe('24px')
+    expect(fabAnchor.bottom).toBe('24px')
+
+    // Read the raw CSS rules — that's the contract we actually care
+    // about (getComputedStyle resolves 100% to pixels which would be
+    // brittle). Both .fab and .root must declare `transform-origin:
+    // 100% 100%` so the corner anchor is the shared morph pivot.
+    // Vite serves CSS modules as JS that contains the source in a
+    // `__vite__css = "..."` string, so we extract that string and
+    // assert against the original CSS.
+    // Vite serves CSS modules wrapped in JS; using `?raw` returns the
+    // source CSS as a JS string literal (`export default "..."`) with
+    // standard JS string escapes (\n, \\, \"). We extract the
+    // inner string and unescape it so we can assert on the real CSS.
+    const readViteCss = async (path: string): Promise<string> => {
+      return page.evaluate(async (p) => {
+        const r = await fetch(p)
+        const t = await r.text()
+        const m = t.match(/export\s+default\s+"([\s\S]*?)";?\s*$/)
+        if (!m) return t
+        // Reverse the standard JS string escapes the response uses.
+        return m[1]
+          .replace(/\\\\/g, '\\')
+          .replace(/\\n/g, '\n')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"')
+      }, path)
+    }
+    const fabCss = await readViteCss('/src/components/ai/PageAgentFab.module.css?raw')
+    expect(fabCss).toMatch(/\.fab\s*\{[^}]*transform-origin:\s*100%\s*100%/)
+    const panelCss = await readViteCss('/src/components/ai/PageAgentPanel.module.css?raw')
+    expect(panelCss).toMatch(/\.root\s*\{[^}]*transform-origin:\s*100%\s*100%/)
+
+    // Click and immediately read both data-states: the panel must
+    // mount with `expanding` and the FAB must flip to `shrinking`
+    // while the morph is still in flight.
+    await fab.click({ force: true })
+    const panel = page.getByTestId('page-agent-panel')
+    await expect(panel).toBeAttached()
+    expect(await panel.getAttribute('data-state')).toBe('expanding')
+    expect(await fab.getAttribute('data-state')).toBe('shrinking')
+
+    // After the entrance settles the panel reaches its final size and
+    // the FAB is fully retracted.
+    await expect(panel).toBeVisible({ timeout: 1_000 })
+    const panelAnchor = await panel.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return { right: cs.right, bottom: cs.bottom, transition: cs.transitionProperty }
+    })
+    expect(panelAnchor.right).toBe('24px')
+    expect(panelAnchor.bottom).toBe('24px')
+    // The panel must declare a CSS transition on transform so the
+    // exit morph actually animates (vs. snapping).
+    expect(panelAnchor.transition).toMatch(/transform/)
+  })
+
+  test('closing the panel plays the genie reverse morph', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          model: 'deepseek-v4-flash',
+          base_url: 'https://api.deepseek.com/v1',
+        }),
+      }),
+    )
+    await page.goto('/')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await expect(page.getByTestId('page-agent-panel')).toBeVisible({ timeout: 1_000 })
+
+    // Dismiss the panel via the close button — the panel must flip to
+    // `shrinking` (exit morph) and the FAB must re-mount with
+    // `expanding` while the close transition is in flight.
+    await page.getByTestId('page-agent-panel-close').click()
+    const panel = page.getByTestId('page-agent-panel')
+    const fab = page.getByTestId('page-agent-fab')
+    expect(await panel.getAttribute('data-state')).toBe('shrinking')
+    expect(await fab.getAttribute('data-state')).toBe('expanding')
+
+    // The exit transition must also include `transform` so the panel
+    // doesn't snap closed. We poll the live computed style while the
+    // transition is still running. (Poll rather than snapshot because
+    // Chrome can briefly return the start value for one or two frames
+    // after a property change while the compositor commits the new
+    // style — a render-pipeline quirk, not an animation bug. The
+    // transition is only 160ms, so a 1s poll budget is comfortably
+    // past the first decay frame.)
+    await expect
+      .poll(
+        async () =>
+          panel.evaluate((el) => {
+            const cs = getComputedStyle(el)
+            return {
+              opacity: Number(cs.opacity),
+              transition: cs.transitionProperty,
+              transform: cs.transform,
+            }
+          }),
+        { timeout: 1_000 },
+      )
+      .toMatchObject({
+        transition: expect.stringMatching(/transform/),
+      })
+    await expect
+      .poll(
+        async () =>
+          Number(await panel.evaluate((el) => getComputedStyle(el).opacity)),
+        { timeout: 1_000 },
+      )
+      .toBeLessThan(1)
+
+    // Once the close finishes the FAB is fully back at rest with
+    // pointer events restored and no `data-state`.
+    await expect(panel).toHaveCount(0, { timeout: 2_000 })
+    await expect(fab).toBeVisible()
+    expect(await fab.getAttribute('data-state')).toBeNull()
+    const fabPointer = await fab.evaluate((el) => getComputedStyle(el).pointerEvents)
+    expect(fabPointer).not.toBe('none')
+  })
 })

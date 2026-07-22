@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { PageAgent } from 'page-agent'
 import { useLocation } from 'react-router-dom'
@@ -14,6 +14,25 @@ import {
 } from '../lib/pageAgentSession'
 import { PageAgentFab } from './ai/PageAgentFab'
 import { PageAgentPanel } from './ai/PageAgentPanel'
+
+// ─── Magic morph ─────────────────────────────────────────────────────────
+// The FAB and the panel share `position: fixed; right; bottom;` and
+// `transform-origin: 100% 100%`. The two elements stay mounted through
+// each open / close transition (instead of unmounting instantly when
+// `panelOpen` flips) so CSS transitions can morph the FAB into the
+// panel from the same bottom-right anchor — the macOS "genie" feel.
+type Stage = 'closed' | 'opening' | 'open' | 'closing'
+// Tuned to feel snappy but not abrupt; the panel animation runs a
+// bit longer than the FAB transition so the panel "settles" after
+// the FAB has already disappeared into the corner.
+//
+// Close sequence: panel settles (240ms CSS transition) while the FAB
+// re-enters (100ms delay + 220ms animation = 320ms total) using the
+// same gentle keyframe as first paint. We hold `closing` for the full
+// 320ms so the FAB animation finishes *exactly* when the stage
+// flips to `closed` — no mid-animation snap when data-state clears.
+const OPEN_MS = 540
+const CLOSE_MS = 320
 
 export function PublicPageAgentMount() {
   const location = useLocation()
@@ -42,7 +61,66 @@ export function PublicPageAgentMount() {
 
   // Re-render when the session changes (e.g., dispose + recreate).
   const liveAgent = useSyncExternalStore(subscribe, getCurrent, () => null)
-  const [panelOpen, setPanelOpen] = useState(false)
+  // 4-stage state machine: closed → opening → open → closing → closed.
+  // Both FAB and panel mount during the transitions so CSS can morph
+  // them; otherwise we'd see a snap unmount at the moment of toggle.
+  const [stage, setStage] = useState<Stage>('closed')
+  // Reset the stage timer whenever the stage changes so an in-flight
+  // timeout from a previous stage doesn't fire after we already moved
+  // on (e.g. user clicks close mid-open).
+  const stageTimer = useRef<number | null>(null)
+  const clearStageTimer = useCallback(() => {
+    if (stageTimer.current !== null) {
+      window.clearTimeout(stageTimer.current)
+      stageTimer.current = null
+    }
+  }, [])
+  useEffect(() => () => clearStageTimer(), [clearStageTimer])
+
+  const advance = useCallback(
+    (target: Stage, ms: number) => {
+      clearStageTimer()
+      stageTimer.current = window.setTimeout(() => {
+        setStage(target)
+        stageTimer.current = null
+      }, ms)
+    },
+    [clearStageTimer],
+  )
+
+  const openPanel = useCallback(() => {
+    setStage((prev) => {
+      // If the user clicks the FAB while it's still mid-close, snap
+      // straight to the open phase; CSS transitions will reverse
+      // smoothly from whatever scale they're currently at.
+      if (prev === 'closed' || prev === 'closing') {
+        advance('open', OPEN_MS)
+        return 'opening'
+      }
+      return prev
+    })
+  }, [advance])
+  const closePanel = useCallback(() => {
+    setStage((prev) => {
+      if (prev === 'open' || prev === 'opening') {
+        advance('closed', CLOSE_MS)
+        return 'closing'
+      }
+      return prev
+    })
+  }, [advance])
+
+  // The FAB lives only when the panel isn't fully open; the panel
+  // lives only when it isn't fully closed. Both mount during the
+  // transitions so the morph is visible (e.g. panel grows in while
+  // FAB shrinks out, anchored at the same bottom-right corner).
+  const showFab = stage !== 'open'
+  const showPanel = stage !== 'closed'
+  const fabDataState: 'shrinking' | 'expanding' | undefined =
+    stage === 'opening' ? 'shrinking' : stage === 'closing' ? 'expanding' : undefined
+  const panelDataState: 'expanding' | 'shrinking' | undefined =
+    stage === 'opening' ? 'expanding' : stage === 'closing' ? 'shrinking' : undefined
+
   // Keep the last-known live agent in state so the panel can keep
   // rendering across the brief window where the session was disposed
   // and a new one is being constructed. The panel's own sendOperate
@@ -70,12 +148,18 @@ export function PublicPageAgentMount() {
 
   return (
     <>
-      {!panelOpen && <PageAgentFab onClick={() => setPanelOpen(true)} />}
-      {panelOpen && (
+      {showFab && (
+        <PageAgentFab
+          onClick={openPanel}
+          data-state={fabDataState}
+        />
+      )}
+      {showPanel && (
         <PageAgentPanel
           agent={renderAgent}
           routeKey={`${location.pathname}${location.search}`}
-          onClose={() => setPanelOpen(false)}
+          onClose={closePanel}
+          data-state={panelDataState}
         />
       )}
     </>

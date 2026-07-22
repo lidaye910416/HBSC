@@ -18,10 +18,13 @@ export function PageAgentPanel({
   agent,
   routeKey,
   onClose,
+  'data-state': dataState,
 }: {
   agent: PageAgent
   routeKey: string
   onClose: () => void
+  /** Animation stage: 'expanding' (panel opening) or 'shrinking' (panel closing). */
+  'data-state'?: 'expanding' | 'shrinking'
 }) {
   const [mode, setMode] = useState<AgentMode>('ask')
   const askKey = getStorageKey(routeKey, 'ask')
@@ -359,7 +362,7 @@ export function PageAgentPanel({
   }
 
   return (
-    <div className={styles.root} role="dialog" aria-label="AI 助手" data-testid="page-agent-panel">
+    <div className={styles.root} role="dialog" aria-label="AI 助手" data-testid="page-agent-panel" data-state={dataState} inert={dataState === "shrinking"}>
       <div className={styles.header}>
         <div className={styles.brand}>
           <span className={styles.brandIcon} aria-hidden="true"><Bot size={17} /></span>
@@ -373,6 +376,7 @@ export function PageAgentPanel({
           className={styles.close}
           onClick={onClose}
           aria-label="关闭 AI 助手面板"
+          data-testid="page-agent-panel-close"
         >
           <X size={16} />
         </button>
