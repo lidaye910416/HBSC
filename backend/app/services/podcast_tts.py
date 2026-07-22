@@ -87,22 +87,30 @@ MINIMAX_TTS_BYTES_PER_SAMPLE = 2   # s16le
 # ---------------------------------------------------------------------------
 #
 # hbsc exposes only two product voices on the FAB ("小数" / "小创"); we
-# Voice ids picked after F0 measurement on a fixed sample sentence:
-#   female-shaonv      F0=246 Hz, 6.83 s — warm female, MiniCast warm_female
-#   male-qn-qingse     F0=143 Hz, 8.31 s — too bright/slow for "deep male" feel
-#   male-qn-jingying   F0=111 Hz, 5.79 s — clearly deeper + ~30% faster
+# Voice ids picked after F0 measurement on a fixed sample sentence
+# (speed=1.15, "你好，欢迎收听今天的节目..."):
+#   female-shaonv                          F0=246 Hz, 6.83 s — warm female
+#   male-qn-jingying                       F0=111 Hz, 7.30 s — competent male
+#   Chinese (Mandarin)_Reliable_Executive  F0= 96 Hz, 8.53 s — deepest, magnetic
 #
-# midnight_male (「小数」) used to map to male-qn-qingse but listeners
-# read it as female-ish. male-qn-jingying reads unambiguously as a
-# composed adult male, and the 30% shorter per-segment wall-clock
-# also resolves the "语速偏慢" complaint for free.
+# Round 1 mapped midnight_male → male-qn-qingse (F0 143Hz, bright/young).
+# User reported the male role still sounded female-ish. Round 2 switched
+# to male-qn-jingying (F0 111Hz) — cleaner separation, but still reads
+# on the bright side of "adult male" in Chinese voice-acting terms.
+#
+# Round 3 (this commit) lands on Chinese (Mandarin)_Reliable_Executive.
+# F0 96Hz sits solidly in the "中年磁性男主持人" zone users mean when
+# they say 磁性低沉. Note this voice is NOT in MiniCast's
+# CURATED_VOICES catalog — we deliberately diverge from MiniCast here
+# because their pick (male-qn-qingse) doesn't match our persona copy
+# for 「小数」.
 #
 # Hardcoded on purpose so admin can't accidentally remap the persona
 # copy in the FAB.
 
 VOICE_MAP: dict[str, str] = {
-    "warm_female":   "female-shaonv",     # 小创 — 温暖女声
-    "midnight_male": "male-qn-jingying",  # 小数 — 磁性低沉男声 (精英)
+    "warm_female":   "female-shaonv",                            # 小创 — 温暖女声
+    "midnight_male": "Chinese (Mandarin)_Reliable_Executive",  # 小数 — 磁性低沉男声
 }
 
 
@@ -353,7 +361,7 @@ async def _minimax_tts_one(
         "stream": False,
         "voice_setting": {
             "voice_id": voice_id,
-            "speed": 1.15,
+            "speed": 1.2,
             "vol": 1.0,
             "pitch": 0,
             "emotion": "neutral",
