@@ -323,8 +323,24 @@ export const api = {
       podcast: {
         get: (id: number) => request<PodcastAudioStatus>(`/api/admin/articles/${id}/podcast`),
         regenerate: (id: number) => request<PodcastAudioStatus>(`/api/admin/articles/${id}/podcast`, { method: 'POST' }),
+        /** Stop an in-flight generation. Returns was_running + reconciled
+         *  so the UI can show "已停止" vs "重置了卡住的任务". */
+        cancel: (id: number) =>
+          request<{ was_running: boolean; reconciled: boolean; status: string | null }>(
+            `/api/admin/articles/${id}/podcast/cancel`, { method: 'POST' },
+          ),
         delete: (id: number) => request(`/api/admin/articles/${id}/podcast`, { method: 'DELETE' }),
       },
+      /**
+       * Queue a podcast generation for many articles at once. The
+       * backend partitions into { queued, skipped[] } so the admin UI
+       * can surface partial success without throwing.
+       */
+      batchPodcast: (ids: number[]) =>
+        request<{ queued: number[]; skipped: Array<{ id: number; reason: string }> }>(
+          '/api/admin/articles/podcast/batch',
+          { method: 'POST', body: JSON.stringify({ article_ids: ids }) },
+        ),
       delete: (id: number) =>
         request(`/api/admin/articles/${id}`, { method: 'DELETE' }),
       // Multipart upload — must NOT set Content-Type: application/json
@@ -560,10 +576,10 @@ export interface PodcastGenerateResult {
 }
 
 export interface PodcastAudioStatus {
-  status: 'pending' | 'generating' | 'ready' | 'failed'
+  status: 'pending' | 'generating' | 'ready' | 'failed' | 'cancelled'
   /** Pipeline sub-stage while status==='generating'. Drives the
    *  PodcastProgress label and indeterminate vs. determinate UI. */
-  stage?: 'pending' | 'scripting' | 'synthesizing' | 'muxing' | 'ready' | 'failed'
+  stage?: 'pending' | 'scripting' | 'synthesizing' | 'muxing' | 'ready' | 'failed' | 'cancelled'
   /** Integer 0–100. Combined with `stage` to render the progress bar. */
   progress?: number
   job_id?: string | null

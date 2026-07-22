@@ -44,7 +44,9 @@ Admin-managed settings (read here, written via /api/admin/settings):
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import os
 import hashlib
 from datetime import datetime
@@ -94,6 +96,73 @@ router = APIRouter(prefix="/api/public/podcast", tags=["public-podcast"])
 _log = logging.getLogger(__name__)
 
 
+# -----------------------------------------------------------------------
+# Job registry + cancellation flag.
+#
+# FastAPI BackgroundTasks doesn't expose a handle to the running asyncio
+# task, so we track them ourselves. We also keep a separate "cancel
+# requested" flag per article so the worker can short-circuit a long
+# TTS call even if .cancel() is racy with the awaited segment — the
+# pipeline checks ``_is_cancel_requested(article_id)`` between segments
+# and exits cleanly instead of leaving a half-baked mp3 on disk.
+#
+# Both structures are module-level globals; this is a single-process
+# uvicorn dev/prod deployment and we accept the in-memory tradeoff.
+# -----------------------------------------------------------------------
+_running_tasks: dict[int, asyncio.Task] = {}
+_cancel_flags: dict[int, bool] = {}
+_registry_lock = threading.Lock()
+
+
+def _register_job(article_id: int, task: asyncio.Task) -> Optional[asyncio.Task]:
+    """Attach ``task`` to the registry. Returns the previous task (if
+    any) so the caller can decide whether to await it."""
+    with _registry_lock:
+        previous = _running_tasks.get(article_id)
+        _running_tasks[article_id] = task
+        _cancel_flags[article_id] = False
+    return previous
+
+
+async def _await_previous_job(article_id: int, previous: asyncio.Task) -> None:
+    """Wait briefly for a prior job to drain so we never have two
+    concurrent generations fighting over the same row. Best-effort."""
+    if previous is None or previous.done():
+        return
+    _log.warning("previous job for article %s still running; awaiting it", article_id)
+    try:
+        await asyncio.wait_for(asyncio.shield(previous), timeout=2.0)
+    except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+        pass
+
+
+def _unregister_job(article_id: int) -> None:
+    with _registry_lock:
+        _running_tasks.pop(article_id, None)
+        _cancel_flags.pop(article_id, None)
+
+
+def _is_cancel_requested(article_id: int) -> bool:
+    with _registry_lock:
+        return _cancel_flags.get(article_id, False)
+
+
+def request_cancel(article_id: int) -> bool:
+    """Mark a job as cancelled and ask its asyncio.Task to wake up.
+
+    Returns True if a live task was found (the caller can tell the user
+    "stopping…" instead of "already stopped"); False if no job was
+    running for that article.
+    """
+    with _registry_lock:
+        task = _running_tasks.get(article_id)
+        _cancel_flags[article_id] = True
+    if task is not None and not task.done():
+        task.cancel()
+        return True
+    return False
+
+
 async def prewarm_article_script(article_id: int) -> None:
     """Generate a script after an article save without delaying the admin API."""
     db = SessionLocal()
@@ -138,17 +207,19 @@ async def _synth_with_progress(
     voice_b: str,
     job_id: str,
     output_dir,
+    cancel_check=None,
 ) -> "SynthResult":
     """Same as ``local_synthesize`` but checkpoints progress to the DB
     after every synthesized segment so the admin can watch the bar move
     during the longest stage (MiniMax TTS). Falls back to the plain
     helper if anything in the checkpoint plumbing fails.
+
+    ``cancel_check`` is an optional callable that returns truthy when the
+    caller wants the loop aborted. The TTS module raises
+    ``PodcastGenerationCancelled`` (caught by ``generate_article_podcast``
+    → marks status=cancelled) so the DB row always reflects the stop.
     """
     total = max(1, len(segments))
-    # We import lazily to keep this helper self-contained. The TTS module
-    # exports its public entry point as ``synthesize`` (not
-    # ``local_synthesize``); the alias ``local_synthesize`` is just the
-    # name the upstream router used historically.
     from ..services.podcast_tts import synthesize as local_synthesize
     return await local_synthesize(
         segments,
@@ -161,6 +232,7 @@ async def _synth_with_progress(
             "synthesizing",
             15 + int(done * 75 / total),
         ),
+        cancel_check=cancel_check,
     )
 
 
@@ -170,11 +242,25 @@ async def generate_article_podcast(article_id: int) -> None:
     Pipeline (each phase commits a progress checkpoint so the admin UI
     can render a live progress bar):
       pending → scripting (5–15) → synthesizing (15–90) → muxing (90–99)
-      → ready (100)  |  any exception → failed
+      → ready (100)  |  cancel requested → cancelled  |  exception → failed
+
+    Self-registers an asyncio.Task so ``request_cancel(article_id)`` can
+    short-circuit the TTS loop between segments and call ``.cancel()``
+    on the running task. The cancel flag is checked at every segment
+    boundary inside ``synthesize`` (see ``podcast_tts.synthesize``).
     """
-    from ..services.podcast_tts import SynthResult  # local to avoid cycle
+    from ..services.podcast_tts import (  # local to avoid cycle
+        SynthResult,
+        PodcastGenerationCancelled as _CancelledByCaller,
+    )
+    task = asyncio.current_task()
+    if task is not None:
+        previous = _register_job(article_id, task)
+        if previous is not None and not previous.done():
+            await _await_previous_job(article_id, previous)
     db = SessionLocal()
     record = None
+    cancelled = False
     try:
         article = db.get(Article, article_id)
         if not article or not (article.content or "").strip():
@@ -195,13 +281,22 @@ async def generate_article_podcast(article_id: int) -> None:
         record.stage = "scripting"
         record.progress = 10
         db.commit()
+        if _is_cancel_requested(article_id):
+            cancelled = True
+            return
         segments, script_text = await _generate_script_via_llm(
             content=article.content, title=article.title, db=db,
         )
         write_script(article.slug, segments, script_text)
         _report_stage(record, "scripting", 15)
+        if _is_cancel_requested(article_id):
+            cancelled = True
+            return
 
-        # 2) TTS — this is the long stage; checkpoints every segment
+        # 2) TTS — this is the long stage; checkpoints every segment.
+        # The cancel flag is also re-read after each segment via the
+        # progress_cb, so a "stop" click mid-job aborts within one
+        # segment rather than burning another full MiniMax round-trip.
         digest = hashlib.sha1(
             f"{article.id}|{article.updated_at}|{script_text}".encode("utf-8")
         ).hexdigest()[:16]
@@ -214,7 +309,11 @@ async def generate_article_podcast(article_id: int) -> None:
             voice_b=DEFAULT_VOICE_B,
             job_id=job_id,
             output_dir=job_dir(job_id),
+            cancel_check=lambda: _is_cancel_requested(article_id),
         )
+        if _is_cancel_requested(article_id):
+            cancelled = True
+            return
 
         # 3) muxing — currently a no-op since ffmpeg runs inside
         # local_synthesize; we still surface the stage so the UI can
@@ -234,6 +333,12 @@ async def generate_article_podcast(article_id: int) -> None:
         record.srt_path = str(synth.srt_path) if synth.srt_path else None
         record.completed_at = datetime.utcnow()
         db.commit()
+    except asyncio.CancelledError:
+        cancelled = True
+        _log.info("podcast generation cancelled for article %s", article_id)
+    except _CancelledByCaller:
+        cancelled = True
+        _log.info("podcast generation cancelled (caller flag) for article %s", article_id)
     except Exception as exc:
         _log.exception("podcast generation failed for article %s", article_id)
         if record is not None:
@@ -245,6 +350,15 @@ async def generate_article_podcast(article_id: int) -> None:
             except Exception:
                 pass
     finally:
+        if cancelled and record is not None:
+            record.status = "cancelled"
+            record.stage = "cancelled"
+            record.error_message = "已停止生成"
+            try:
+                db.commit()
+            except Exception:
+                pass
+        _unregister_job(article_id)
         db.close()
 
 

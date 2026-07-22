@@ -135,6 +135,14 @@ class PodcastTTSError(RuntimeError):
     """
 
 
+class PodcastGenerationCancelled(RuntimeError):
+    """Raised by ``synthesize`` when the caller-supplied ``cancel_check``
+    callback returns truthy between segments. The pipeline catches this
+    distinctly from ``PodcastTTSError`` so the admin row can be flipped
+    to ``status=cancelled`` instead of ``status=failed``.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
@@ -510,6 +518,7 @@ async def synthesize(
     base_url: str | None = None,
     model: str = MINIMAX_TTS_MODEL_DEFAULT,
     progress_cb=None,
+    cancel_check=None,
 ) -> SynthResult:
     """Synthesize a per-segment script to one mp3 + optional srt.
 
@@ -522,6 +531,11 @@ async def synthesize(
     omitted the module resolves credentials via ``resolve_tts_credentials``
     (which checks podcast.tts_* → article_typesetter.* → env var in
     that order).
+
+    ``cancel_check`` is an optional callable ``() -> bool``. The loop
+    calls it between segments and raises ``PodcastGenerationCancelled``
+    if it returns truthy — that's the hook the admin "stop" button uses
+    to abort a long job without waiting for it to finish naturally.
     """
     if not segments:
         raise ValueError("segments is empty")
@@ -575,6 +589,18 @@ async def synthesize(
         # means a 12-segment job takes ~12x longer per segment but
         # stays inside the quota window.
         for i, seg in enumerate(segments):
+            if cancel_check is not None:
+                try:
+                    if cancel_check():
+                        raise PodcastGenerationCancelled(
+                            f"cancelled by caller before segment {i}"
+                        )
+                except PodcastGenerationCancelled:
+                    raise
+                except Exception:
+                    # Never let a buggy callback kill the pipeline; the
+                    # admin row will simply reflect the natural outcome.
+                    pass
             try:
                 p, t = await synth_one(i, seg)
             except _TTSRetryableError as e:
@@ -625,6 +651,7 @@ async def synthesize(
 __all__ = [
     "SynthResult",
     "PodcastTTSError",
+    "PodcastGenerationCancelled",
     "VOICE_MAP",
     "MINIMAX_TTS_MODEL_DEFAULT",
     "DEFAULT_PAUSE_S",

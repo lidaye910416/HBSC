@@ -287,12 +287,21 @@ def regenerate_article_podcast(
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
+    """Re-queue a podcast generation. 409 if a job is already running
+    for this article — the operator must hit /cancel first or wait for
+    the in-flight job to finish naturally.
+    """
     article = db.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="文章不存在")
     if not (article.content or "").strip():
         raise HTTPException(status_code=422, detail="文章正文为空，无法生成语音")
     record = db.query(PodcastAudio).filter_by(article_id=article_id).first()
+    if record and record.status == "generating":
+        raise HTTPException(
+            status_code=409,
+            detail="该文章正在生成中,请先停止当前任务或等待完成",
+        )
     if record:
         record.status = "pending"
         record.error_message = None
@@ -300,6 +309,92 @@ def regenerate_article_podcast(
     from .routers.public_podcast_router import generate_article_podcast
     background_tasks.add_task(generate_article_podcast, article_id)
     return {"status": "pending"}
+
+
+@router.post("/articles/{article_id}/podcast/cancel")
+def cancel_article_podcast(
+    article_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Stop an in-flight generation. Two cases:
+
+    1. Live task registered in the global task table → flip the cancel
+       flag, ask the asyncio.Task to wake up; the worker settles the row
+       to ``status=cancelled`` itself within a segment.
+    2. Stale "generating" row whose worker died (server restart, OOM,
+       etc.) → the task lookup returns nothing, so we mark the row
+       cancelled directly. Without this branch the regenerate guard
+       (409 if status==generating) would permanently wedge the article.
+    """
+    article = db.get(Article, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    from .routers.public_podcast_router import request_cancel
+    was_running = request_cancel(article_id)
+    record = db.query(PodcastAudio).filter_by(article_id=article_id).first()
+    reconciled = False
+    if record and record.status == "generating":
+        if was_running:
+            record.error_message = "正在停止…"
+        else:
+            # Stale row — worker died but status was never updated.
+            record.status = "cancelled"
+            record.stage = "cancelled"
+            record.error_message = "任务异常中断,已重置"
+            record.progress = 0
+            reconciled = True
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+    return {
+        "was_running": was_running,
+        "reconciled": reconciled,
+        "status": "cancelling" if was_running else (record.status if record else None),
+    }
+
+
+class PodcastBatchRequest(BaseModel):
+    article_ids: List[int] = Field(..., min_length=1, max_length=50)
+
+
+@router.post("/articles/podcast/batch")
+def batch_generate_podcasts(
+    body: PodcastBatchRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    """Queue a podcast generation for each article id. Articles that
+    are missing, empty, or already generating are returned in
+    ``skipped`` with a reason so the admin UI can surface partial
+    success ("queued 4, skipped 2 already generating") instead of a
+    blunt toast.
+    """
+    from .routers.public_podcast_router import generate_article_podcast
+    queued: list[int] = []
+    skipped: list[dict] = []
+    for aid in body.article_ids:
+        article = db.get(Article, aid)
+        if not article:
+            skipped.append({"id": aid, "reason": "not_found"})
+            continue
+        if not (article.content or "").strip():
+            skipped.append({"id": aid, "reason": "empty_content"})
+            continue
+        record = db.query(PodcastAudio).filter_by(article_id=aid).first()
+        if record and record.status == "generating":
+            skipped.append({"id": aid, "reason": "already_generating"})
+            continue
+        if record:
+            record.status = "pending"
+            record.error_message = None
+        queued.append(aid)
+        background_tasks.add_task(generate_article_podcast, aid)
+    if queued:
+        db.commit()
+    return {"queued": queued, "skipped": skipped}
 
 
 @router.delete("/articles/{article_id}/podcast")

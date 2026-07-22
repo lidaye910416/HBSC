@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Star, Trash2, Edit, RefreshCw, Headphones } from 'lucide-react'
+import { Plus, Star, Trash2, Edit, RefreshCw, Headphones, Square, SquareCheck, XCircle, Pause } from 'lucide-react'
 import { api } from '../../services/api'
 import { listRowStagger } from '../../components/admin/animations'
 import { useToast } from '../../components/admin/Toast'
@@ -49,7 +49,47 @@ export function ArticleList() {
       toast.success('已开始生成对谈语音')
       qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : '语音生成失败'),
+    onError: (e) => {
+      // 409 = job already running; tell the user to cancel first instead
+      // of a generic "语音生成失败".
+      const msg = e instanceof Error ? e.message : '语音生成失败'
+      toast.error(msg.includes('生成中') ? msg : '语音生成失败: ' + msg)
+    },
+  })
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => api.admin.articles.podcast.cancel(id),
+    onSuccess: (res, id) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
+      if (res.was_running) {
+        toast.success(`已停止 #${id} 的生成`)
+      } else if (res.reconciled) {
+        toast.success(`已重置 #${id} 卡住的任务,请重新生成`)
+      } else {
+        toast.info(`#${id} 当前没有正在运行的任务`)
+      }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '停止失败'),
+  })
+  const batchMut = useMutation({
+    mutationFn: (ids: number[]) => api.admin.articles.batchPodcast(ids),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
+      const skippedReasons = res.skipped.reduce<Record<string, number>>((acc, s) => {
+        acc[s.reason] = (acc[s.reason] ?? 0) + 1
+        return acc
+      }, {})
+      const skipMsg = Object.entries(skippedReasons)
+        .map(([reason, n]) => `${reason}×${n}`).join(', ')
+      if (res.queued.length === 0) {
+        toast.error(`未生成任何语音(跳过: ${skipMsg || '无'})`)
+      } else if (res.skipped.length > 0) {
+        toast.success(`已排队 ${res.queued.length} 篇,跳过 ${res.skipped.length} 篇(${skipMsg})`)
+      } else {
+        toast.success(`已为 ${res.queued.length} 篇文章排队生成`)
+      }
+      setSelected(new Set())
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '批量生成失败'),
   })
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
@@ -79,6 +119,39 @@ export function ArticleList() {
       per_page: 20,
     }),
   })
+
+  // Selection / batch — derived from the current page's articles. We
+  // compute these on every render (not in useMemo) because they're
+  // trivially cheap and putting them inline keeps the toggle callbacks
+  // below close to the state they read.
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const pageIds = useMemo(() => (data?.items ?? []).map((a) => a.id), [data])
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id))
+  const toggleOne = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const togglePage = () => {
+    setSelected((prev) => {
+      if (allOnPageSelected) {
+        const next = new Set(prev)
+        pageIds.forEach((id) => next.delete(id))
+        return next
+      }
+      const next = new Set(prev)
+      pageIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+  const selectedGenerating = (data?.items ?? [])
+    .filter((a) => selected.has(a.id) && a.podcast_status === 'generating')
+    .map((a) => a.id)
+  const selectedBatchable = (data?.items ?? [])
+    .filter((a) => selected.has(a.id) && a.podcast_status !== 'generating')
+    .map((a) => a.id)
 
   const onMutateError = (err: unknown, op: string) =>
     toast.error(`${op}失败: ${err instanceof Error ? err.message : String(err)}`)
@@ -186,6 +259,50 @@ export function ArticleList() {
         </ToolbarGroup>
       </Toolbar>
 
+      {selected.size > 0 && (
+        <div
+          data-testid="batch-action-bar"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+            padding: 'var(--space-3) var(--space-4)',
+            margin: '0 0 var(--space-3) 0',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--admin-surface-2)',
+            border: '1px solid var(--admin-border)',
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>已选 {selected.size} 篇</span>
+          <span style={{ color: 'var(--admin-text-2)', fontSize: 'var(--type-sm)' }}>
+            可生成 {selectedBatchable.length} · 生成中 {selectedGenerating.length}
+          </span>
+          <div style={{ flex: 1 }} />
+          {selectedGenerating.length > 0 && (
+            <Button
+              variant="danger"
+              icon={<XCircle size={14} />}
+              data-testid="batch-cancel"
+              loading={cancelMut.isPending}
+              onClick={() => {
+                selectedGenerating.forEach((id) => cancelMut.mutate(id))
+              }}
+            >
+              停止选中 ({selectedGenerating.length})
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            icon={<Headphones size={14} />}
+            data-testid="batch-generate"
+            disabled={selectedBatchable.length === 0 || batchMut.isPending}
+            loading={batchMut.isPending}
+            onClick={() => batchMut.mutate(selectedBatchable)}
+          >
+            批量生成 ({selectedBatchable.length})
+          </Button>
+          <Button variant="ghost" onClick={() => setSelected(new Set())}>清除选择</Button>
+        </div>
+      )}
+
       {isLoading ? (
         <p style={{ padding: 'var(--space-5)', textAlign: 'center', color: 'var(--admin-text-2)' }}>加载中…</p>
       ) : (
@@ -193,6 +310,21 @@ export function ArticleList() {
           <table ref={tableRef} className="admin-table">
             <thead>
               <tr>
+                <th style={{ width: 36 }}>
+                  <button
+                    type="button"
+                    onClick={togglePage}
+                    aria-label={allOnPageSelected ? '取消全选' : '全选当前页'}
+                    aria-pressed={allOnPageSelected}
+                    data-testid="select-all"
+                    style={{
+                      background: 'none', border: 0, padding: 4, cursor: 'pointer',
+                      color: 'var(--admin-text-2)',
+                    }}
+                  >
+                    {allOnPageSelected ? <SquareCheck size={16} /> : <Square size={16} />}
+                  </button>
+                </th>
                 <th style={{ width: 48 }}>精选</th>
                 <th>标题</th>
                 <th>分类</th>
@@ -204,7 +336,17 @@ export function ArticleList() {
             </thead>
             <tbody>
               {data?.items.map((a) => (
-                <tr key={a.id}>
+                <tr key={a.id} data-row-id={a.id}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`选择文章 ${a.title}`}
+                      data-testid={`row-select-${a.id}`}
+                      checked={selected.has(a.id)}
+                      onChange={() => toggleOne(a.id)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
                   <td style={{ textAlign: 'center' }}>
                     <IconButton
                       label={a.featured ? '取消精选' : '设为精选'}
@@ -234,6 +376,7 @@ export function ArticleList() {
                         color: a.podcast_status === 'ready' ? '#7FD49A'
                           : a.podcast_status === 'generating' ? '#F0C168'
                           : a.podcast_status === 'failed' ? '#F2A6A6'
+                          : a.podcast_status === 'cancelled' ? 'var(--admin-text-2)'
                           : 'var(--admin-text-2)',
                         fontWeight: 600,
                       }}>
@@ -241,22 +384,36 @@ export function ArticleList() {
                           ? `已完成${a.podcast_duration_seconds ? ` · ${formatDuration(a.podcast_duration_seconds)}` : ''}`
                           : a.podcast_status === 'generating' ? '生成中…'
                           : a.podcast_status === 'failed' ? '失败'
+                          : a.podcast_status === 'cancelled' ? '已停止'
                           : '待生成'}
                       </span>
-                      {a.podcast_status === 'failed' && a.podcast_error ? (
+                      {(a.podcast_status === 'failed' || a.podcast_status === 'cancelled')
+                        && a.podcast_error ? (
                         <span
                           title={a.podcast_error}
                           style={{ fontSize: 11, color: 'var(--admin-text-2)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         >{a.podcast_error}</span>
                       ) : null}
-                      <IconButton
-                        label="重新生成对谈语音"
-                        variant="ghost"
-                        size="sm"
-                        icon={<RefreshCw size={14} />}
-                        onClick={() => podcastMut.mutate(a.id)}
-                        disabled={podcastMut.isPending || a.podcast_status === 'generating'}
-                      />
+                      {a.podcast_status === 'generating' ? (
+                        <IconButton
+                          label="停止生成"
+                          variant="danger"
+                          size="sm"
+                          data-testid={`row-cancel-${a.id}`}
+                          icon={<Pause size={14} />}
+                          onClick={() => cancelMut.mutate(a.id)}
+                          disabled={cancelMut.isPending}
+                        />
+                      ) : (
+                        <IconButton
+                          label="重新生成对谈语音"
+                          variant="ghost"
+                          size="sm"
+                          icon={<RefreshCw size={14} />}
+                          onClick={() => podcastMut.mutate(a.id)}
+                          disabled={podcastMut.isPending}
+                        />
+                      )}
                     </div>
                     {a.podcast_status === 'generating' ? (
                       <div style={{ marginTop: 6, minWidth: 220, maxWidth: 320 }}>
@@ -298,7 +455,7 @@ export function ArticleList() {
               ))}
               {data?.items.length === 0 && (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <Empty title="暂无文章" description="点击右上角『新建文章』开始你的第一篇。" />
                   </td>
                 </tr>
