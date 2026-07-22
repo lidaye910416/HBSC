@@ -5,6 +5,7 @@ import { Plus, Star, Trash2, Edit, RefreshCw, Headphones } from 'lucide-react'
 import { api } from '../../services/api'
 import { listRowStagger } from '../../components/admin/animations'
 import { useToast } from '../../components/admin/Toast'
+import { PodcastProgress } from '../../components/admin/PodcastProgress'
 import {
   PageHeader, Button, IconButton, Toolbar, ToolbarGroup,
   SearchInput, StatusBadge, Empty, Modal,
@@ -257,6 +258,17 @@ export function ArticleList() {
                         disabled={podcastMut.isPending || a.podcast_status === 'generating'}
                       />
                     </div>
+                    {a.podcast_status === 'generating' ? (
+                      <div style={{ marginTop: 6, minWidth: 220, maxWidth: 320 }}>
+                        <PodcastProgress
+                          stage={a.podcast_stage ?? 'pending'}
+                          progress={a.podcast_progress ?? 0}
+                          startedAt={a.podcast_started_at ?? null}
+                          lastDuration={a.podcast_last_duration_seconds ?? 0}
+                          variant="inline"
+                        />
+                      </div>
+                    ) : null}
                   </td>
                   <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>
                     {a.updated_at || a.published_at

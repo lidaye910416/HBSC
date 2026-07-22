@@ -126,6 +126,38 @@ def root():
 def health():
     return {"status": "healthy", "service": settings.APP_NAME}
 
+def _migrate_podcast_audios_progress():
+    """One-shot migration: ensure PodcastAudio has the progress / stage /
+    started_at / last_successful_duration_seconds columns. Mirrors the
+    existing _backfill_journal_status pattern — idempotent ALTER TABLE
+    ADD COLUMN for SQLite. The columns power the in-progress UX (stage
+    label, progress bar, ETA) on the admin list / editor / podcast panel.
+
+    Skipped when pytest has installed a get_db override.
+    """
+    from sqlalchemy import text, inspect
+    if get_db in app.dependency_overrides:
+        return
+    insp = inspect(engine)
+    if not insp.has_table("podcast_audios"):
+        return
+    cols = {c["name"] for c in insp.get_columns("podcast_audios")}
+    adds = []
+    if "stage" not in cols:
+        adds.append("ALTER TABLE podcast_audios ADD COLUMN stage VARCHAR(20) NOT NULL DEFAULT 'pending'")
+    if "progress" not in cols:
+        adds.append("ALTER TABLE podcast_audios ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
+    if "started_at" not in cols:
+        adds.append("ALTER TABLE podcast_audios ADD COLUMN started_at DATETIME")
+    if "last_successful_duration_seconds" not in cols:
+        adds.append("ALTER TABLE podcast_audios ADD COLUMN last_successful_duration_seconds INTEGER NOT NULL DEFAULT 0")
+    if adds:
+        with engine.begin() as conn:
+            for stmt in adds:
+                conn.execute(text(stmt))
+        print(f"[migration] podcast_audios: added {len(adds)} column(s)")
+
+
 def _backfill_journal_status():
     """One-shot migration: ensure Journal.status column exists and is non-null.
     For pre-Phase-1 databases that have no `status` column, this runs an
@@ -214,4 +246,5 @@ def seed_all():
 @app.on_event("startup")
 def on_startup():
     _backfill_journal_status()
+    _migrate_podcast_audios_progress()
     seed_all()

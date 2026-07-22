@@ -14,6 +14,7 @@ import {
   type TypesetStyle,
 } from '../../components/admin/TypesetPreviewDialog'
 import { useToast } from '../../components/admin/Toast'
+import { PodcastProgress } from '../../components/admin/PodcastProgress'
 import './ArticleList.css'
 
 interface FormState {
@@ -629,6 +630,15 @@ export function ArticleEditor() {
                         : '尚未生成'}
                 </span>
               </div>
+              {(podcastQuery.data?.status === 'generating' || podcastQuery.data?.status === 'pending') ? (
+                <PodcastProgress
+                  stage={podcastQuery.data?.stage ?? 'pending'}
+                  progress={podcastQuery.data?.progress ?? 0}
+                  startedAt={podcastQuery.data?.started_at ?? null}
+                  lastDuration={podcastQuery.data?.last_successful_duration_seconds ?? 0}
+                  variant="card"
+                />
+              ) : null}
               {podcastQuery.data?.status === 'ready' && podcastQuery.data?.mp3_url ? (
                 <audio
                   controls

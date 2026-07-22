@@ -509,6 +509,7 @@ async def synthesize(
     api_key: str | None = None,
     base_url: str | None = None,
     model: str = MINIMAX_TTS_MODEL_DEFAULT,
+    progress_cb=None,
 ) -> SynthResult:
     """Synthesize a per-segment script to one mp3 + optional srt.
 
@@ -580,6 +581,12 @@ async def synthesize(
                 raise PodcastTTSError(f"segment {i} TTS failed: {e}") from e
             pcm_paths.append(p)
             timings.append(t)
+            if progress_cb is not None:
+                try:
+                    progress_cb(i + 1)
+                except Exception:
+                    # Never let a UI-side bug kill the audio pipeline.
+                    pass
 
         # 2. Build silence PCM (one shared buffer reused in the concat).
         silence_pcm = tmp_dir / "silence.pcm"

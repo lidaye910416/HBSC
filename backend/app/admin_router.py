@@ -26,6 +26,25 @@ from .services.image_gen import generate_image
 from .services.completeness import is_journal_complete
 from .models.podcast_audio import PodcastAudio
 
+def _iso_utc(dt) -> str | None:
+    """Serialize a possibly-naive datetime as an ISO-8601 string in UTC
+    (with ``+00:00`` suffix). The frontend's ``new Date(...)`` then
+    parses the value unambiguously regardless of the viewer's local
+    timezone, so the elapsed/ETA counters don't drift by 8 hours for
+    users east of UTC. Returns ``None`` for missing values.
+    """
+    if dt is None:
+        return None
+    # Naive datetimes are stored as UTC by convention in this project
+    # (see ``datetime.utcnow()`` calls); mark them as such before
+    # isoformatting.
+    if dt.tzinfo is None:
+        from datetime import timezone
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -110,11 +129,15 @@ def _article_to_dict(a: Article, include_content: bool = True) -> dict:
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
         "podcast_status": a.podcast_audio.status if a.podcast_audio else "pending",
+        "podcast_stage": a.podcast_audio.stage if a.podcast_audio else "pending",
+        "podcast_progress": a.podcast_audio.progress if a.podcast_audio else 0,
         "podcast_job_id": a.podcast_audio.job_id if a.podcast_audio else None,
         "podcast_duration_seconds": a.podcast_audio.duration_seconds if a.podcast_audio else 0,
         "podcast_total_chars": a.podcast_audio.total_chars if a.podcast_audio else 0,
         "podcast_error": a.podcast_audio.error_message if a.podcast_audio else None,
-        "podcast_updated_at": a.podcast_audio.updated_at.isoformat() if a.podcast_audio and a.podcast_audio.updated_at else None,
+        "podcast_started_at": _iso_utc(a.podcast_audio.started_at) if a.podcast_audio else None,
+        "podcast_last_duration_seconds": a.podcast_audio.last_successful_duration_seconds if a.podcast_audio else 0,
+        "podcast_updated_at": _iso_utc(a.podcast_audio.updated_at) if a.podcast_audio else None,
     }
     if not include_content:
         d.pop("content", None)
@@ -221,19 +244,27 @@ def get_article_admin(
 
 def _podcast_admin_dict(record: PodcastAudio | None) -> dict:
     if not record:
-        return {"status": "pending", "job_id": None, "error_message": None}
+        return {
+            "status": "pending", "stage": "pending", "progress": 0,
+            "job_id": None, "error_message": None,
+            "started_at": None, "last_successful_duration_seconds": 0,
+        }
     return {
         "id": record.id,
         "status": record.status,
+        "stage": record.stage or "pending",
+        "progress": record.progress if record.progress is not None else 0,
         "job_id": record.job_id,
         "script_text": record.script_text or "",
         "segment_count": record.segment_count or 0,
         "total_chars": record.total_chars or 0,
         "duration_seconds": record.duration_seconds or 0,
+        "last_successful_duration_seconds": record.last_successful_duration_seconds or 0,
+        "started_at": _iso_utc(record.started_at),
         "mp3_url": f"/api/public/podcast/download/{record.job_id}" if record.job_id else "",
         "srt_url": f"/api/public/podcast/subtitle/{record.job_id}" if record.srt_path and record.job_id else "",
         "error_message": record.error_message or "",
-        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+        "updated_at": _iso_utc(record.updated_at),
     }
 
 

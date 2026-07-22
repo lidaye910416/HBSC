@@ -4,6 +4,7 @@ import { AlertTriangle, Check, Download, Headphones, Loader2, Mic } from 'lucide
 import { api, ApiError, type PodcastConfig, type PodcastGenerateResult, type PodcastAudioStatus } from '../../services/api'
 import type { PageContext } from './pageContext'
 import styles from './PodcastPanel.module.css'
+import { PodcastProgress } from '../admin/PodcastProgress'
 
 /**
  * 数创智伴 「播一下」 tab body.
@@ -269,7 +270,18 @@ export function PodcastPanel({
       {backendGenerating && (
         <div className={styles.notice} role="status" data-testid="podcast-backend-generating">
           <Loader2 size={14} className={styles.noticeIcon} aria-hidden="true" />
-          <span>后台正在为这篇文章生成对谈语音，完成后会自动切到播放界面…</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div>后台正在为这篇文章生成对谈语音，完成后会自动切到播放界面…</div>
+            <div style={{ marginTop: 6 }}>
+              <PodcastProgress
+                stage={backendData?.stage ?? 'pending'}
+                progress={backendData?.progress ?? 0}
+                startedAt={backendData?.started_at ?? null}
+                lastDuration={backendData?.last_successful_duration_seconds ?? 0}
+                variant="inline"
+              />
+            </div>
+          </div>
         </div>
       )}
 

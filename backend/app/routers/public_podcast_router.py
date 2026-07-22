@@ -60,6 +60,20 @@ from sqlalchemy.orm import Session
 from ..database import get_db, SessionLocal
 from ..models.journal import Article
 from ..models.podcast_audio import PodcastAudio
+def _iso_utc(dt) -> str | None:
+    """Serialize a possibly-naive datetime as ISO-8601 in UTC (with
+    ``+00:00`` suffix). See admin_router._iso_utc for the rationale —
+    the frontend renders elapsed / ETA counters from this value, and
+    an ambiguous naive timestamp would drift by the viewer's TZ offset.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        from datetime import timezone
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 from ..models.admin_setting import AdminSetting
 from ..services.crypto import decrypt_value
 from ..services.admin_setting_defaults import default_for
@@ -98,8 +112,67 @@ async def prewarm_article_script(article_id: int) -> None:
         db.close()
 
 
+def _report_stage(record: PodcastAudio, stage: str, progress: int) -> None:
+    """Commit a single (stage, progress) checkpoint so the admin UI can
+    render a live progress bar. Best-effort: any DB error is swallowed
+    (we'd rather lose one progress tick than crash the whole pipeline)."""
+    record.stage = stage
+    record.progress = max(0, min(100, int(progress)))
+    try:
+        from .database import SessionLocal  # local import to avoid cycle at import time
+        db = SessionLocal()
+        try:
+            db.merge(record)
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        _log.debug("progress checkpoint failed for stage=%s", stage, exc_info=True)
+
+
+async def _synth_with_progress(
+    segments,
+    *,
+    record: PodcastAudio,
+    voice_a: str,
+    voice_b: str,
+    job_id: str,
+    output_dir,
+) -> "SynthResult":
+    """Same as ``local_synthesize`` but checkpoints progress to the DB
+    after every synthesized segment so the admin can watch the bar move
+    during the longest stage (MiniMax TTS). Falls back to the plain
+    helper if anything in the checkpoint plumbing fails.
+    """
+    total = max(1, len(segments))
+    # We import lazily to keep this helper self-contained. The TTS module
+    # exports its public entry point as ``synthesize`` (not
+    # ``local_synthesize``); the alias ``local_synthesize`` is just the
+    # name the upstream router used historically.
+    from ..services.podcast_tts import synthesize as local_synthesize
+    return await local_synthesize(
+        segments,
+        voice_a=voice_a,
+        voice_b=voice_b,
+        job_id=job_id,
+        output_dir=output_dir,
+        progress_cb=lambda done: _report_stage(
+            record,
+            "synthesizing",
+            15 + int(done * 75 / total),
+        ),
+    )
+
+
 async def generate_article_podcast(article_id: int) -> None:
-    """Generate and persist the complete article podcast in the background."""
+    """Generate and persist the complete article podcast in the background.
+
+    Pipeline (each phase commits a progress checkpoint so the admin UI
+    can render a live progress bar):
+      pending → scripting (5–15) → synthesizing (15–90) → muxing (90–99)
+      → ready (100)  |  any exception → failed
+    """
+    from ..services.podcast_tts import SynthResult  # local to avoid cycle
     db = SessionLocal()
     record = None
     try:
@@ -111,30 +184,52 @@ async def generate_article_podcast(article_id: int) -> None:
             record = PodcastAudio(article_id=article_id)
             db.add(record)
         record.status = "generating"
+        record.stage = "scripting"
+        record.progress = 5
         record.error_message = None
+        record.started_at = datetime.utcnow()
         db.commit()
+        db.refresh(record)
 
+        # 1) LLM dialog
+        record.stage = "scripting"
+        record.progress = 10
+        db.commit()
         segments, script_text = await _generate_script_via_llm(
             content=article.content, title=article.title, db=db,
         )
         write_script(article.slug, segments, script_text)
+        _report_stage(record, "scripting", 15)
+
+        # 2) TTS — this is the long stage; checkpoints every segment
         digest = hashlib.sha1(
             f"{article.id}|{article.updated_at}|{script_text}".encode("utf-8")
         ).hexdigest()[:16]
         job_id = f"article-{article.id}-{digest}"
-        synth = await local_synthesize(
+        _report_stage(record, "synthesizing", 15)
+        synth: SynthResult = await _synth_with_progress(
             segments,
+            record=record,
             voice_a=DEFAULT_VOICE_A,
             voice_b=DEFAULT_VOICE_B,
             job_id=job_id,
             output_dir=job_dir(job_id),
         )
+
+        # 3) muxing — currently a no-op since ffmpeg runs inside
+        # local_synthesize; we still surface the stage so the UI can
+        # render a final "正在合成音频…" beat before flipping to ready.
+        _report_stage(record, "muxing", 95)
+
         record.job_id = job_id
         record.status = "ready"
+        record.stage = "ready"
+        record.progress = 100
         record.script_text = script_text
         record.segment_count = len(segments)
         record.total_chars = sum(len(seg.get("text", "")) for seg in segments)
         record.duration_seconds = int(round(synth.duration_seconds))
+        record.last_successful_duration_seconds = record.duration_seconds
         record.mp3_path = str(synth.mp3_path)
         record.srt_path = str(synth.srt_path) if synth.srt_path else None
         record.completed_at = datetime.utcnow()
@@ -143,8 +238,12 @@ async def generate_article_podcast(article_id: int) -> None:
         _log.exception("podcast generation failed for article %s", article_id)
         if record is not None:
             record.status = "failed"
+            record.stage = "failed"
             record.error_message = str(exc)[:1000]
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                pass
     finally:
         db.close()
 
@@ -729,9 +828,11 @@ async def article_podcast(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="文章不存在")
     record = db.query(PodcastAudio).filter_by(article_id=article.id).first()
     if not record:
-        return {"status": "pending", "article_slug": slug}
+        return {"status": "pending", "stage": "pending", "progress": 0, "article_slug": slug}
     return {
         "status": record.status,
+        "stage": record.stage or "pending",
+        "progress": record.progress if record.progress is not None else 0,
         "article_slug": slug,
         "job_id": record.job_id,
         "mp3_url": f"/api/public/podcast/download/{record.job_id}" if record.job_id else "",
@@ -741,7 +842,9 @@ async def article_podcast(slug: str, db: Session = Depends(get_db)):
         "segment_count": record.segment_count or 0,
         "script_text": record.script_text or "",
         "error_message": record.error_message or "",
-        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+        "started_at": _iso_utc(record.started_at),
+        "last_successful_duration_seconds": record.last_successful_duration_seconds or 0,
+        "updated_at": _iso_utc(record.updated_at),
     }
 
 

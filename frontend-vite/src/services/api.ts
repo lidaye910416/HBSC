@@ -305,7 +305,14 @@ export const api = {
         if (params?.sort_dir) sp.set('sort_dir', params.sort_dir)
         if (params?.page) sp.set('page', String(params.page))
         if (params?.per_page) sp.set('per_page', String(params.per_page))
-        return request<PaginatedResponse<ArticleList & { status: string; featured: boolean; updated_at?: string; podcast_status?: PodcastAudioStatus['status'] }>>('/api/admin/articles?' + sp.toString())
+        return request<PaginatedResponse<ArticleList & {
+    status: string; featured: boolean; updated_at?: string;
+    podcast_status?: PodcastAudioStatus['status'];
+    podcast_stage?: PodcastAudioStatus['stage'];
+    podcast_progress?: PodcastAudioStatus['progress'];
+    podcast_started_at?: string | null;
+    podcast_last_duration_seconds?: number;
+  }>>('/api/admin/articles?' + sp.toString())
       },
       get: (id: number): Promise<Article & { status: string; featured: boolean; cover_image_alt?: string; updated_at?: string }> =>
         request(`/api/admin/articles/${id}`),
@@ -554,10 +561,21 @@ export interface PodcastGenerateResult {
 
 export interface PodcastAudioStatus {
   status: 'pending' | 'generating' | 'ready' | 'failed'
+  /** Pipeline sub-stage while status==='generating'. Drives the
+   *  PodcastProgress label and indeterminate vs. determinate UI. */
+  stage?: 'pending' | 'scripting' | 'synthesizing' | 'muxing' | 'ready' | 'failed'
+  /** Integer 0–100. Combined with `stage` to render the progress bar. */
+  progress?: number
   job_id?: string | null
   mp3_url?: string
   srt_url?: string
   duration_seconds?: number
+  /** Most recent successful run's wall-clock duration. Used to estimate
+   *  the current run's ETA once at least one prior run completed. */
+  last_successful_duration_seconds?: number
+  /** ISO timestamp of when the current run started. Anchors the
+   *  "u5df2消耗 X" + "预计还需 Y" counters. */
+  started_at?: string | null
   total_chars?: number
   segment_count?: number
   script_text?: string
