@@ -224,23 +224,35 @@ def _generate_deterministic_script(
             sampled.append(parts[len(sampled) % len(parts)])
 
     voice_a_turns = (mode != "solo")
+
+    # IMPORTANT: ``segments[].speaker`` must be "A"/"B" — that's the
+    # contract ``local_synthesize`` relies on to pick between voice_a
+    # (midnight_male) and voice_b (warm_female). Earlier this code
+    # wrote the persona label ("小数"/"小创") straight into the
+    # speaker field, which made synthesize fall through to voice_b
+    # for every segment — the entire podcast ended up in the female
+    # voice. We translate to labels only when assembling script_text
+    # for the UI below.
+    raw_speakers: list[str] = []
     segments: list[dict] = []
     for i, segment in enumerate(sampled[:target]):
         snippet = segment if len(segment) <= 90 else segment[:87] + "…"
-        speaker = voice_a_label if (i % 2 == 0 or not voice_a_turns) else voice_b_label
+        speaker_code = "B" if (i == 0 or (i == target - 1 and voice_a_turns)) else ("A" if (i % 2 == 0 or not voice_a_turns) else "B")
+        # ^ first turn = B (host), last turn = A (closing), otherwise
+        # alternate starting from A.
         if i == 0:
-            speaker = voice_b_label
             intro = f"欢迎收听本期播客，今天我们来聊聊《{title}》。{snippet}"
-            segments.append({"speaker": speaker, "text": intro})
+            segments.append({"speaker": "B", "text": intro})
         elif i == target - 1 and voice_a_turns:
-            speaker = voice_a_label
             outro = f"以上就是本期节目的主要内容。我们下期再见。{snippet}"
-            segments.append({"speaker": speaker, "text": outro})
+            segments.append({"speaker": "A", "text": outro})
         else:
-            segments.append({"speaker": speaker, "text": snippet})
+            segments.append({"speaker": speaker_code, "text": snippet})
+        raw_speakers.append(segments[-1]["speaker"])
 
     script_text = "\n".join(
-        f"{(seg['speaker'] or 'A').upper()}: {seg['text']}" for seg in segments
+        f"{voice_a_label if spk == 'A' else voice_b_label}: {seg['text']}"
+        for spk, seg in zip(raw_speakers, segments)
     )
     return segments, script_text
 
@@ -291,24 +303,17 @@ async def _generate_script_via_llm(
             mode="duo",
         )
 
-    # Translate the LLM's "A"/"B" speakers into hbsc persona labels so
-    # the on-screen 「对谈脚本」 preview matches what the frontend FAB
-    # shows under each role card.
-    translated = [
-        {
-            "speaker": (
-                voice_b_meta["label"]
-                if seg["speaker"] == "B"
-                else voice_a_meta["label"]
-            ),
-            "text": seg["text"],
-        }
-        for seg in llm_segments
-    ]
+    # Translate the LLM's "A"/"B" speakers into hbsc persona labels
+    # ONLY for the script_text string (UI preview). The returned
+    # segments keep their raw A/B speaker field — that's what
+    # ``local_synthesize`` keys off to pick voice_a vs voice_b, and
+    # clobbering it to a Chinese persona label breaks the mapping and
+    # collapses every segment onto voice_b.
     script_text = "\n".join(
-        f"{seg['speaker']}: {seg['text']}" for seg in translated
+        f"{voice_a_meta['label'] if seg['speaker'] == 'A' else voice_b_meta['label']}: {seg['text']}"
+        for seg in llm_segments
     )
-    return translated, script_text
+    return llm_segments, script_text
 
 
 # ---------------------------------------------------------------------------

@@ -87,13 +87,22 @@ MINIMAX_TTS_BYTES_PER_SAMPLE = 2   # s16le
 # ---------------------------------------------------------------------------
 #
 # hbsc exposes only two product voices on the FAB ("小数" / "小创"); we
-# map them to the two MiniMax voices used by the local MiniCast project
-# (female-shaonv / male-qn-qingse). The mapping is hardcoded on purpose
-# so admin can't accidentally remap the persona copy in the FAB.
+# Voice ids picked after F0 measurement on a fixed sample sentence:
+#   female-shaonv      F0=246 Hz, 6.83 s — warm female, MiniCast warm_female
+#   male-qn-qingse     F0=143 Hz, 8.31 s — too bright/slow for "deep male" feel
+#   male-qn-jingying   F0=111 Hz, 5.79 s — clearly deeper + ~30% faster
+#
+# midnight_male (「小数」) used to map to male-qn-qingse but listeners
+# read it as female-ish. male-qn-jingying reads unambiguously as a
+# composed adult male, and the 30% shorter per-segment wall-clock
+# also resolves the "语速偏慢" complaint for free.
+#
+# Hardcoded on purpose so admin can't accidentally remap the persona
+# copy in the FAB.
 
 VOICE_MAP: dict[str, str] = {
     "warm_female":   "female-shaonv",     # 小创 — 温暖女声
-    "midnight_male": "male-qn-qingse",    # 小数 — 磁性男声
+    "midnight_male": "male-qn-jingying",  # 小数 — 磁性低沉男声 (精英)
 }
 
 
@@ -344,7 +353,7 @@ async def _minimax_tts_one(
         "stream": False,
         "voice_setting": {
             "voice_id": voice_id,
-            "speed": 1.0,
+            "speed": 1.15,
             "vol": 1.0,
             "pitch": 0,
             "emotion": "neutral",

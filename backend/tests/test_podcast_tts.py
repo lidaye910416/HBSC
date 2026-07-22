@@ -150,7 +150,7 @@ class TestVoiceMap:
         # These are the only two ids the FAB /config endpoint exposes;
         # if MiniCast later adds more curated voices we'd add them here.
         assert pt.VOICE_MAP["warm_female"] == "female-shaonv"
-        assert pt.VOICE_MAP["midnight_male"] == "male-qn-qingse"
+        assert pt.VOICE_MAP["midnight_male"] == "male-qn-jingying"
         assert "english_female" not in pt.VOICE_MAP
         assert "news_male" not in pt.VOICE_MAP
 
@@ -329,7 +329,7 @@ class TestSynthesize:
         first_voice_id = fake_http.calls[0][1]["voice_setting"]["voice_id"]
         second_voice_id = fake_http.calls[1][1]["voice_setting"]["voice_id"]
         assert first_voice_id == "female-shaonv"
-        assert second_voice_id == "male-qn-qingse"
+        assert second_voice_id == "male-qn-jingying"
 
     def test_request_body_shape(self, tmp_path, fake_http, fake_ffmpeg):
         """Document what we send to MiniMax — keep this test in sync
@@ -348,7 +348,7 @@ class TestSynthesize:
         assert body["model"] == "speech-2.6-hd"
         assert body["stream"] is False
         vs = body["voice_setting"]
-        assert vs["speed"] == 1.0
+        assert vs["speed"] == 1.15
         assert vs["emotion"] == "neutral"
         au = body["audio_setting"]
         assert au["format"] == "pcm"
