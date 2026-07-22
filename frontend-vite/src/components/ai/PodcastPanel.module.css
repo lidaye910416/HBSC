@@ -447,6 +447,27 @@
   overflow: auto;
 }
 
+/* ───── Notice (generating / fallback) ───── */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d6e6e0;
+  background: linear-gradient(180deg, #f4fbf6, #ebf6ef);
+  color: #1f5a3a;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.55;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.notice > span { min-width: 0; flex: 1; }
+.noticeIcon { animation: spin 1.4s linear infinite; flex-shrink: 0; margin-top: 1px; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 /* ───── Error ───── */
 
 .error {
@@ -512,3 +533,23 @@
     transition: none;
   }
 }
+
+/* ≤ 420px — phones in portrait (3.5–4.7 inch). Tighten everything so the
+   panel doesn't feel like a desktop dialog squeezed into a 360px viewport. */
+@media (max-width: 420px) {
+  .root { gap: 12px; padding: 12px 12px 14px; }
+  .title { font-size: 12px; letter-spacing: 0.01em; }
+  .voiceRow { grid-template-columns: 1fr; }
+  .voiceCard { padding: 9px 10px; gap: 9px; border-radius: 12px; }
+  .voiceAvatar { width: 32px; height: 32px; font-size: 16px; }
+  .voiceLabel { font-size: 13px; }
+  .voiceSubtitle { font-size: 10.5px; line-height: 1.4; }
+  .steps { padding: 10px 10px 9px; border-radius: 12px; }
+  .step { font-size: 12px; padding: 6px 2px; gap: 10px; }
+  .stepDot { width: 20px; height: 20px; font-size: 10.5px; }
+  .startBtn { padding: 10px 14px; font-size: 12.5px; border-radius: 12px; }
+  .startBtnIcon { width: 20px; height: 20px; }
+  .audioBox, .scriptBox, .error, .notice { padding: 10px 11px; border-radius: 12px; }
+  .scriptPre { font-size: 11.5px; }
+}
+

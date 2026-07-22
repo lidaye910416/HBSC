@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -24,6 +24,7 @@ from .security import get_current_admin
 from .upload_service import save_upload, read_upload_with_limit, UploadTooLarge, get_public_path
 from .services.image_gen import generate_image
 from .services.completeness import is_journal_complete
+from .models.podcast_audio import PodcastAudio
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -108,6 +109,12 @@ def _article_to_dict(a: Article, include_content: bool = True) -> dict:
         "published_at": a.published_at.isoformat() if a.published_at else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+        "podcast_status": a.podcast_audio.status if a.podcast_audio else "pending",
+        "podcast_job_id": a.podcast_audio.job_id if a.podcast_audio else None,
+        "podcast_duration_seconds": a.podcast_audio.duration_seconds if a.podcast_audio else 0,
+        "podcast_total_chars": a.podcast_audio.total_chars if a.podcast_audio else 0,
+        "podcast_error": a.podcast_audio.error_message if a.podcast_audio else None,
+        "podcast_updated_at": a.podcast_audio.updated_at.isoformat() if a.podcast_audio and a.podcast_audio.updated_at else None,
     }
     if not include_content:
         d.pop("content", None)
@@ -172,6 +179,7 @@ def list_articles(
 @router.post("/articles")
 def create_article(
     body: ArticleCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
@@ -193,6 +201,9 @@ def create_article(
         db.rollback()
         raise HTTPException(status_code=409, detail=f"slug '{body.slug}' 已被使用")
     db.refresh(article)
+    if (article.content or "").strip():
+        from .routers.public_podcast_router import generate_article_podcast
+        background_tasks.add_task(generate_article_podcast, article.id)
     return _article_to_dict(article)
 
 
@@ -208,10 +219,95 @@ def get_article_admin(
     return _article_to_dict(a)
 
 
+def _podcast_admin_dict(record: PodcastAudio | None) -> dict:
+    if not record:
+        return {"status": "pending", "job_id": None, "error_message": None}
+    return {
+        "id": record.id,
+        "status": record.status,
+        "job_id": record.job_id,
+        "script_text": record.script_text or "",
+        "segment_count": record.segment_count or 0,
+        "total_chars": record.total_chars or 0,
+        "duration_seconds": record.duration_seconds or 0,
+        "mp3_url": f"/api/public/podcast/download/{record.job_id}" if record.job_id else "",
+        "srt_url": f"/api/public/podcast/subtitle/{record.job_id}" if record.srt_path and record.job_id else "",
+        "error_message": record.error_message or "",
+        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+    }
+
+
+@router.get("/articles/{article_id}/podcast")
+def get_article_podcast(
+    article_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    article = db.get(Article, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    return _podcast_admin_dict(db.query(PodcastAudio).filter_by(article_id=article_id).first())
+
+
+@router.post("/articles/{article_id}/podcast")
+def regenerate_article_podcast(
+    article_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    article = db.get(Article, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    if not (article.content or "").strip():
+        raise HTTPException(status_code=422, detail="文章正文为空，无法生成语音")
+    record = db.query(PodcastAudio).filter_by(article_id=article_id).first()
+    if record:
+        record.status = "pending"
+        record.error_message = None
+        db.commit()
+    from .routers.public_podcast_router import generate_article_podcast
+    background_tasks.add_task(generate_article_podcast, article_id)
+    return {"status": "pending"}
+
+
+@router.delete("/articles/{article_id}/podcast")
+def delete_article_podcast(
+    article_id: int,
+    db: Session = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    import os
+    record = db.query(PodcastAudio).filter_by(article_id=article_id).first()
+    job_dir_path: str | None = None
+    if record:
+        if record.mp3_path:
+            job_dir_path = os.path.dirname(record.mp3_path)
+        for path in (record.mp3_path, record.srt_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        db.delete(record)
+        db.commit()
+    if job_dir_path:
+        try:
+            os.rmdir(job_dir_path)
+        except OSError:
+            pass
+    from .services.podcast_script_cache import delete_script
+    article = db.get(Article, article_id)
+    if article:
+        delete_script(article.slug)
+    return {"status": "deleted"}
+
+
 @router.put("/articles/{article_id}")
 def update_article(
     article_id: int,
     body: ArticleUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
@@ -234,12 +330,19 @@ def update_article(
         a.published_at = datetime.utcnow()
     db.commit()
     db.refresh(a)
+    if {"content", "title"} & data.keys():
+        from .services.podcast_script_cache import delete_script
+        delete_script(a.slug)
+        from .routers.public_podcast_router import generate_article_podcast
+        if (a.content or "").strip():
+            background_tasks.add_task(generate_article_podcast, a.id)
     return _article_to_dict(a)
 
 
 @router.post("/articles/{article_id}/publish", response_model=ArticleAdminOut)
 def publish_article(
     article_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
@@ -249,6 +352,10 @@ def publish_article(
     a.status = "published"
     db.commit()
     db.refresh(a)
+    if (a.content or "").strip():
+        from .routers.public_podcast_router import generate_article_podcast
+        # Publishing a draft is also an article-available event.
+        background_tasks.add_task(generate_article_podcast, a.id)
     return _article_to_dict(a)
 
 
@@ -283,8 +390,19 @@ def delete_article(
     a = db.query(Article).filter(Article.id == article_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="文章不存在")
+    import os
+    if a.podcast_audio is not None:
+        for path in (a.podcast_audio.mp3_path, a.podcast_audio.srt_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+    article_slug = a.slug
     db.delete(a)
     db.commit()
+    from .services.podcast_script_cache import delete_script
+    delete_script(article_slug)
     return OkResponse()
 
 

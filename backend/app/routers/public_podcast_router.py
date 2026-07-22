@@ -46,6 +46,8 @@ from __future__ import annotations
 
 import logging
 import os
+import hashlib
+from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -55,7 +57,9 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, SessionLocal
+from ..models.journal import Article
+from ..models.podcast_audio import PodcastAudio
 from ..models.admin_setting import AdminSetting
 from ..services.crypto import decrypt_value
 from ..services.admin_setting_defaults import default_for
@@ -68,11 +72,81 @@ from ..services.podcast_tts import (
     job_dir,
     synthesize as local_synthesize,
 )
+from ..services.podcast_script_cache import read_script, write_script
 from ..middleware.rate_limit import rate_limit
 
 
 router = APIRouter(prefix="/api/public/podcast", tags=["public-podcast"])
 _log = logging.getLogger(__name__)
+
+
+async def prewarm_article_script(article_id: int) -> None:
+    """Generate a script after an article save without delaying the admin API."""
+    db = SessionLocal()
+    try:
+        article = db.get(Article, article_id)
+        if not article or not (article.content or "").strip():
+            return
+        segments, script_text = await _generate_script_via_llm(
+            content=article.content, title=article.title, db=db,
+        )
+        write_script(article.slug, segments, script_text)
+        _log.info("podcast script prewarmed for article %s", article.slug)
+    except Exception:
+        _log.exception("podcast script prewarm failed for article %s", article_id)
+    finally:
+        db.close()
+
+
+async def generate_article_podcast(article_id: int) -> None:
+    """Generate and persist the complete article podcast in the background."""
+    db = SessionLocal()
+    record = None
+    try:
+        article = db.get(Article, article_id)
+        if not article or not (article.content or "").strip():
+            return
+        record = db.query(PodcastAudio).filter_by(article_id=article_id).first()
+        if record is None:
+            record = PodcastAudio(article_id=article_id)
+            db.add(record)
+        record.status = "generating"
+        record.error_message = None
+        db.commit()
+
+        segments, script_text = await _generate_script_via_llm(
+            content=article.content, title=article.title, db=db,
+        )
+        write_script(article.slug, segments, script_text)
+        digest = hashlib.sha1(
+            f"{article.id}|{article.updated_at}|{script_text}".encode("utf-8")
+        ).hexdigest()[:16]
+        job_id = f"article-{article.id}-{digest}"
+        synth = await local_synthesize(
+            segments,
+            voice_a=DEFAULT_VOICE_A,
+            voice_b=DEFAULT_VOICE_B,
+            job_id=job_id,
+            output_dir=job_dir(job_id),
+        )
+        record.job_id = job_id
+        record.status = "ready"
+        record.script_text = script_text
+        record.segment_count = len(segments)
+        record.total_chars = sum(len(seg.get("text", "")) for seg in segments)
+        record.duration_seconds = int(round(synth.duration_seconds))
+        record.mp3_path = str(synth.mp3_path)
+        record.srt_path = str(synth.srt_path) if synth.srt_path else None
+        record.completed_at = datetime.utcnow()
+        db.commit()
+    except Exception as exc:
+        _log.exception("podcast generation failed for article %s", article_id)
+        if record is not None:
+            record.status = "failed"
+            record.error_message = str(exc)[:1000]
+            db.commit()
+    finally:
+        db.close()
 
 
 # Mirror public_agent_router's body caps; deliberately smaller because
@@ -125,6 +199,11 @@ def _is_isolated() -> bool:
 # ---------------------------------------------------------------------------
 # Local extract (always available — independent of isolation mode)
 # ---------------------------------------------------------------------------
+
+def _article_slug_from_url(url: str) -> str | None:
+    path = urlparse(url).path.rstrip("/")
+    return path[len("/articles/"):] if path.startswith("/articles/") else None
+
 
 async def _extract_from_hbsc(url: str, request: Request) -> tuple[str, str]:
     """Read content directly from hbsc's own article/issue endpoints.
@@ -640,6 +719,32 @@ async def generate(
     return await _generate_upstream(body, request, db)
 
 
+@router.get("/article/{slug}")
+async def article_podcast(slug: str, db: Session = Depends(get_db)):
+    """Return the pre-generated audio state for a published article."""
+    article = db.query(Article).filter(
+        Article.slug == slug, Article.status == "published"
+    ).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    record = db.query(PodcastAudio).filter_by(article_id=article.id).first()
+    if not record:
+        return {"status": "pending", "article_slug": slug}
+    return {
+        "status": record.status,
+        "article_slug": slug,
+        "job_id": record.job_id,
+        "mp3_url": f"/api/public/podcast/download/{record.job_id}" if record.job_id else "",
+        "srt_url": f"/api/public/podcast/subtitle/{record.job_id}" if record.srt_path and record.job_id else "",
+        "duration_seconds": record.duration_seconds or 0,
+        "total_chars": record.total_chars or 0,
+        "segment_count": record.segment_count or 0,
+        "script_text": record.script_text or "",
+        "error_message": record.error_message or "",
+        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+    }
+
+
 async def _generate_isolated(
     body: GenerateRequest,
     request: Request,
@@ -661,9 +766,12 @@ async def _generate_isolated(
     # 2. Generate script (LLM if configured, deterministic fallback
     # otherwise). The LLM call is allowed to fail without aborting the
     # whole request — the deterministic generator keeps the FAB usable.
-    segments, script_text = await _generate_script_via_llm(
-        content=content, title=title_hint, db=db,
-    )
+    article_slug = _article_slug_from_url(body.url)
+    cached = read_script(article_slug) if article_slug else None
+    if cached:
+        segments, script_text = cached
+    else:
+        segments, script_text = await _generate_script_via_llm(content=content, title=title_hint, db=db)
     segment_count = len(segments)
 
     # 3. Synthesize audio locally via edge-tts + ffmpeg.

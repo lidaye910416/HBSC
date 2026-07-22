@@ -438,3 +438,26 @@
   color: var(--admin-text-muted);
   word-break: break-all;
 }
+/* ArticleEditor — podcast management card */
+.article-editor__podcast {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.article-editor__podcastHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.article-editor__podcastActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+@media (max-width: 520px) {
+  .article-editor__podcastHeader { font-size: 13px; }
+  .article-editor__podcastActions { flex-direction: column; align-items: stretch; }
+  .article-editor__podcastActions > * { width: 100%; }
+}

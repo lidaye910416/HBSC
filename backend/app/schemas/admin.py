@@ -74,6 +74,13 @@ class ArticleAdminOut(BaseModel):
     published_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # 对谈语音元数据 — 见 backend/app/models/podcast_audio.py
+    podcast_status: str = "pending"
+    podcast_job_id: Optional[str] = None
+    podcast_duration_seconds: int = 0
+    podcast_total_chars: int = 0
+    podcast_error: Optional[str] = None
+    podcast_updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

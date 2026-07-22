@@ -283,6 +283,8 @@ export const api = {
           method: 'POST',
           body: JSON.stringify(body),
         }),
+      article: (slug: string) =>
+        request<PodcastAudioStatus>(`/api/public/podcast/article/${encodeURIComponent(slug)}`),
     },
   },
 
@@ -303,7 +305,7 @@ export const api = {
         if (params?.sort_dir) sp.set('sort_dir', params.sort_dir)
         if (params?.page) sp.set('page', String(params.page))
         if (params?.per_page) sp.set('per_page', String(params.per_page))
-        return request<PaginatedResponse<ArticleList & { status: string; featured: boolean; updated_at?: string }>>('/api/admin/articles?' + sp.toString())
+        return request<PaginatedResponse<ArticleList & { status: string; featured: boolean; updated_at?: string; podcast_status?: PodcastAudioStatus['status'] }>>('/api/admin/articles?' + sp.toString())
       },
       get: (id: number): Promise<Article & { status: string; featured: boolean; cover_image_alt?: string; updated_at?: string }> =>
         request(`/api/admin/articles/${id}`),
@@ -311,6 +313,11 @@ export const api = {
         request('/api/admin/articles', { method: 'POST', body: JSON.stringify(body) }),
       update: (id: number, body: Record<string, unknown>) =>
         request(`/api/admin/articles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+      podcast: {
+        get: (id: number) => request<PodcastAudioStatus>(`/api/admin/articles/${id}/podcast`),
+        regenerate: (id: number) => request<PodcastAudioStatus>(`/api/admin/articles/${id}/podcast`, { method: 'POST' }),
+        delete: (id: number) => request(`/api/admin/articles/${id}/podcast`, { method: 'DELETE' }),
+      },
       delete: (id: number) =>
         request(`/api/admin/articles/${id}`, { method: 'DELETE' }),
       // Multipart upload — must NOT set Content-Type: application/json
@@ -542,5 +549,18 @@ export interface PodcastGenerateResult {
   segment_count: number
   script_text: string
   fallback_url: string
+  mode?: string
 }
 
+export interface PodcastAudioStatus {
+  status: 'pending' | 'generating' | 'ready' | 'failed'
+  job_id?: string | null
+  mp3_url?: string
+  srt_url?: string
+  duration_seconds?: number
+  total_chars?: number
+  segment_count?: number
+  script_text?: string
+  error_message?: string
+  updated_at?: string | null
+}

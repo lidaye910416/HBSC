@@ -48,6 +48,7 @@ class Article(Base):
 
     journal_id = Column(Integer, ForeignKey("journals.id"))
     journal = relationship("Journal", back_populates="articles")
+    podcast_audio = relationship("PodcastAudio", back_populates="article", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Article {self.title}>"

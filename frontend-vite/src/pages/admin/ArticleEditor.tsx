@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
-import { Calendar, Sparkles, User as UserIcon } from 'lucide-react'
+import { Calendar, Sparkles, User as UserIcon, Headphones, RefreshCw, Trash2 } from 'lucide-react'
 import { api } from '../../services/api'
 import { ImageUploader } from '../../components/admin/ImageUploader'
 import { imageCommand } from '../../components/admin/Mde/insertImagePlugin'
@@ -47,6 +47,14 @@ const emptyForm = (): FormState => ({
   status: 'draft',
   tags: '',
 })
+
+
+function formatSeconds(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds || 0))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
 
 const slugify = (s: string) =>
   s.toLowerCase().trim()
@@ -256,6 +264,37 @@ export function ArticleEditor() {
       form.tags !== existingTags
     )
   }, [form, existing])
+
+  // 对谈语音 — 后台预生成状态与管理入口。/api/admin/articles/{id}/podcast
+  // 返回与公开接口一致的 status 字段（pending/generating/ready/failed）。
+  const articleIdNum = id ? parseInt(id, 10) : 0
+  const podcastQuery = useQuery({
+    queryKey: ['admin', 'articles', articleIdNum, 'podcast'],
+    queryFn: () => api.admin.articles.podcast.get(articleIdNum),
+    enabled: !isNew && Number.isFinite(articleIdNum),
+    refetchInterval: (q) => {
+      const s = q.state.data?.status
+      return s === 'pending' || s === 'generating' ? 2500 : false
+    },
+  })
+  const podcastRegenMut = useMutation({
+    mutationFn: () => api.admin.articles.podcast.regenerate(articleIdNum),
+    onSuccess: () => {
+      toast.success('已提交后台生成')
+      qc.invalidateQueries({ queryKey: ['admin', 'articles', articleIdNum, 'podcast'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '生成失败'),
+  })
+  const podcastDeleteMut = useMutation({
+    mutationFn: () => api.admin.articles.podcast.delete(articleIdNum),
+    onSuccess: () => {
+      toast.success('已删除对谈语音')
+      qc.invalidateQueries({ queryKey: ['admin', 'articles', articleIdNum, 'podcast'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '删除失败'),
+  })
 
   const saveMut = useMutation({
     mutationFn: async (status: 'draft' | 'published') => {
@@ -574,7 +613,59 @@ export function ArticleEditor() {
           </label>
         </div>
 
-        <Card>
+        {!isNew && (
+          <Card>
+            <div className="article-editor__podcast" data-testid="article-podcast-card">
+              <div className="article-editor__podcastHeader">
+                <Headphones size={16} aria-hidden="true" />
+                <span style={{ fontWeight: 600 }}>对谈语音（数创智伴）</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--admin-text-muted)' }}>
+                  {podcastQuery.data?.status === 'ready'
+                    ? `已完成${podcastQuery.data?.duration_seconds ? ` · ${formatSeconds(podcastQuery.data.duration_seconds)}` : ''}`
+                    : podcastQuery.data?.status === 'generating'
+                      ? '后台生成中…'
+                      : podcastQuery.data?.status === 'failed'
+                        ? '生成失败'
+                        : '尚未生成'}
+                </span>
+              </div>
+              {podcastQuery.data?.status === 'ready' && podcastQuery.data?.mp3_url ? (
+                <audio
+                  controls
+                  src={podcastQuery.data.mp3_url}
+                  style={{ width: '100%', marginTop: 8 }}
+                />
+              ) : null}
+              {podcastQuery.data?.status === 'failed' && podcastQuery.data?.error_message ? (
+                <div style={{ marginTop: 8, color: '#b93838', fontSize: 12 }}>
+                  {podcastQuery.data.error_message}
+                </div>
+              ) : null}
+              <div className="article-editor__podcastActions">
+                <Button
+                  variant="secondary"
+                  icon={<RefreshCw size={14} />}
+                  onClick={() => podcastRegenMut.mutate()}
+                  loading={podcastRegenMut.isPending}
+                  disabled={podcastQuery.data?.status === 'generating'}
+                >
+                  重新生成
+                </Button>
+                <Button
+                  variant="ghost"
+                  icon={<Trash2 size={14} />}
+                  onClick={() => podcastDeleteMut.mutate()}
+                  loading={podcastDeleteMut.isPending}
+                  disabled={!podcastQuery.data?.job_id}
+                >
+                  删除语音
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+                <Card>
           <div className="article-editor__actions">
             <Button data-ai-blocked="publish" onClick={() => saveMut.mutate('published')} loading={saveMut.isPending}>
               {saveMut.isPending ? '保存中...' : '保存并发布'}

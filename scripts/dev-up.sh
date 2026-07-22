@@ -192,7 +192,7 @@ log "starting vite (port $FRONTEND_PORT)"
 # siblings on some shells, and the foreground branch needs the exact PIDs.
 # Use pushd/popd to set cwd without subshell.
 pushd "$REPO_ROOT/frontend-vite" >/dev/null
-nohup npm run dev -- --port "$FRONTEND_PORT" --host 127.0.0.1 \
+nohup ./node_modules/.bin/vite --port "$FRONTEND_PORT" --host 127.0.0.1 \
   </dev/null >>"$VITE_LOG" 2>&1 &
 VITE_PID=$!
 popd >/dev/null
@@ -200,7 +200,7 @@ disown "$VITE_PID" 2>/dev/null || true
 
 log "starting uvicorn (port $BACKEND_PORT)"
 pushd "$REPO_ROOT/backend" >/dev/null
-nohup python3 -m uvicorn app.main:app --reload --port "$BACKEND_PORT" --host 127.0.0.1 \
+nohup python3 -m uvicorn app.main:app --port "$BACKEND_PORT" --host 127.0.0.1 \
   </dev/null >>"$UVICORN_LOG" 2>&1 &
 UVICORN_RELOADER_PID=$!
 popd >/dev/null

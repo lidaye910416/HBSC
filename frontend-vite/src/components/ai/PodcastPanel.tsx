@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Check, Download, Headphones, Loader2, Mic } from 'lucide-react'
-import { api, ApiError, type PodcastConfig, type PodcastGenerateResult } from '../../services/api'
+import { api, ApiError, type PodcastConfig, type PodcastGenerateResult, type PodcastAudioStatus } from '../../services/api'
 import type { PageContext } from './pageContext'
 import styles from './PodcastPanel.module.css'
 
@@ -90,12 +90,27 @@ function estimateDuration(content: string): string {
   return `约 ${formatHumanDuration(total)}`
 }
 
+function articleSlugFromUrl(url: string): string | null {
+  const match = new URL(url, window.location.origin).pathname.match(/^\/articles\/([^/]+)\/?$/)
+  return match?.[1] ?? null
+}
+
 export function PodcastPanel({
   pageContext,
 }: {
   pageContext: PageContext
 }) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  const articleSlug = articleSlugFromUrl(pageContext.url)
+  const backendAudioQuery = useQuery<PodcastAudioStatus>({
+    queryKey: ['public', 'podcast', 'article', articleSlug],
+    queryFn: () => api.public.podcast.article(articleSlug!),
+    enabled: Boolean(articleSlug),
+    refetchInterval: (query) => {
+      const state = query.state.data?.status
+      return state === 'pending' || state === 'generating' ? 2500 : false
+    },
+  })
 
   // Read the public config to learn the voice catalog and the FAB gate.
   // If disabled, the FAB shouldn't have surfaced this tab — but we still
@@ -113,6 +128,28 @@ export function PodcastPanel({
   useEffect(() => {
     setStatus({ kind: 'idle' })
   }, [pageContext.url])
+
+  useEffect(() => {
+    const data = backendAudioQuery.data
+    if (!data) return
+    // If the backend has finished preparing audio for the article we're
+    // viewing, surface it directly — overriding any in-flight ad-hoc
+    // generation since the persisted asset is always fresher.
+    if (data.status === 'ready' && data.job_id) {
+      if (status.kind === 'ready' && status.data.job_id === data.job_id) return
+      setStatus({ kind: 'ready', data: {
+        job_id: data.job_id,
+        mp3_url: data.mp3_url || '',
+        srt_url: data.srt_url || '',
+        duration_seconds: data.duration_seconds || 0,
+        total_chars: data.total_chars || 0,
+        segment_count: data.segment_count || 0,
+        script_text: data.script_text || '',
+        fallback_url: '',
+        mode: 'backend-prebuilt',
+      } })
+    }
+  }, [backendAudioQuery.data, status.kind, status])
 
   async function handleStart() {
     if (status.kind === 'extracting' || status.kind === 'scripting' || status.kind === 'synthesizing') {
@@ -148,7 +185,10 @@ export function PodcastPanel({
   const config = configQuery.data
   const voiceA = config?.voices?.[config.default_voice_a]
   const voiceB = config?.voices?.[config.default_voice_b]
-  const disabled = !configQuery.isSuccess || config?.enabled === false
+  const backendData = backendAudioQuery.data
+  const backendGenerating = backendData?.status === 'pending' || backendData?.status === 'generating'
+  const backendFailed = backendData?.status === 'failed'
+  const disabled = !configQuery.isSuccess || config?.enabled === false || backendGenerating
 
   return (
     <div className={styles.root} data-testid="podcast-panel">
@@ -220,8 +260,27 @@ export function PodcastPanel({
           aria-label="开始生成当前页播客"
         >
           <span className={styles.startBtnIcon}><Mic size={14} /></span>
-          开始生成
+          {backendGenerating
+            ? '后台正在准备语音…'
+            : '开始生成'}
         </button>
+      )}
+
+      {backendGenerating && (
+        <div className={styles.notice} role="status" data-testid="podcast-backend-generating">
+          <Loader2 size={14} className={styles.noticeIcon} aria-hidden="true" />
+          <span>后台正在为这篇文章生成对谈语音，完成后会自动切到播放界面…</span>
+        </div>
+      )}
+
+      {backendFailed && status.kind === 'idle' && (
+        <div className={styles.error} role="alert" data-testid="podcast-backend-failed">
+          <AlertTriangle size={14} aria-hidden="true" />
+          <div>
+            <div>后台预生成失败：{backendData?.error_message || '未知错误'}</div>
+            <div style={{ marginTop: 4 }}>可以点击上方按钮实时重试一次。</div>
+          </div>
+        </div>
       )}
 
       {status.kind === 'ready' && (

@@ -26,7 +26,7 @@ from .routers import (
 # module-level helpers. See backend/app/routers/__init__.py comment.
 from .routers.public_podcast_router import router as public_podcast_router
 from .middleware.rate_limit import rate_limit
-from .models import Journal, Article, Researcher
+from .models import Journal, Article, Researcher, PodcastAudio
 from .services.seed_data import seed_journals, seed_articles, seed_researchers
 from sqlalchemy.orm import Session
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Star, Trash2, Edit } from 'lucide-react'
+import { Plus, Star, Trash2, Edit, RefreshCw, Headphones } from 'lucide-react'
 import { api } from '../../services/api'
 import { listRowStagger } from '../../components/admin/animations'
 import { useToast } from '../../components/admin/Toast'
@@ -30,10 +30,26 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debounced
 }
 
+
+function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds || 0))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
+
 export function ArticleList() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const toast = useToast()
+  const podcastMut = useMutation({
+    mutationFn: (id: number) => api.admin.articles.podcast.regenerate(id),
+    onSuccess: () => {
+      toast.success('已开始生成对谈语音')
+      qc.invalidateQueries({ queryKey: ['admin', 'articles'] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : '语音生成失败'),
+  })
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
@@ -180,6 +196,7 @@ export function ArticleList() {
                 <th>标题</th>
                 <th>分类</th>
                 <th>状态</th>
+                <th>对谈语音</th>
                 <th>更新时间</th>
                 <th style={{ width: 120 }}>操作</th>
               </tr>
@@ -209,6 +226,38 @@ export function ArticleList() {
                   </td>
                   <td>{a.category || '—'}</td>
                   <td><StatusBadge status={(a.status === 'published' ? 'published' : 'draft')} /></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Headphones size={14} aria-hidden="true" />
+                      <span style={{
+                        color: a.podcast_status === 'ready' ? '#1f6e4a'
+                          : a.podcast_status === 'generating' ? '#a96a00'
+                          : a.podcast_status === 'failed' ? '#b93838'
+                          : 'var(--admin-text-muted)',
+                        fontWeight: 600,
+                      }}>
+                        {a.podcast_status === 'ready'
+                          ? `已完成${a.podcast_duration_seconds ? ` · ${formatDuration(a.podcast_duration_seconds)}` : ''}`
+                          : a.podcast_status === 'generating' ? '生成中…'
+                          : a.podcast_status === 'failed' ? '失败'
+                          : '待生成'}
+                      </span>
+                      {a.podcast_status === 'failed' && a.podcast_error ? (
+                        <span
+                          title={a.podcast_error}
+                          style={{ fontSize: 11, color: 'var(--admin-text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >{a.podcast_error}</span>
+                      ) : null}
+                      <IconButton
+                        label="重新生成对谈语音"
+                        variant="ghost"
+                        size="sm"
+                        icon={<RefreshCw size={14} />}
+                        onClick={() => podcastMut.mutate(a.id)}
+                        disabled={podcastMut.isPending || a.podcast_status === 'generating'}
+                      />
+                    </div>
+                  </td>
                   <td style={{ fontSize: 'var(--type-sm)', color: 'var(--admin-text-2)' }}>
                     {a.updated_at || a.published_at
                       ? new Date(a.updated_at || a.published_at!).toLocaleDateString('zh-CN')
@@ -237,7 +286,7 @@ export function ArticleList() {
               ))}
               {data?.items.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <Empty title="暂无文章" description="点击右上角『新建文章』开始你的第一篇。" />
                   </td>
                 </tr>
