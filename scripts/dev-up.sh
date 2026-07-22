@@ -130,49 +130,71 @@ curl_with_retry() {
 log "checking :$BACKEND_PORT (backend)"
 existing=$(pids_on_port "$BACKEND_PORT")
 if [[ -n "$existing" ]]; then
-  if [[ $NO_KILL -eq 1 ]]; then
-    die "port :$BACKEND_PORT is busy (pids: $existing); re-run without --no-kill"
-  fi
-  for pid in $existing; do
-    if is_hubei_process "$pid"; then
-      log "killing stale hubei uvicorn (pid=$pid)"
-      kill_pid_gracefully "$pid" "hubei uvicorn"
+  if [[ $FOREGROUND -eq 1 ]]; then
+    # dev-supervisor.sh respawns us in a tight loop. If we kill our own
+    # children on every respawn we just feed the loop forever
+    # (each kill triggers a new respawn, which kills the new child
+    # again, ad infinitum). When the port is held by a hubei uvicorn
+    # (our own previous child or a sibling worktree) we trust the
+    # supervisor to handle it and just skip the preflight kill. If
+    # it's a *non*-hubei process we still die so the operator can
+    # see the conflict and resolve it manually.
+    if is_hubei_process "$existing"; then
+      log "foreground mode: trusting existing hubei uvicorn on :$BACKEND_PORT (pid=$existing)"
     else
-      warn "port :$BACKEND_PORT held by NON-hubei process (pid=$pid):"
-      warn "    $(pid_cmd "$pid")"
-      warn "    killing it — this is the 'backend.run_server zombie' scenario."
-      kill_pid_gracefully "$pid" "zombie"
+      die "port :$BACKEND_PORT held by non-hubei pid=$existing under supervisor; resolve manually"
     fi
-  done
-  # final wait
-  for _ in {1..10}; do
-    [[ -z "$(pids_on_port "$BACKEND_PORT")" ]] && break
-    sleep 0.2
-  done
-  [[ -n "$(pids_on_port "$BACKEND_PORT")" ]] && die "port :$BACKEND_PORT still busy after kill"
+  elif [[ $NO_KILL -eq 1 ]]; then
+    die "port :$BACKEND_PORT is busy (pids: $existing); re-run without --no-kill"
+  else
+    for pid in $existing; do
+      if is_hubei_process "$pid"; then
+        log "killing stale hubei uvicorn (pid=$pid)"
+        kill_pid_gracefully "$pid" "hubei uvicorn"
+      else
+        warn "port :$BACKEND_PORT held by NON-hubei process (pid=$pid):"
+        warn "    $(pid_cmd "$pid")"
+        warn "    killing it — this is the 'backend.run_server zombie' scenario."
+        kill_pid_gracefully "$pid" "zombie"
+      fi
+    done
+    # final wait
+    for _ in {1..10}; do
+      [[ -z "$(pids_on_port "$BACKEND_PORT")" ]] && break
+      sleep 0.2
+    done
+    [[ -n "$(pids_on_port "$BACKEND_PORT")" ]] && die "port :$BACKEND_PORT still busy after kill"
+  fi
 fi
 
 # --- preflight: clear port 5173 ---------------------------------------------
 log "checking :$FRONTEND_PORT (frontend)"
 existing=$(pids_on_port "$FRONTEND_PORT")
 if [[ -n "$existing" ]]; then
-  if [[ $NO_KILL -eq 1 ]]; then
-    die "port :$FRONTEND_PORT is busy (pids: $existing); re-run without --no-kill"
-  fi
-  for pid in $existing; do
-    if is_hubei_process "$pid"; then
-      log "killing stale hubei vite (pid=$pid)"
-      kill_pid_gracefully "$pid" "hubei vite"
+  if [[ $FOREGROUND -eq 1 ]]; then
+    if is_hubei_process "$existing"; then
+      log "foreground mode: trusting existing hubei process on :$FRONTEND_PORT (pid=$existing)"
     else
-      warn "port :$FRONTEND_PORT held by non-hubei process (pid=$pid): $(pid_cmd "$pid")"
-      kill_pid_gracefully "$pid" "stranger"
+      die "port :$FRONTEND_PORT held by non-hubei pid=$existing under supervisor; resolve manually"
     fi
-  done
-  for _ in {1..10}; do
-    [[ -z "$(pids_on_port "$FRONTEND_PORT")" ]] && break
-    sleep 0.2
-  done
-  [[ -n "$(pids_on_port "$FRONTEND_PORT")" ]] && die "port :$FRONTEND_PORT still busy after kill"
+  elif [[ $NO_KILL -eq 1 ]]; then
+    die "port :$FRONTEND_PORT is busy (pids: $existing); re-run without --no-kill"
+  else
+    for pid in $existing; do
+      if is_hubei_process "$pid"; then
+        log "killing stale hubei vite (pid=$pid)"
+        kill_pid_gracefully "$pid" "hubei vite"
+      else
+        warn "port :$FRONTEND_PORT held by non-hubei process (pid=$pid): $(pid_cmd "$pid")"
+        kill_pid_gracefully "$pid" "stranger"
+      fi
+    done
+    for _ in {1..10}; do
+      [[ -z "$(pids_on_port "$FRONTEND_PORT")" ]] && break
+      sleep 0.2
+    done
+    [[ -n "$(pids_on_port "$FRONTEND_PORT")" ]] && die "port :$FRONTEND_PORT still busy after kill"
+  fi
 fi
 
 # --- start servers in the foreground ----------------------------------------
