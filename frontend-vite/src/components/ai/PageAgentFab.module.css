@@ -21,17 +21,64 @@
   -webkit-backdrop-filter: blur(22px) saturate(150%);
   cursor: pointer;
   font-family: var(--font-sans-cn, 'Noto Sans SC', system-ui, sans-serif);
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-  animation: fab-enter 320ms cubic-bezier(.2,.8,.2,1) 500ms backwards;
+  /* Magic morph anchor: the bottom-right corner is shared with the
+   * panel (both elements use `right: 24px; bottom: 24px;`). Scaling
+   * toward this corner makes the FAB "shrink into" the panel slot and
+   * the panel "grow out of" the FAB slot — the macOS genie feel. */
+  transform-origin: 100% 100%;
+  transition:
+    transform 360ms cubic-bezier(.7, 0, .85, .35),
+    opacity 240ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+  /* First-paint entrance — mild scale so the FAB stays clickable
+   * during the animation (scale(.001) would shrink it below 1px and
+   * break tests / first-click timing). 200ms delay lets the hero
+   * animation land first. */
+  animation: fab-magic-intro 420ms cubic-bezier(.16, 1, .3, 1) 200ms backwards;
 }
 
-.fab:hover {
+/* When the user clicks the FAB it morphs into the panel: scale
+ * toward the bottom-right anchor (shared with the panel). Stays
+ * mounted (and inert) until the panel finishes its own entrance. */
+.fab[data-state="shrinking"] {
+  transform: scale(.001);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Re-entry after the panel closes: FAB mounts at the morph anchor
+ * (scale(.001) opacity 0) and grows back out of the bottom-right
+ * corner. The 60ms delay lets the panel start shrinking first so
+ * the morph reads as a continuous genie effect rather than a swap. */
+.fab[data-state="expanding"] {
+  animation: fab-magic-reenter 240ms cubic-bezier(.16, 1, .3, 1) 40ms backwards;
+}
+
+/* Mild first-paint entrance — keeps the FAB interactable during the
+ * animation, see `.fab` rule above. */
+@keyframes fab-magic-intro {
+  from {
+    transform: scale(.94) translateY(8px);
+    opacity: 0;
+  }
+}
+
+/* Corner-anchored re-entry — matches the panel's exit point. */
+@keyframes fab-magic-reenter {
+  from {
+    transform: scale(.001);
+    opacity: 0;
+  }
+}
+
+.fab:hover:not([data-state]) {
   transform: translateY(-3px);
   border-color: rgba(201, 168, 76, 0.72);
   box-shadow: 0 22px 52px rgba(8, 23, 50, 0.32), 0 0 0 4px rgba(78, 126, 218, 0.1);
 }
 
-.fab:active { transform: translateY(-1px); }
+.fab:active:not([data-state]) { transform: translateY(-1px); }
 .fab:focus-visible { outline: 3px solid rgba(90, 142, 238, 0.38); outline-offset: 3px; }
 
 .iconWrap {
@@ -64,9 +111,7 @@
 .textMain { font-size: 14px; font-weight: 700; letter-spacing: 0.06em; overflow-wrap: anywhere; word-break: break-word; }
 .textSub { color: rgba(230, 237, 252, 0.69); font-size: 10.5px; letter-spacing: 0.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .arrow { color: rgba(230, 237, 252, 0.62); transition: transform 180ms ease, color 180ms ease; }
-.fab:hover .arrow { color: #e5c56e; transform: translate(2px, -2px); }
-
-@keyframes fab-enter { from { opacity: 0; transform: translateY(10px) scale(.96); } }
+.fab:hover:not([data-state]) .arrow { color: #e5c56e; transform: translate(2px, -2px); }
 
 /* Phones: collapse to an icon-only chip.
  * - right/bottom offset respects iOS safe-area inset via env(safe-area-inset-bottom)
@@ -95,4 +140,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .fab, .arrow { animation: none; transition: none; }
+  .fab[data-state="shrinking"] { transform: none; opacity: 0; }
 }

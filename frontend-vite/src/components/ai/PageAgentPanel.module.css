@@ -18,7 +18,37 @@
   font-family: var(--font-sans-cn, 'Noto Sans SC', system-ui, sans-serif);
   font-size: 14px;
   line-height: 1.6;
-  animation: panel-enter 260ms cubic-bezier(.2,.8,.2,1);
+  /* Magic morph anchor: matches the FAB (`right: 24px; bottom: 24px;`),
+   * so the panel grows out of / retracts into the same bottom-right
+   * corner — the macOS genie effect. The exit uses a CSS transition
+   * (smooth reverse on interrupt); the entrance uses a one-shot
+   * keyframe with `backwards` fill mode so the panel is at scale(.001)
+   * during the small delay, then springs to scale(1). */
+  transform-origin: 100% 100%;
+  transition:
+    transform 240ms cubic-bezier(.55, 0, .85, .35),
+    opacity 160ms cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Panel entrance — starts from the shared bottom-right corner and
+ * smoothly decelerates into its final size using Apple's standard
+ * ease-out-expo (no overshoot — the bounce read as jarring). The
+ * 80ms delay lines up with the FAB's shrink so the panel appears
+ * to "replace" the chip rather than pop in alongside it. */
+.root[data-state="expanding"] {
+  animation: panel-magic-enter 460ms cubic-bezier(.16, 1, .3, 1) 80ms backwards;
+}
+
+/* Panel exit — macOS minimize-to-dock: the panel collapses
+ * vertically into a thin strip at the bottom edge (anchored at
+ * bottom-right via transform-origin) while shrinking slightly in
+ * width, then fades. Reads as "put away" rather than "shrink to a
+ * point", and is visually distinct from the corner-bloom entrance.
+ */
+.root[data-state="shrinking"] {
+  transform: scaleY(.05) scaleX(.92);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .header {
@@ -170,7 +200,7 @@
 .clearConfirm { border: 1px solid #c65a53; background: #c65a53; color: #fff; }
 .clearConfirm:hover { border-color: #ae4842; background: #ae4842; }
 
-@keyframes panel-enter { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+@keyframes panel-magic-enter { from { transform: scale(.001); opacity: 0; } }
 @keyframes clear-card-enter { from { opacity: 0; transform: translateY(8px); } }
 
 /* Subtle pulse so "正在理解" feels alive instead of static. */
@@ -279,7 +309,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .root, .emptyPrompt, .clearCard { animation: none; transition: none; }
+  .root, .root[data-state="expanding"], .root[data-state="shrinking"], .emptyPrompt, .clearCard { animation: none; transition: none; }
+  .root[data-state="shrinking"] { transform: none; opacity: 0; }
 }
 
 .modeTabs {
