@@ -25,8 +25,14 @@ type Stage = 'closed' | 'opening' | 'open' | 'closing'
 // Tuned to feel snappy but not abrupt; the panel animation runs a
 // bit longer than the FAB transition so the panel "settles" after
 // the FAB has already disappeared into the corner.
+//
+// Close sequence: panel settles (240ms CSS transition) while the FAB
+// re-enters (100ms delay + 220ms animation = 320ms total) using the
+// same gentle keyframe as first paint. We hold `closing` for the full
+// 320ms so the FAB animation finishes *exactly* when the stage
+// flips to `closed` — no mid-animation snap when data-state clears.
 const OPEN_MS = 540
-const CLOSE_MS = 280
+const CLOSE_MS = 320
 
 export function PublicPageAgentMount() {
   const location = useLocation()

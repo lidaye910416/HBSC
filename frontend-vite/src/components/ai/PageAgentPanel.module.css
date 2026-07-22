@@ -39,14 +39,20 @@
   animation: panel-magic-enter 460ms cubic-bezier(.16, 1, .3, 1) 80ms backwards;
 }
 
-/* Panel exit — macOS minimize-to-dock: the panel collapses
- * vertically into a thin strip at the bottom edge (anchored at
- * bottom-right via transform-origin) while shrinking slightly in
- * width, then fades. Reads as "put away" rather than "shrink to a
- * point", and is visually distinct from the corner-bloom entrance.
+/* Panel exit — the panel softly settles back toward the shared
+ * bottom-right anchor (matching the entrance's reverse) and fades.
+ *
+ * Was `scaleY(.05) scaleX(.92)` (a horizontal bar mid-flight, which
+ * read as "panel collapses weirdly" — the morph endpoints never lined
+ * up with the FAB re-entry corner). Now a gentle uniform scale-down
+ * paired with a small downward translate: it mirrors the FAB's
+ * re-entry keyframe (`fab-magic-intro` does scale(.94) translateY(8)
+ * → rest), so the panel "settles down" exactly where the FAB will
+ * rise back up. Visually one continuous handoff rather than two
+ * independent motions.
  */
 .root[data-state="shrinking"] {
-  transform: scaleY(.05) scaleX(.92);
+  transform: scale(.92) translateY(8px);
   opacity: 0;
   pointer-events: none;
 }

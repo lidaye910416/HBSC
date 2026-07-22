@@ -1078,14 +1078,36 @@ test.describe('public page-agent FAB — podcast mode', () => {
     expect(await fab.getAttribute('data-state')).toBe('expanding')
 
     // The exit transition must also include `transform` so the panel
-    // doesn't snap closed. We sample the live computed style while
-    // the transition is still running.
-    const inFlight = await panel.evaluate((el) => {
-      const cs = getComputedStyle(el)
-      return { transition: cs.transitionProperty, opacity: cs.opacity, transform: cs.transform }
-    })
-    expect(inFlight.transition).toMatch(/transform/)
-    expect(Number(inFlight.opacity)).toBeLessThan(1)
+    // doesn't snap closed. We poll the live computed style while the
+    // transition is still running. (Poll rather than snapshot because
+    // Chrome can briefly return the start value for one or two frames
+    // after a property change while the compositor commits the new
+    // style — a render-pipeline quirk, not an animation bug. The
+    // transition is only 160ms, so a 1s poll budget is comfortably
+    // past the first decay frame.)
+    await expect
+      .poll(
+        async () =>
+          panel.evaluate((el) => {
+            const cs = getComputedStyle(el)
+            return {
+              opacity: Number(cs.opacity),
+              transition: cs.transitionProperty,
+              transform: cs.transform,
+            }
+          }),
+        { timeout: 1_000 },
+      )
+      .toMatchObject({
+        transition: expect.stringMatching(/transform/),
+      })
+    await expect
+      .poll(
+        async () =>
+          Number(await panel.evaluate((el) => getComputedStyle(el).opacity)),
+        { timeout: 1_000 },
+      )
+      .toBeLessThan(1)
 
     // Once the close finishes the FAB is fully back at rest with
     // pointer events restored and no `data-state`.
