@@ -99,31 +99,26 @@ export function MindmapBlock({ code }: { code: string }) {
           const palette = ['#1f386e', '#c9a84c', '#3a6cb1', '#7a5fc9', '#2f8f6e', '#c25b3a']
           return palette[depth % palette.length]
         },
-        paddingX: zoomed ? 32 : 16,
+        paddingX: 16,
         autoFit: true,
-        fitRatio: 0.95,
-        // Wider max-width gives more horizontal room for Chinese node
-        // labels which would otherwise wrap awkwardly. Modal gets even
-        // more room since the viewport is the full screen.
-        maxWidth: zoomed ? 520 : 320,
-        // Force a min height per node so multi-line labels stay aligned
-        // with single-line ones — improves the radial "spokes" look.
+        // Same options in both the thumbnail and the dialog so the
+        // markmap instance is interchangeable when zoomed toggles —
+        // fit() then handles the up-scaling to whichever container
+        // happens to be active. Dialog labels are wider because of
+        // the larger --markmap-font + --markmap-max-width CSS in the
+        // dialog (see global.css); paddingX / spacingHorizontal stay
+        // identical so the layout shape is comparable between views.
+        fitRatio: zoomed ? 0.92 : 0.95,
+        maxWidth: 320,
         nodeMinHeight: 24,
-        spacingHorizontal: zoomed ? 120 : 80,
+        spacingHorizontal: 80,
         spacingVertical: 6,
         // Thicker connector lines = clearer branches.
         lineWidth: (node) => {
-          // Thicker lines for shallower levels so the root → branch
-          // connection reads as the "trunk" of the tree.
           const depth = getDepth(node)
           return Math.max(1.5, 4 - depth * 0.5)
         },
         duration: 200,
-        // Always render all nodes. The "compact thumbnail" feel comes
-        // from the small host box (460x240), not from collapsing the
-        // tree — collapsing produced a sparse diagram that didn't read
-        // as a mindmap. The modal uses the same option and relies on
-        // autoFit to scale up.
         initialExpandLevel: 99,
       }, rootDataRef.current!)
       markmapRef.current = mm
@@ -137,15 +132,19 @@ export function MindmapBlock({ code }: { code: string }) {
       if (zoomed) {
         target.setAttribute('width', '100%')
         target.setAttribute('height', '100%')
-        // Schedule a fit on the next frame so the browser has measured
-        // the new dimensions — calling it synchronously can race the
-        // layout pass and end up fitting to the old 300×150.
+        // rAF + 200ms safety net: fit() reads the SVG's
+        // getBoundingClientRect, so it must run after the attribute
+        // change has been laid out. Without the second call, slow
+        // first-mounts can fit to the previous 300×150 and render the
+        // tree as a squished strip.
         requestAnimationFrame(() => mm.fit())
-        // Re-fit on any subsequent container resize (viewport changes,
-        // font-load reflow, devtools toggling, etc.).
+        setTimeout(() => mm.fit(), 200)
+        // Watch the SVG itself so ResizeObserver fires when its width
+        // attribute changes (e.g. after font-load reflow or window
+        // resize while the dialog is open).
         if (typeof ResizeObserver !== 'undefined') {
           observer = new ResizeObserver(() => mm.fit())
-          observer.observe(target.parentElement || target)
+          observer.observe(target)
         }
       }
     })

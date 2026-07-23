@@ -1334,7 +1334,16 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
  * pill-shaped background that varies by depth using CSS attribute
  * selectors. This gives every level its own brand color without
  * needing to inject per-node styles from JS. */
-.page-agent-mindmap .markmap-foreign > div > div {
+.page-agent-mindmap .markmap-foreign > div > div,
+.page-agent-mindmap-dialog .markmap-foreign > div > div {
+  /* Without white-space:nowrap the dialog's foreignObject ends up in a
+   * chicken-and-egg sizing loop: foreignObject inherits its width from
+   * the pill's scrollWidth, but with normal white-space the Chinese
+   * text wraps to one char per line, measuring ~17px wide. markmap
+   * then bakes that 17px into state.rect and the entire tree lays out
+   * as a tall, narrow strip in the 1168px dialog. Forcing nowrap lets
+   * the pill report its content width (~102px for a 6-char label) and
+   * the tree fans out horizontally — same as the thumbnail. */
   padding: 4px 10px;
   border-radius: 14px;
   background: #fff;
