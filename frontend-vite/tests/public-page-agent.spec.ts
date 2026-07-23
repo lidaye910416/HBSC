@@ -42,9 +42,11 @@ test.describe('public page-agent FAB', () => {
     expect(Number(text[1])).toBeGreaterThan(230)
     expect(Number(text[2])).toBeGreaterThan(230)
     await expect(fab).toContainText('数创智伴')
-    // FAB subtitle now advertises three modes (读懂 / 操作 / 播一下) since
-    // the 2026-07-20 podcast feature shipped. Match the new copy.
-    await expect(fab).toContainText('读懂 · 操作 · 播一下')
+    // FAB subtitle lists only the always-available modes (读懂 / 操作) on
+    // non-journal pages; 「播一下」 is reserved for journal article pages
+    // — see the podcast-tab tests further down.
+    await expect(fab).toContainText('读懂 · 操作')
+    await expect(fab).not.toContainText('播一下')
   })
 
   test('FAB appears on homepage after admin enables + key is set', async ({ page }) => {
@@ -866,8 +868,22 @@ test.describe('public page-agent FAB — podcast mode', () => {
         }),
       }),
     )
+    // 「播一下」tab 仅在期刊文章页开放：把文章详情 mock 成带 journal_id，
+    // 这样 useIsJournalArticle() 拉详情后能正确解析为 true，tab 才会出现。
+    await page.route('**/api/articles/foo', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 1,
+          title: '测试期刊文章',
+          slug: 'foo',
+          journal_id: 7,
+        }),
+      }),
+    )
 
-    await page.goto('/')
+    await page.goto('/articles/foo')
     await page.getByTestId('page-agent-fab').click({ force: true })
 
     // The third tab should be reachable.
@@ -918,7 +934,15 @@ test.describe('public page-agent FAB — podcast mode', () => {
       }),
     )
 
-    await page.goto('/')
+    // 「播一下」tab 仅在期刊文章页开放：mock 文章详情带 journal_id。
+    await page.route('**/api/articles/foo', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 1, title: '测试期刊文章', slug: 'foo', journal_id: 7 }),
+      }),
+    )
+    await page.goto('/articles/foo')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-mode-podcast').click()
     await expect(page.getByTestId('page-agent-input')).toHaveCount(0)
@@ -959,7 +983,15 @@ test.describe('public page-agent FAB — podcast mode', () => {
       }),
     )
 
-    await page.goto('/')
+    // 「播一下」tab 仅在期刊文章页开放：mock 文章详情带 journal_id。
+    await page.route('**/api/articles/foo', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 1, title: '测试期刊文章', slug: 'foo', journal_id: 7 }),
+      }),
+    )
+    await page.goto('/articles/foo')
     await page.getByTestId('page-agent-fab').click({ force: true })
     await page.getByTestId('page-agent-mode-podcast').click()
     await page.getByTestId('podcast-start-btn').click()
@@ -967,6 +999,78 @@ test.describe('public page-agent FAB — podcast mode', () => {
     // Fallback link targets the workbench embed with the current page as source.
     const link = page.getByTestId('podcast-error').locator('a')
     await expect(link).toHaveAttribute('href', /\/labs\/minicast\/\?embed=1&source=/)
+  })
+
+  test('播一下 tab 隐藏在非期刊文章页 — 文章带 journal_id=null', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: '', base_url: '', system_prompt: '' }),
+      }),
+    )
+    // 文章详情 mock 成「非期刊文章」：journal_id 为 null。
+    await page.route('**/api/articles/standalone', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 99,
+          title: '独立文章',
+          slug: 'standalone',
+          journal_id: null,
+        }),
+      }),
+    )
+    await page.goto('/articles/standalone')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.waitForTimeout(800)
+    // 播一下 tab 必须不存在
+    await expect(page.getByTestId('page-agent-mode-podcast')).toHaveCount(0)
+  })
+
+  test('播一下 tab 仅在期刊文章页打开 — 文章带 journal_id', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: '', base_url: '', system_prompt: '' }),
+      }),
+    )
+    // 文章详情 mock 成「期刊文章」：journal_id 非空。
+    await page.route('**/api/articles/journal-piece', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 100,
+          title: '期刊文章',
+          slug: 'journal-piece',
+          journal_id: 3,
+        }),
+      }),
+    )
+    await page.goto('/articles/journal-piece')
+    await page.getByTestId('page-agent-fab').click({ force: true })
+    await page.waitForTimeout(800)
+    // 播一下 tab 必须存在并可见
+    await expect(page.getByTestId('page-agent-mode-podcast')).toBeVisible()
+  })
+
+  test('播一下 tab 在列表页（/、/issues）一律隐藏', async ({ page }) => {
+    await page.route('**/api/public/agent/config', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, model: '', base_url: '', system_prompt: '' }),
+      }),
+    )
+    for (const path of ['/', '/issues']) {
+      await page.goto(path)
+      await page.getByTestId('page-agent-fab').click({ force: true })
+      await page.waitForTimeout(500)
+      await expect(page.getByTestId('page-agent-mode-podcast')).toHaveCount(0)
+    }
   })
 
   test('FAB morphs into the panel via shared bottom-right anchor', async ({ page }) => {
