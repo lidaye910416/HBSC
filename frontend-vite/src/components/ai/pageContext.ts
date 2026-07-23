@@ -5,6 +5,13 @@ export type PageContext = {
   url: string
   content: string
   isTechnicalArticle: boolean
+  /**
+   * 当前页是否属于某一期期刊的文章详情页（journal_id != null）。
+   * 数创智伴「播一下」tab 仅在这种页面开放，其他页面（首页、列表、
+   * 独立文章、期刊详情页本身）一律隐藏。同步检测阶段只能拿到 DOM/URL，
+   * 准确值由面板内 useEffect 拉取文章详情后回填。
+   */
+  isJournalArticle: boolean
 }
 
 const MAX_CONTENT_LENGTH = 12_000
@@ -48,6 +55,10 @@ export function collectPageContext(doc: Document, location: Location): PageConte
         ? 'listing'
         : 'page'
 
+  // 仅当 URL 命中文章详情页路由时初值才可能是期刊文章；具体期刊归属需要
+  // 后端字段 journal_id，由面板在挂载后异步确认后覆盖。这里默认 false 即可，
+  // 避免「在列表页短暂高亮 播一下 tab」的视觉跳变。
+  const isJournalArticle = false
   return {
     type,
     typeLabel: type === 'technical-article'
@@ -61,6 +72,7 @@ export function collectPageContext(doc: Document, location: Location): PageConte
     url: location.href,
     content,
     isTechnicalArticle,
+    isJournalArticle,
   }
 }
 

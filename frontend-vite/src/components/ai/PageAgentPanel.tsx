@@ -19,12 +19,15 @@ export function PageAgentPanel({
   routeKey,
   onClose,
   'data-state': dataState,
+  isJournalArticle,
 }: {
   agent: PageAgent
   routeKey: string
   onClose: () => void
   /** Animation stage: 'expanding' (panel opening) or 'shrinking' (panel closing). */
   'data-state'?: 'expanding' | 'shrinking'
+  /** 当前文章是否隶属某一期期刊；外部 useIsJournalArticle() 解析后传入。 */
+  isJournalArticle?: boolean
 }) {
   const [mode, setMode] = useState<AgentMode>('ask')
   const askKey = getStorageKey(routeKey, 'ask')
@@ -122,7 +125,14 @@ export function PageAgentPanel({
     const refreshContext = () => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
-        setPageContext(collectPageContext(document, window.location))
+        // 保留 isJournalArticle：它由父组件 useIsJournalArticle() 异步解析后
+        // 通过 prop 推入，再由下面的镜像 effect 写入 state。collectPageContext
+        // 同步版本拿不到 journal_id，若不保留会让 400ms 后被覆盖成 false，
+        // 导致「播一下」tab 在已经 fetch 到 journal_id 后突然消失。
+        setPageContext((prev) => ({
+          ...collectPageContext(document, window.location),
+          isJournalArticle: prev.isJournalArticle,
+        }))
       })
     }
     observer = new MutationObserver(refreshContext)
@@ -157,6 +167,22 @@ export function PageAgentPanel({
     // wipes the textarea mid-flow). See "operate-mode forwards a URL" e2e.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeKey])
+
+  // 期刊归属由父组件的 useIsJournalArticle() 解析后通过 prop 传入；
+  // 这里把它同步到 pageContext，便于 buildPageContextMessage（系统提示）
+  // 和渲染层共享同一份事实，避免在两处分别判断。
+  useEffect(() => {
+    const next = Boolean(isJournalArticle)
+    setPageContext((prev) => (prev.isJournalArticle === next ? prev : { ...prev, isJournalArticle: next }))
+  }, [isJournalArticle])
+
+  // 当离开期刊文章进入非期刊页面时，若面板当前还停留在「播一下」模式，
+  // 立即回退到「读懂本页」，否则会把已隐藏的 tab 仍然显示在 body 里。
+  useEffect(() => {
+    if (!isJournalArticle && mode === 'podcast') {
+      setMode('ask')
+    }
+  }, [isJournalArticle, mode])
 
   // Persist chat history to the bucket matching the current mode.
   // Podcast mode intentionally skips persistence — its state lives in
@@ -409,16 +435,18 @@ export function PageAgentPanel({
         >
           <MousePointerClick size={14} /> 协助操作
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'podcast'}
-          className={`${styles.modeTab} ${mode === 'podcast' ? styles.modeTabActive : ''}`}
-          onClick={() => setMode('podcast')}
-          data-testid="page-agent-mode-podcast"
-        >
-          <Headphones size={14} /> 播一下
-        </button>
+        {pageContext.isJournalArticle && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'podcast'}
+            className={`${styles.modeTab} ${mode === 'podcast' ? styles.modeTabActive : ''}`}
+            onClick={() => setMode('podcast')}
+            data-testid="page-agent-mode-podcast"
+          >
+            <Headphones size={14} /> 播一下
+          </button>
+        )}
       </div>
 
       {mode === 'podcast' && (

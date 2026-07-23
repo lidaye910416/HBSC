@@ -165,6 +165,9 @@ def get_article(slug: str, db: Session = Depends(get_db)):
         "views": article.views,
         "tags": article.tags.split(",") if article.tags else [],
         "published_at": article.published_at.isoformat() if article.published_at else None,
+        # journal_id 是「期刊文章」的唯一标志：非空表示该文章隶属于某期期刊，
+        # 数创智伴「播一下」tab 仅对这些文章开放。
+        "journal_id": article.journal_id,
         "related": [
             {
                 "id": r.id,

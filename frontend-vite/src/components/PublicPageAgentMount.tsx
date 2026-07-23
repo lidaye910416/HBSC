@@ -14,6 +14,7 @@ import {
 } from '../lib/pageAgentSession'
 import { PageAgentFab } from './ai/PageAgentFab'
 import { PageAgentPanel } from './ai/PageAgentPanel'
+import { useIsJournalArticle } from './ai/useIsJournalArticle'
 
 // ─── Magic morph ─────────────────────────────────────────────────────────
 // The FAB and the panel share `position: fixed; right; bottom;` and
@@ -135,6 +136,9 @@ export function PublicPageAgentMount() {
   }, [liveAgent])
   const renderAgent = liveAgent ?? lastAgent
 
+  // 「播一下」tab 仅在期刊文章页开放；其他页面隐藏入口和 FAB 文案。
+  const isJournalArticle = useIsJournalArticle()
+
   // Auto-recover: if the session was disposed while the FAB/panel is
   // still mounted (HMR reload, dev hot update, explicit reset), kick
   // off a fresh acquire() so the user doesn't have to close+reopen the
@@ -152,6 +156,7 @@ export function PublicPageAgentMount() {
         <PageAgentFab
           onClick={openPanel}
           data-state={fabDataState}
+          showPodcast={isJournalArticle}
         />
       )}
       {showPanel && (
@@ -160,6 +165,7 @@ export function PublicPageAgentMount() {
           routeKey={`${location.pathname}${location.search}`}
           onClose={closePanel}
           data-state={panelDataState}
+          isJournalArticle={isJournalArticle}
         />
       )}
     </>

@@ -83,6 +83,8 @@ export interface Article {
   views: number;
   tags?: string[];
   related?: Article[];
+  /** 仅在文章隶属于某期期刊时非空；前端用它判断是否展示数创智伴的「播一下」tab。 */
+  journal_id?: number | null;
 }
 
 export interface ArticleList {
@@ -292,6 +294,8 @@ export const api = {
     articles: {
       list: (params?: {
         status?: string; category?: string; q?: string; featured?: boolean;
+        // 限定到某一期期刊下的文章；与下方 URL 参数 sp.set('journal_id', ...) 对应。
+        journal_id?: number | null;
         sort_by?: 'updated_at' | 'published_at' | 'title';
         sort_dir?: 'asc' | 'desc';
         page?: number; per_page?: number;
