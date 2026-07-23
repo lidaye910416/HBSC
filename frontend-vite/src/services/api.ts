@@ -301,12 +301,15 @@ export const api = {
         if (params?.category) sp.set('category', params.category)
         if (params?.q) sp.set('q', params.q)
         if (params?.featured !== undefined) sp.set('featured', String(params.featured))
+        if (params?.journal_id !== undefined) sp.set('journal_id', String(params.journal_id))
         if (params?.sort_by) sp.set('sort_by', params.sort_by)
         if (params?.sort_dir) sp.set('sort_dir', params.sort_dir)
         if (params?.page) sp.set('page', String(params.page))
         if (params?.per_page) sp.set('per_page', String(params.per_page))
         return request<PaginatedResponse<ArticleList & {
     status: string; featured: boolean; updated_at?: string;
+    journal_id?: number | null;
+    journal?: { id: number; title: string; issue_number: string; slug: string } | null;
     podcast_status?: PodcastAudioStatus['status'];
     podcast_stage?: PodcastAudioStatus['stage'];
     podcast_progress?: PodcastAudioStatus['progress'];

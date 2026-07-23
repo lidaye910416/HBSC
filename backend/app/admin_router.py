@@ -125,6 +125,16 @@ def _article_to_dict(a: Article, include_content: bool = True) -> dict:
         "status": a.status or "published",
         "tags": _serialize_tags(a.tags),
         "journal_id": a.journal_id,
+        # Joined-loaded journal — see list_articles(). When the article
+        # is unassigned (journal_id IS NULL) we still serialize a
+        # ``null`` shape so the table column can render a 「未归期」
+        # placeholder without a second roundtrip.
+        "journal": (
+            {"id": a.journal.id, "title": a.journal.title,
+             "issue_number": a.journal.issue_number,
+             "slug": a.journal.slug}
+            if getattr(a, "journal", None) is not None else None
+        ),
         "published_at": a.published_at.isoformat() if a.published_at else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
@@ -162,6 +172,13 @@ def list_articles(
     category: Optional[str] = None,
     q: Optional[str] = None,
     featured: Optional[bool] = None,
+    # ``journal_id`` 过滤文章所属期刊。约定:
+    #   • 整数 id → 严格匹配该期刊
+    #   • 字符串 "none" → 仅展示尚未归期的文章(journal_id IS NULL)
+    #   • 缺省 / null → 不过滤
+    # admin ArticleList 工具栏的「按期刊」下拉直接把这个值传给后端,
+    # 避免前端在客户端二次过滤分页数据导致总数对不上。
+    journal_id: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
     page: int = 1,
@@ -176,6 +193,16 @@ def list_articles(
         query = query.filter(Article.category == category)
     if featured is not None:
         query = query.filter(Article.featured == (1 if featured else 0))
+    if journal_id is not None and journal_id != "":
+        if journal_id == "none":
+            query = query.filter(Article.journal_id.is_(None))
+        else:
+            try:
+                query = query.filter(Article.journal_id == int(journal_id))
+            except (TypeError, ValueError):
+                # 非法值直接忽略,而不是 422 — 工具栏下拉翻页时容易
+                # 触发,422 会把整页打挂。
+                pass
     safe_q = _validate_search_q(q)
     if safe_q:
         query = query.filter(Article.title.ilike(f"%{safe_q}%", escape="\\"))
@@ -189,7 +216,16 @@ def list_articles(
     order_fn = col.desc if direction == "desc" else col.asc
 
     total = query.count()
-    items = query.order_by(order_fn()).offset((page - 1) * per_page).limit(per_page).all()
+    # Eager-load the journal so the table can render the 期号 column
+    # without N+1 queries (one per row).
+    from sqlalchemy.orm import joinedload
+    items = (
+        query.options(joinedload(Article.journal))
+        .order_by(order_fn())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
     return {
         "items": [_article_to_dict(a) for a in items],
         "total": total,

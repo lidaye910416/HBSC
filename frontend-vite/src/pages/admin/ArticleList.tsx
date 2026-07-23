@@ -97,6 +97,8 @@ export function ArticleList() {
   const [sortBy, setSortBy] = useState<'updated_at' | 'published_at' | 'title'>('updated_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [featuredFilter, setFeaturedFilter] = useState<'' | 'true' | 'false'>('')
+  // 「按期刊」下拉的值: '' = 全部; 数字 = 期刊 id; 'none' = 未归期。
+  const [journalFilter, setJournalFilter] = useState<'' | number | 'none'>('')
   const [page, setPage] = useState(1)
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null)
   const tableRef = useRef<HTMLTableElement>(null)
@@ -107,17 +109,26 @@ export function ArticleList() {
   const debouncedQ = useDebouncedValue(q, 250)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'articles', { status, q: debouncedQ, category, featuredFilter, sortBy, sortDir, page }],
+    queryKey: ['admin', 'articles', { status, q: debouncedQ, category, featuredFilter, journalFilter, sortBy, sortDir, page }],
     queryFn: () => api.admin.articles.list({
       status: status || undefined,
       q: debouncedQ || undefined,
       category: category || undefined,
       featured: featuredFilter === '' ? undefined : featuredFilter === 'true',
+      journal_id: journalFilter === '' ? undefined : journalFilter,
       sort_by: sortBy,
       sort_dir: sortDir,
       page,
       per_page: 20,
     }),
+  })
+
+  // Pull the journal catalog once for the toolbar dropdown. We don't
+  // paginate because hbsc only has a few issues at a time; if that
+  // changes, swap this for a search-as-you-type combobox.
+  const journalsQuery = useQuery({
+    queryKey: ['admin', 'journals', 'list', { per_page: 100 }],
+    queryFn: () => api.admin.journals.list({ per_page: 100 }),
   })
 
   // Selection / batch — derived from the current page's articles. We
@@ -245,6 +256,26 @@ export function ArticleList() {
           </select>
           <select
             className="ui-toolbar__select"
+            value={journalFilter === '' ? '' : String(journalFilter)}
+            onChange={(e) => {
+              const v = e.target.value
+              setJournalFilter(v === '' ? '' : v === 'none' ? 'none' : Number(v))
+              setPage(1)
+            }}
+            data-testid="journal-filter"
+            aria-label="按期刊筛选"
+            disabled={journalsQuery.isLoading}
+          >
+            <option value="">全部期刊</option>
+            {(journalsQuery.data?.items ?? []).map((j) => (
+              <option key={j.id} value={String(j.id)}>
+                {j.issue_number || j.title}
+              </option>
+            ))}
+            <option value="none">未归期</option>
+          </select>
+          <select
+            className="ui-toolbar__select"
             value={`${sortBy}_${sortDir}`}
             onChange={(e) => {
               const [b, d] = e.target.value.split('_') as ['updated_at' | 'published_at' | 'title', 'asc' | 'desc']
@@ -328,6 +359,7 @@ export function ArticleList() {
                 <th style={{ width: 48 }}>精选</th>
                 <th>标题</th>
                 <th>分类</th>
+                <th style={{ width: 110 }}>期刊</th>
                 <th>状态</th>
                 <th>对谈语音</th>
                 <th>更新时间</th>
@@ -368,6 +400,23 @@ export function ArticleList() {
                     <div style={{ fontSize: 'var(--type-xs)', color: 'var(--admin-text-muted)' }}>/{a.slug}</div>
                   </td>
                   <td>{a.category || '—'}</td>
+                  <td style={{ fontSize: 'var(--type-sm)' }}>
+                    {a.journal ? (
+                      <span
+                        title={a.journal.title}
+                        style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--admin-surface-2)',
+                          color: 'var(--admin-text-1)',
+                          fontWeight: 500,
+                        }}
+                      >{a.journal.issue_number || a.journal.title}</span>
+                    ) : (
+                      <span style={{ color: 'var(--admin-text-muted)' }}>未归期</span>
+                    )}
+                  </td>
                   <td><StatusBadge status={(a.status === 'published' ? 'published' : 'draft')} /></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -455,7 +504,7 @@ export function ArticleList() {
               ))}
               {data?.items.length === 0 && (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <Empty title="暂无文章" description="点击右上角『新建文章』开始你的第一篇。" />
                   </td>
                 </tr>
