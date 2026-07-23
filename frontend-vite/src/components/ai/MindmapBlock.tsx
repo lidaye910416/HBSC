@@ -3,6 +3,8 @@ import { AlertTriangle, Loader2, Maximize2, X } from 'lucide-react'
 import type { IMarkmap, INode } from 'markmap-view'
 import { Transformer } from 'markmap-lib/no-plugins'
 
+type ResizeObserverSafe = typeof window extends { ResizeObserver: infer T } ? T : never
+
 // markmap's ~30KB gzip (markmap-view + d3-hierarchy/selection/zoom/shape/
 // flextree) is loaded on first use — i.e. only when the model actually
 // emits a `markmap` code block. Keeping it dynamic avoids paying the
@@ -78,6 +80,12 @@ export function MindmapBlock({ code }: { code: string }) {
     if (!target) return
 
     let disposed = false
+    // ResizeObserver is only useful when the modal is open — the
+    // thumbnail's host box has a fixed CSS size. We watch the dialog
+    // body so the diagram reflows if the user resizes the viewport
+    // while zoomed.
+    let observer: ResizeObserver | null = null
+
     loadMarkmap().then(({ Markmap }) => {
       if (disposed) return
       // Tear down the previous instance if any (switching from thumbnail
@@ -91,16 +99,17 @@ export function MindmapBlock({ code }: { code: string }) {
           const palette = ['#1f386e', '#c9a84c', '#3a6cb1', '#7a5fc9', '#2f8f6e', '#c25b3a']
           return palette[depth % palette.length]
         },
-        paddingX: 16,
+        paddingX: zoomed ? 32 : 16,
         autoFit: true,
         fitRatio: 0.95,
         // Wider max-width gives more horizontal room for Chinese node
-        // labels which would otherwise wrap awkwardly.
-        maxWidth: 320,
+        // labels which would otherwise wrap awkwardly. Modal gets even
+        // more room since the viewport is the full screen.
+        maxWidth: zoomed ? 520 : 320,
         // Force a min height per node so multi-line labels stay aligned
         // with single-line ones — improves the radial "spokes" look.
         nodeMinHeight: 24,
-        spacingHorizontal: 80,
+        spacingHorizontal: zoomed ? 120 : 80,
         spacingVertical: 6,
         // Thicker connector lines = clearer branches.
         lineWidth: (node) => {
@@ -118,9 +127,31 @@ export function MindmapBlock({ code }: { code: string }) {
         initialExpandLevel: 99,
       }, rootDataRef.current!)
       markmapRef.current = mm
+
+      // markmap.create() writes explicit width="300" height="150"
+      // attributes on the SVG. Without overriding these, the dialog
+      // SVG stays at 300×150 regardless of CSS, because on an <svg>
+      // element CSS `width: auto` resolves to the attribute value.
+      // We override the attributes here so the dialog fills its body
+      // and call fit() so d3 re-zooms the inner <g> to the new size.
+      if (zoomed) {
+        target.setAttribute('width', '100%')
+        target.setAttribute('height', '100%')
+        // Schedule a fit on the next frame so the browser has measured
+        // the new dimensions — calling it synchronously can race the
+        // layout pass and end up fitting to the old 300×150.
+        requestAnimationFrame(() => mm.fit())
+        // Re-fit on any subsequent container resize (viewport changes,
+        // font-load reflow, devtools toggling, etc.).
+        if (typeof ResizeObserver !== 'undefined') {
+          observer = new ResizeObserver(() => mm.fit())
+          observer.observe(target.parentElement || target)
+        }
+      }
     })
     return () => {
       disposed = true
+      observer?.disconnect()
       // Don't destroy on every effect re-run; only on unmount via the
       // cleanup that fires when (state.status, zoomed) tuple changes.
     }

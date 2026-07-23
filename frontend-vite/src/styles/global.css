@@ -1451,13 +1451,18 @@ h1{font-size:2.5rem}h2{font-size:2rem}h3{font-size:1.5rem}h4{font-size:1.25rem}
 }
 .page-agent-mindmap-dialogBody > svg {
   display: block;
+  /* markmap.create() writes width="300" height="150" on the SVG
+   * element by default; CSS `width: auto` resolves to the attribute
+   * value, so we have to force the SVG to fill its container via 100%.
+   * The fit() call from MindmapBlock re-zooms the inner <g> so the
+   * diagram fits the new size, and a ResizeObserver re-fits on
+   * viewport changes. */
+  width: 100% !important;
+  height: 100% !important;
   /* Cap by viewport so very large diagrams still fit and pan instead of
-   * overflowing. Browsers preserve aspect ratio when only one of max-w/h
-   * is set. */
+   * overflowing. */
   max-width: min(92vw, 1600px);
   max-height: 88vh;
-  width: auto;
-  height: auto;
 }
 .page-agent-mindmap-close {
   position: fixed;

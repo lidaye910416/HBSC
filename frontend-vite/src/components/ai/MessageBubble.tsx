@@ -13,7 +13,7 @@ type Props = {
 }
 
 // react-markdown lets us swap individual tag renderers. We only override
-// the ones that need non-trivial behavior (code blocks for mermaid, tables
+// the ones that need non-trivial behavior (code blocks for mindmaps, tables
 // so they fit in the panel, links that should not navigate away from the
 // underlying app).
 function buildComponents(): Components {
@@ -45,10 +45,12 @@ function buildComponents(): Components {
       }
       const lang = (className ?? '').replace(/^language-/, '')
       const text = String(children ?? '').replace(/\n$/, '')
-      if (lang === 'markmap' || lang === 'mermaid') {
-        // Accept both labels so the model can use whichever feels natural
-        // (we teach it 'markmap' in the system prompt, but 'mermaid' is a
-        // graceful fallback if it slips through).
+      if (lang === 'markmap') {
+        // System prompt teaches the model to emit ```` ```markmap ```` code
+        // blocks for mindmap requests. If a model ever slips and uses
+        // ```` ```mermaid ```` the syntax is incompatible, so it falls
+        // through to the default fenced-code renderer below — better to
+        // show source than a broken mindmap.
         return <MindmapBlock code={text} />
       }
       return (
