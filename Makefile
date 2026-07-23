@@ -1,4 +1,4 @@
-.PHONY: help build package deploy deploy-list deploy-stop rebuild clean verify-frontend
+.PHONY: help build package package-backend deploy deploy-list deploy-stop rebuild clean verify-frontend
 
 # ── 部署服务（通过 deploy-service skill）────────────────────────────────────
 # 这个 Makefile 防止源码/dist 漂移：每次 deploy 前会自动 rebuild 前端 dist/
@@ -30,14 +30,9 @@ build-frontend: ## 构建前端 dist/
 	@echo "==> [1/2] 构建前端 dist/"
 	@cd $(FRONTEND_DIR) && npm run build
 
-package-backend: ## 打包后端源码成 tar.gz（含 research.db，不含 .env）
+package-backend: ## 打包后端源码 tar.gz（排除 data/ research.db uploads/*）
 	@echo "==> [2/2] 打包后端 $(PACKAGE_FILE)"
-	@cd $(BACKEND_DIR) && tar --exclude='__pycache__' \
-	                        --exclude='*.pyc' \
-	                        --exclude='.pytest_cache' \
-	                        --exclude='*.db-journal' \
-	                        --exclude='.env' \
-	                        -czf $(PACKAGE_FILE) .
+	@cd $(BACKEND_DIR) && tar --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' --exclude='*.db-journal' --exclude='.env' --exclude='./data' --exclude='./research.db' --exclude='./uploads/*' -czf $(PACKAGE_FILE) .
 
 # ── 部署步骤 ──────────────────────────────────────────────────────────────
 

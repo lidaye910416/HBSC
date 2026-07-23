@@ -5,3 +5,5 @@ uploads/
 .pytest_cache/
 .coverage
 research.db
+
+data/
