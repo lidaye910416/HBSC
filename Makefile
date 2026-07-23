@@ -32,7 +32,7 @@ build-frontend: ## 构建前端 dist/
 
 package-backend: ## 打包后端源码 tar.gz（排除 data/ research.db uploads/*）
 	@echo "==> [2/2] 打包后端 $(PACKAGE_FILE)"
-	@cd $(BACKEND_DIR) && tar --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' --exclude='*.db-journal' --exclude='.env' --exclude='./data' --exclude='./research.db' --exclude='./uploads/*' -czf $(PACKAGE_FILE) .
+	@cd $(BACKEND_DIR) && tar --exclude=__pycache__ --exclude='*.pyc' --exclude=.pytest_cache --exclude='*.db-journal' --exclude=.env --exclude=./data --exclude=./research.db --exclude='./uploads/*' -czf $(PACKAGE_FILE) .
 
 # ── 部署步骤 ──────────────────────────────────────────────────────────────
 
