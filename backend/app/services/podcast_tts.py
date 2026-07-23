@@ -369,10 +369,17 @@ async def _minimax_tts_one(
         "stream": False,
         "voice_setting": {
             "voice_id": voice_id,
-            "speed": 1.2,
+            # 0.95 ≈ 语速略慢于正常,留出呼吸感;原 1.2 偏赶,主持人追问/嘉宾
+            # 思考的间隙被吃掉,听众难跟。1.0 是 MiniMax 的"正常"档,
+            # 0.95 在它和 0.9 之间,既有节奏又不拖沓。
+            "speed": 0.95,
             "vol": 1.0,
             "pitch": 0,
-            "emotion": "neutral",
+            # 两个角色都打 happy — 比 neutral 多一层温暖/感染力,
+            # 是 MiniMax t2a_v2 通用的"主持人/嘉宾"档,不会像 excited
+            # 那样失真。原 neutral 把两个角色压平了,文章再精彩也读得
+            # 像新闻播报。
+            "emotion": "happy",
         },
         "audio_setting": {
             "sample_rate": MINIMAX_TTS_SAMPLE_RATE,
